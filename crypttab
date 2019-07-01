@@ -1,0 +1,1 @@
+writable_crypt /dev/disk/by-lable/writable_luks2 none luks,discard

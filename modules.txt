@@ -1,0 +1,11 @@
+algif_skcipher
+dm_crypt
+dm_mod
+aes
+cbc
+chainiv
+cryptomgr
+krng
+sha256
+xts
+aesni
