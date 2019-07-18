@@ -6,7 +6,7 @@ set -e
 
 # maybe logind, vconsole, acl, kmod, pam
 
-rm -rf build
+#rm -rf build
 rm -rf install-tmp
 
 meson setup ~/canonical/systemd build \
@@ -21,6 +21,7 @@ meson setup ~/canonical/systemd build \
       -Drootlibdir=/usr/lib/x86_64-linux-gnu \
       -Dsysvinit-path='' \
       -Dsysvrcnd-path='' \
+      -Dsulogin-path='/usr/bin/sh' \
       -Drpmmacrosdir=no \
       -Dlink-udev-shared=true \
       -Dlink-systemctl-shared=true \
@@ -156,10 +157,26 @@ done
 > "$DESTDIR/etc/machine-id"
 rm -f $DESTDIR/etc/passwd
 grep '^systemd-journal:' /etc/group >> "$DESTDIR/etc/group"
+grep '^audio:' /etc/group >> "$DESTDIR/etc/group"
+grep '^cdrom:' /etc/group >> "$DESTDIR/etc/group"
+grep '^dialout:' /etc/group >> "$DESTDIR/etc/group"
+grep '^disk:' /etc/group >> "$DESTDIR/etc/group"
+grep '^input:' /etc/group >> "$DESTDIR/etc/group"
+grep '^kmem:' /etc/group >> "$DESTDIR/etc/group"
+grep '^kvm:' /etc/group >> "$DESTDIR/etc/group"
+grep '^lp:' /etc/group >> "$DESTDIR/etc/group"
+grep '^tape:' /etc/group >> "$DESTDIR/etc/group"
+grep '^tty:' /etc/group >> "$DESTDIR/etc/group"
+grep '^utmp:' /etc/group >> "$DESTDIR/etc/group"
+grep '^video:' /etc/group >> "$DESTDIR/etc/group"
 grep '^adm:' /etc/group >> "$DESTDIR/etc/group"
 grep '^utmp:' /etc/group >> "$DESTDIR/etc/group"
 grep '^root:' /etc/group >> "$DESTDIR/etc/group"
 # we don't use systemd-networkd, but the user is in systemd.conf tmpfiles snippet
+grep '^root:' /etc/passwd 2>/dev/null >> "$DESTDIR/etc/passwd"
+echo 'root::18074:0:99999:7:::' >"$DESTDIR/etc/shadow"
+chmod 600 "$DESTDIR/etc/shadow"
+
 grep '^systemd-network:' /etc/passwd 2>/dev/null >> "$DESTDIR/etc/passwd"
 grep '^systemd-network:' /etc/group >> "$DESTDIR/etc/group"
 
@@ -217,9 +234,8 @@ rm -r $DESTDIR/install-tmp/
 # install everything
 cp -ar install-tmp/* $DESTDIR
 
-copy_exec /bin/false
-copy_exec /bin/rm
-copy_file binary /bin/static-sh
+. /usr/share/initramfs-tools/hooks/zz-busybox-initramfs
+
 ln -s usr/lib/systemd/systemd $DESTDIR/init
 
 export version=${version-$(uname -r)}
@@ -236,6 +252,7 @@ rm -rf $DESTDIR/usr/lib/udev/hwdb.d
 cp -Lr /etc/ld.so.conf* $DESTDIR/etc/
 ldconfig -r $DESTDIR
 
+sudo rm -f ubuntu-core-initramfs.img
 # create initrd
 cd $DESTDIR
 find . | cpio --create --format='newc' --owner=0:0 | lz4 -9 -l > $OLDPWD/ubuntu-core-initramfs.img
