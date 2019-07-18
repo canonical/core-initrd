@@ -6,7 +6,8 @@ set -e
 
 # maybe logind, vconsole, acl, kmod, pam
 
-rm -rf build install-tmp
+rm -rf build
+rm -rf install-tmp
 
 meson setup ~/canonical/systemd build \
       -Db_lto=true \
@@ -212,8 +213,11 @@ done
 copy_exec /bin/false
 copy_exec /bin/rm
 
-## todo
-## copyin required modules
+export version=${version-$(uname -r)}
+export MODULESDIR="/lib/modules/${version}"
+
+auto_add_modules base block scsi
+manual_add_modules $(cat modules.txt)
 
 # rebuild hwdb
 systemd-hwdb --root $DESTDIR update
