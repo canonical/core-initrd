@@ -178,16 +178,19 @@ systemctl --quiet --root $DESTDIR set-default initrd.target
 export WORKDIR=$(mktemp -d --suffix=.ubuntu-core-initramfs)
 export DESTDIR=$WORKDIR/main
 export EARLYDIR=$WORKDIR/early
-export verbose=y
+export verbose=n
 # for /usr/lib/dracut/dracut-install
 export DESTROOTDIR=$DESTDIR
 
 # base dirs
 mkdir -p $DESTDIR $EARLYDIR $DESTDIR/etc
-for d in bin sbin lib lib64; do
+for d in bin lib lib64; do
     mkdir -p $DESTDIR/usr/$d
     ln -s usr/$d $DESTDIR/$d
 done
+ln -s usr/bin $DESTDIR/sbin
+ln -s bin $DESTDIR/usr/sbin
+
 
 # required for in_initrd() systemd detection, part of shutdown
 # spec/requirements this is equivalent to /etc/os-release
@@ -204,14 +207,20 @@ EOF
 # our boot sequence is to be controled by systemd
 . /usr/share/initramfs-tools/hook-functions
 
+export LD_LIBRARY_PATH=install-tmp/usr/lib/systemd/
+for e in $(find install-tmp -type f -executable); do
+	copy_exec $e ${e##install-tmp} || true
+done
+unset LD_LIBRARY_PATH
+rm -r $DESTDIR/install-tmp/
+
 # install everything
 cp -ar install-tmp/* $DESTDIR
 
-for e in $(find install-tmp -type f -executable); do
-	copy_exec $e ${e##install-tmp}
-done
 copy_exec /bin/false
 copy_exec /bin/rm
+copy_file binary /bin/static-sh
+ln -s usr/lib/systemd/systemd $DESTDIR/init
 
 export version=${version-$(uname -r)}
 export MODULESDIR="/lib/modules/${version}"
@@ -229,5 +238,5 @@ ldconfig -r $DESTDIR
 
 # create initrd
 cd $DESTDIR
-find . | cpio --create --format='newc' | lz4 -9 -l > $OLDPWD/ubuntu-core-initramfs.img
+find . | cpio --create --format='newc' --owner=0:0 | lz4 -9 -l > $OLDPWD/ubuntu-core-initramfs.img
 cd $OLDPWD
