@@ -231,6 +231,13 @@ done
 unset LD_LIBRARY_PATH
 rm -r $DESTDIR/install-tmp/
 
+copy_exec /lib/x86_64-linux-gnu/libnss_files.so.2
+copy_exec /lib/x86_64-linux-gnu/libnss_compat.so.2
+copy_exec /lib/x86_64-linux-gnu/libnss_systemd.so.2
+for f in nsswitch.conf passwd shadow group gshadow; do
+	copy_file conf $f /etc/$f
+done
+
 # install everything
 cp -ar install-tmp/* $DESTDIR
 
@@ -243,6 +250,9 @@ export MODULESDIR="/lib/modules/${version}"
 
 auto_add_modules base block scsi
 manual_add_modules $(cat modules.txt)
+for f in $MODULESDIR/modules.*; do
+	copy_file conf $f $f
+done
 
 # rebuild hwdb
 systemd-hwdb --root $DESTDIR update
