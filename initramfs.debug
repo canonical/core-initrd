@@ -1,0 +1,1574 @@
++ [ -z ubuntu-core-rootfs ]
++ [ -n  ]
++ [  = none ]
++ resume=
++ maybe_break top
++ export BOOT
++ run_scripts /scripts/init-top
++ initdir=/scripts/init-top
++ [ ! -d /scripts/init-top ]
++ shift
++ . /scripts/init-top/ORDER
++ /scripts/init-top/all_generic_ide
++ [ -e /conf/param.conf ]
++ /scripts/init-top/blacklist
++ [ -e /conf/param.conf ]
++ /scripts/init-top/udev
+  device-enumerator: scanning /sys/bus
+device-enumerator: scan all dirs
+  device-enumerator: scanning /sys/bus
+  device-enumerator: scanning /sys/class
++ [ -e /conf/param.conf ]
++ maybe_break modules
++ [ n != y ]
++ log_begin_msg Loading essential drivers
++ _log_msg Begin: Loading essential drivers ... 
++ [ n = y ]
++ printf Begin: Loading essential drivers ... 
+Begin: Loading essential drivers ... + [ -n  ]
++ load_modules
++ [ -e /conf/modules ]
++ cat+  /conf/modules
+read m
++ [ -z i2c-bcm2708 ]
++ printf %.1s i2c-bcm2708
++ com=i
++ [ i = # ]
++ modprobe i2c-bcm2708
++ read m
++ [ -z nvme ]
++ printf %.1s nvme
++ com=n
++ [ n = # ]
++ modprobe nvme
++ read m
++ [ -z usbhid ]
++ printf %.1s usbhid
++ com=u
++ [ u = # ]
++ modprobe usbhid
++ read m
++ [ -z hid-generic ]
++ printf %.1s hid-generic
++ com=h
++ [ h = # ]
++ modprobe hid-generic
++ read m
++ [ -z squashfs ]
++ printf %.1s squashfs
++ com=s
++ [ s = # ]
++ modprobe squashfs
++ read m
++ [ -z ahci ]
++ printf %.1s ahci
++ com=a
++ [ a = # ]
++ modprobe ahci
++ read m
++ [ -z libahci ]
++ printf %.1s libahci
++ com=l
++ [ l = # ]
++ modprobe libahci
++ read m
++ [ -z usb-storage ]
++ printf %.1s usb-storage
++ com=u
++ [ u = # ]
++ modprobe usb-storage
++ read m
++ [ -z nls_iso8859-1 ]
++ printf %.1s nls_iso8859-1
++ com=n
++ [ n = # ]
++ modprobe nls_iso8859-1
++ read m
++ [ -z virtio_scsi ]
++ printf %.1s virtio_scsi
++ com=v
++ [ v = # ]
++ modprobe virtio_scsi
++ read m
++ [ -z sdhci ]
++ printf %.1s sdhci
++ com=s
++ [ s = # ]
++ modprobe sdhci
++ read m
++ [ -z sdhci-pci ]
++ printf %.1s sdhci-pci
++ com=s
++ [ s = # ]
++ modprobe sdhci-pci
++ read m
++ [ -z sdhci-acpi ]
++ printf %.1s sdhci-acpi
++ com=s
++ [ s = # ]
++ modprobe sdhci-acpi
++ read m
++ [ -z mmc-block ]
++ printf %.1s mmc-block
++ com=m
++ [ m = # ]
++ modprobe mmc-block
++ read m
++ [ -z hv_storvsc ]
++ printf %.1s hv_storvsc
++ com=h
++ [ h = # ]
++ modprobe hv_storvsc
++ read m
++ [ -z hv_vmbus ]
++ printf %.1s hv_vmbus
++ com=h
++ [ h = # ]
++ modprobe hv_vmbus
++ read m
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ maybe_break premount
++ [ n != y ]
++ log_begin_msg Running /scripts/init-premount
++ _log_msg Begin: Running /scripts/init-premount ... 
++ [ n = y ]
++ printf Begin: Running /scripts/init-premount ... 
+Begin: Running /scripts/init-premount ... + run_scripts /scripts/init-premount
++ initdir=/scripts/init-premount
++ [ ! -d /scripts/init-premount ]
++ return
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ maybe_break mount
++ log_begin_msg Mounting root file system
++ _log_msg Begin: Mounting root file system ... 
++ [ n = y ]
++ printf Begin: Mounting root file system ... 
+Begin: Mounting root file system ... + . /scripts/local
++ . /scripts/nfs
++ . /scripts/ubuntu-core-rootfs
++ . /scripts/ubuntu-core-functions
++ parse_numeric LABEL=writable
++ return
++ maybe_break mountroot
++ mount_top
++ nfs_top
++ [  != yes ]
++ [ n != y ]
++ log_begin_msg Running /scripts/nfs-top
++ _log_msg Begin: Running /scripts/nfs-top ... 
++ [ n = y ]
++ printf Begin: Running /scripts/nfs-top ... 
+Begin: Running /scripts/nfs-top ... + run_scripts /scripts/nfs-top
++ initdir=/scripts/nfs-top
++ [ ! -d /scripts/nfs-top ]
++ return
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ nfs_top_used=yes
++ mount_premount
++ nfs_premount
++ [  != yes ]
++ [ n != y ]
++ log_begin_msg Running /scripts/nfs-premount
++ _log_msg Begin: Running /scripts/nfs-premount ... 
++ [ n = y ]
++ printf Begin: Running /scripts/nfs-premount ... 
+Begin: Running /scripts/nfs-premount ... + run_scripts /scripts/nfs-premount
++ initdir=/scripts/nfs-premount
++ [ ! -d /scripts/nfs-premount ]
++ return
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ nfs_premount_used=yes
++ mountroot
++ pre_mountroot
++ local script_dir=/scripts/local-top
++ [ n != y ]
++ log_begin_msg Running /scripts/local-top
++ _log_msg Begin: Running /scripts/local-top ... 
++ [ n = y ]
++ printf Begin: Running /scripts/local-top ... 
+Begin: Running /scripts/local-top ... + run_scripts /scripts/local-top
++ initdir=/scripts/local-top
++ [ ! -d /scripts/local-top ]
++ return
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ [ n != y ]
++ log_begin_msg Running /scripts/local-premount
++ _log_msg Begin: Running /scripts/local-premount ... 
++ [ n = y ]
++ printf Begin: Running /scripts/local-premount ... 
+Begin: Running /scripts/local-premount ... + run_scripts /scripts/local-premount
++ initdir=/scripts/local-premount
++ [ ! -d /scripts/local-premount ]
++ shift
++ . /scripts/local-premount/ORDER
++ /scripts/local-premount/dragonmac
++ [ -e /conf/param.conf ]
++ /scripts/local-premount/fixrtc
++ [ -e /conf/param.conf ]
++ /scripts/local-premount/resize
++ [ -e /conf/param.conf ]
++ /scripts/local-premount/resume
++ [ -e /conf/param.conf ]
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ cat /proc/cmdline
++ snap_core=core18_1074.snap
++ snap_kernel=pc-kernel_252.snap
++ [ -z core18_1074.snap ]
++ [ -z pc-kernel_252.snap ]
++ writable_label=writable
++ writable_mnt=/tmpmnt_writable
++ mkdir -p /tmpmnt_writable
++ fsck_writable writable /tmpmnt_writable
++ local writable_label=writable
++ local writable_mnt=/tmpmnt_writable
++ get_partition_from_label writable
++ local label=writable
++ [ -n writable ]
++ wait-for-root LABEL=writable 180
++ find /dev+  -name writabletail
+ -1
++ local part=/dev/disk/by-label/writable
++ [ -z /dev/disk/by-label/writable ]
++ readlink -f /dev/disk/by-label/writable
++ local path=/dev/sda3
++ [ -n /dev/sda3 ]
++ echo /dev/sda3
++ path=/dev/sda3
++ [ -n /dev/sda3 ]
++ logfile=/run/initramfs/fsck-writable
++ echo initrd: checking filesystem for writable partition
++ date +%s
++ echo 1573753307: start
++ mount -o errors=remount-ro /dev/sda3 /tmpmnt_writable
++ umount /tmpmnt_writable
++ /sbin/e2fsck -va /dev/sda3
++ date +%s
++ echo 1573753307: end
++ do_root_mounting
++ root=LABEL=writable
++ wait-for-root LABEL=writable 180
+ext4
++ [ -n LABEL=writable ]
++ echo LABEL=writable
++ grep -q ^/
++ findfs LABEL=writable
++ path=/dev/sda3
++ [ -e /dev/sda3 ]
++ modprobe squashfs
++ grep -q squashfs /proc/filesystems
++ get_partition_from_label writable
++ local label=writable
++ [ -n writable ]
++ wait-for-root LABEL=writable 180
++ find /dev -name writable
++ tail -1
++ local part=/dev/disk/by-label/writable
++ [ -z /dev/disk/by-label/writable ]
++ readlink -f /dev/disk/by-label/writable
++ local path=/dev/sda3
++ [ -n /dev/sda3 ]
++ echo /dev/sda3
++ path=/dev/sda3
++ mount /dev/sda3 /tmpmnt_writable
++ mount_snaps
++ mount -o ro /tmpmnt_writable/system-data/var/lib/snapd/snaps/core18_1074.snap /root
++ local kernel_mnt=/tmpmnt_kernel
++ mkdir -p /tmpmnt_kernel
++ mount -o ro /tmpmnt_writable/system-data/var/lib/snapd/snaps/pc-kernel_252.snap /tmpmnt_kernel
++ [ -d /tmpmnt_kernel/modules ]
++ mount -o bind /tmpmnt_kernel/modules /root/lib/modules
++ [ -d /tmpmnt_kernel/firmware ]
++ mount -o bind /tmpmnt_kernel/firmware /root/lib/firmware
++ umount /tmpmnt_kernel
++ echo initrd: mounting /run
++ mount -o rw,nosuid,noexec,relatime,mode=755 -t tmpfs tmpfs /root/run
++ mount --move /tmpmnt_writable /root/writable
++ fstab=/root/etc/fstab
++ writable_paths=/root/etc/system-image/writable-paths
++ [ -e /root/etc/system-image/writable-paths ]
++ touch /root/run/image.fstab
++ mount -o bind /root/run/image.fstab /root/etc/fstab
++ echo # Auto-generated by /init
++ echo # DO NOT EDIT THIS FILE BY HAND - YOUR CHANGES WILL BE OVERWRITTEN
++ echo # (See writable-paths(5) for details)
++ echo /dev/root / rootfs defaults,ro 0 0
++ echo LABEL=writable /writable auto defaults 0 0
++ handle_writable_paths /root/etc/system-image/writable-paths /root/etc/fstab
++ writable_paths=/root/etc/system-image/writable-paths
++ fstab=/root/etc/fstab
++ [ -n /root/etc/system-image/writable-paths ]
++ [ -e /root/etc/system-image/writable-paths ]
++ [ -n /root/etc/fstab ]
++ + readcat line
+ /root/etc/system-image/writable-paths
++ set -- # --------------------------------------------------------------------
++ [ -z # ]
++ [ -z -------------------------------------------------------------------- ]
++ [ -z  ]
++ continue
++ read line
++ set -- # 1st column: Mount point
++ [ -z # ]
++ [ -z 1st ]
++ [ -z column: ]
++ [ -z Mount ]
++ [ -z point ]
++ continue
++ read line
++ set -- # 2nd column: Path relative to root of persistent storage (or auto)
++ [ -z # ]
++ [ -z 2nd ]
++ [ -z column: ]
++ [ -z Path ]
++ [ -z relative ]
++ continue
++ read line
++ set -- # 3rd column: type => persistent|synced|temporary
++ [ -z # ]
++ [ -z 3rd ]
++ [ -z column: ]
++ [ -z type ]
++ [ -z => ]
++ continue
++ read line
++ set -- # 4th column: action => none|transition (transition requires persistent)
++ [ -z # ]
++ [ -z 4th ]
++ [ -z column: ]
++ [ -z action ]
++ [ -z => ]
++ continue
++ read line
++ set -- # 5th column: mount flags
++ [ -z # ]
++ [ -z 5th ]
++ [ -z column: ]
++ [ -z mount ]
++ [ -z flags ]
++ continue
++ read line
++ set -- #
++ [ -z # ]
++ [ -z  ]
++ continue
++ read line
++ set -- # See writable-paths(5) for full details.
++ [ -z # ]
++ [ -z See ]
++ [ -z writable-paths(5) ]
++ [ -z for ]
++ [ -z full ]
++ continue
++ read line
++ set -- # --------------------------------------------------------------------
++ [ -z # ]
++ [ -z -------------------------------------------------------------------- ]
++ [ -z  ]
++ continue
++ read line
++ set -- /home user-data persistent transition none
++ [ -z /home ]
++ [ -z user-data ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/home
++ [ ! -e /root/home ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ user-data = auto ]
++ srcpath=/root/writable/user-data
++ path=/writable/user-data
++ [ ! -e /root/writable/user-data ]
++ stat -c %u:%g /root/home
++ dstown=0:0
++ stat -c %a /root/home
++ dstmode=755
++ mkdir -p /root/writable
++ [ ! -d /root/home ]
++ [ transition = transition ]
++ cp -aR /root/home /root/writable/user-data
++ [ none = none ]
++ echo /writable/user-data /home none bind 0 0
++ read line
++ set -- /snap auto persistent none none
++ [ -z /snap ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z none ]
++ [ -z none ]
++ dstpath=/root/snap
++ [ ! -e /root/snap ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/snap
++ path=/writable/system-data/snap
++ [ ! -e /root/writable/system-data/snap ]
++ stat -c %u:%g /root/snap
++ dstown=0:0
++ stat -c %a /root/snap
++ dstmode=755
++ mkdir -p /root/writable/system-data
++ [ ! -d /root/snap ]
++ [ none = transition ]
++ [ persistent = synced ]
++ mkdir /root/writable/system-data/snap
++ chown 0:0 /root/writable/system-data/snap
++ chmod 755 /root/writable/system-data/snap
++ [ none = none ]
++ echo /writable/system-data/snap /snap none bind 0 0
++ read line
++ set -- # snappy security policy, etc
++ [ -z # ]
++ [ -z snappy ]
++ [ -z security ]
++ [ -z policy, ]
++ [ -z etc ]
++ continue
++ read line
++ set -- /var/lib/snapd auto persistent transition none
++ [ -z /var/lib/snapd ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/lib/snapd
++ [ ! -e /root/var/lib/snapd ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/snapd
++ path=/writable/system-data/var/lib/snapd
++ [ ! -e /root/writable/system-data/var/lib/snapd ]
++ [ persistent = synced ]
++ [ none = none ]
++ echo /writable/system-data/var/lib/snapd /var/lib/snapd none bind 0 0
++ read line
++ set -- # snap catalogue (sections, pkgnames)
++ [ -z # ]
++ [ -z snap ]
++ [ -z catalogue ]
++ [ -z (sections, ]
++ [ -z pkgnames) ]
++ continue
++ read line
++ set -- /var/cache auto persistent transition none
++ [ -z /var/cache ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/cache
++ [ ! -e /root/var/cache ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/cache
++ path=/writable/system-data/var/cache
++ [ ! -e /root/writable/system-data/var/cache ]
++ stat -c %u:%g /root/var/cache
++ dstown=0:0
++ stat -c %a /root/var/cache
++ dstmode=755
++ mkdir -p /root/writable/system-data/var
++ [ ! -d /root/var/cache ]
++ [ transition = transition ]
++ cp -aR /root/var/cache /root/writable/system-data/var/cache
++ [ none = none ]
++ echo /writable/system-data/var/cache /var/cache none bind 0 0
++ read line
++ set -- # snap data
++ [ -z # ]
++ [ -z snap ]
++ [ -z data ]
++ [ -z  ]
++ continue
++ read line
++ set -- /var/snap auto persistent transition none
++ [ -z /var/snap ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/snap
++ [ ! -e /root/var/snap ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/snap
++ path=/writable/system-data/var/snap
++ [ ! -e /root/writable/system-data/var/snap ]
++ stat -c %u:%g /root/var/snap
++ dstown=0:0
++ stat -c %a /root/var/snap
++ dstmode=755
++ mkdir -p /root/writable/system-data/var
++ [ ! -d /root/var/snap ]
++ [ transition = transition ]
++ cp -aR /root/var/snap /root/writable/system-data/var/snap
++ [ none = none ]
++ echo /writable/system-data/var/snap /var/snap none bind 0 0
++ read line
++ set -- # generic
++ [ -z # ]
++ [ -z generic ]
++ [ -z  ]
++ continue
++ read line
++ set -- /media none temporary none defaults
++ [ -z /media ]
++ [ -z none ]
++ [ -z temporary ]
++ [ -z none ]
++ [ -z defaults ]
++ dstpath=/root/media
++ [ ! -e /root/media ]
++ [ temporary = temporary ]
++ echo tmpfs /media tmpfs defaults 0 0
++ read line
++ set -- /mnt none temporary none defaults
++ [ -z /mnt ]
++ [ -z none ]
++ [ -z temporary ]
++ [ -z none ]
++ [ -z defaults ]
++ dstpath=/root/mnt
++ [ ! -e /root/mnt ]
++ [ temporary = temporary ]
++ echo tmpfs /mnt tmpfs defaults 0 0
++ read line
++ set -- /root auto persistent transition none
++ [ -z /root ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/root
++ [ ! -e /root/root ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/root
++ path=/writable/system-data/root
++ [ ! -e /root/writable/system-data/root ]
++ stat -c %u:%g /root/root
++ dstown=0:0
++ stat -c %a /root/root
++ dstmode=700
++ mkdir -p /root/writable/system-data
++ [ ! -d /root/root ]
++ [ transition = transition ]
++ cp -aR /root/root /root/writable/system-data/root
++ [ none = none ]
++ echo /writable/system-data/root /root none bind 0 0
++ read line
++ set -- /tmp none temporary none defaults
++ [ -z /tmp ]
++ [ -z none ]
++ [ -z temporary ]
++ [ -z none ]
++ [ -z defaults ]
++ dstpath=/root/tmp
++ [ ! -e /root/tmp ]
++ [ temporary = temporary ]
++ echo tmpfs /tmp tmpfs defaults 0 0
++ read line
++ set -- /var/tmp auto persistent transition none
++ [ -z /var/tmp ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/tmp
++ [ ! -e /root/var/tmp ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/tmp
++ path=/writable/system-data/var/tmp
++ [ ! -e /root/writable/system-data/var/tmp ]
++ stat -c %u:%g /root/var/tmp
++ dstown=0:0
++ stat -c %a /root/var/tmp
++ dstmode=1777
++ mkdir -p /root/writable/system-data/var
++ [ ! -d /root/var/tmp ]
++ [ transition = transition ]
++ cp -aR /root/var/tmp /root/writable/system-data/var/tmp
++ [ none = none ]
++ echo /writable/system-data/var/tmp /var/tmp none bind 0 0
++ read line
++ set -- # etc related
++ [ -z # ]
++ [ -z etc ]
++ [ -z related ]
++ [ -z  ]
++ continue
++ read line
++ set -- /etc/writable auto persistent transition none
++ [ -z /etc/writable ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/writable
++ [ ! -e /root/etc/writable ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/writable
++ path=/writable/system-data/etc/writable
++ [ ! -e /root/writable/system-data/etc/writable ]
++ stat -c %u:%g /root/etc/writable
++ dstown=0:0
++ stat -c %a /root/etc/writable
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/writable ]
++ [ transition = transition ]
++ cp -aR /root/etc/writable /root/writable/system-data/etc/writable
++ [ -e /root/writable/system-data//etc/writable ]
++ mount -o bind /root/writable/system-data//etc/writable /root//etc/writable
++ read line
++ set -- # apparmor
++ [ -z # ]
++ [ -z apparmor ]
++ [ -z  ]
++ continue
++ read line
++ set -- /etc/apparmor.d/cache auto persistent none none
++ [ -z /etc/apparmor.d/cache ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z none ]
++ [ -z none ]
++ dstpath=/root/etc/apparmor.d/cache
++ [ ! -e /root/etc/apparmor.d/cache ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/apparmor.d/cache
++ path=/writable/system-data/etc/apparmor.d/cache
++ [ ! -e /root/writable/system-data/etc/apparmor.d/cache ]
++ stat -c %u:%g /root/etc/apparmor.d/cache
++ dstown=0:0
++ stat -c %a /root/etc/apparmor.d/cache
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc/apparmor.d
++ [ ! -d /root/etc/apparmor.d/cache ]
++ [ none = transition ]
++ [ persistent = synced ]
++ mkdir /root/writable/system-data/etc/apparmor.d/cache
++ chown 0:0 /root/writable/system-data/etc/apparmor.d/cache
++ chmod 755 /root/writable/system-data/etc/apparmor.d/cache
++ [ -e /root/writable/system-data//etc/apparmor.d/cache ]
++ mount -o bind /root/writable/system-data//etc/apparmor.d/cache /root//etc/apparmor.d/cache
++ read line
++ set -- # dbus system bus
++ [ -z # ]
++ [ -z dbus ]
++ [ -z system ]
++ [ -z bus ]
++ [ -z  ]
++ continue
++ read line
++ set -- /etc/dbus-1/system.d auto persistent transition none
++ [ -z /etc/dbus-1/system.d ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/dbus-1/system.d
++ [ ! -e /root/etc/dbus-1/system.d ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/dbus-1/system.d
++ path=/writable/system-data/etc/dbus-1/system.d
++ [ ! -e /root/writable/system-data/etc/dbus-1/system.d ]
++ stat -c %u:%g /root/etc/dbus-1/system.d
++ dstown=0:0
++ stat -c %a /root/etc/dbus-1/system.d
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc/dbus-1
++ [ ! -d /root/etc/dbus-1/system.d ]
++ [ transition = transition ]
++ cp -aR /root/etc/dbus-1/system.d /root/writable/system-data/etc/dbus-1/system.d
++ [ -e /root/writable/system-data//etc/dbus-1/system.d ]
++ mount -o bind /root/writable/system-data//etc/dbus-1/system.d /root//etc/dbus-1/system.d
++ read line
++ set -- /etc/hosts auto persistent transition none
++ [ -z /etc/hosts ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/hosts
++ [ ! -e /root/etc/hosts ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/hosts
++ path=/writable/system-data/etc/hosts
++ [ ! -e /root/writable/system-data/etc/hosts ]
++ stat -c %u:%g /root/etc/hosts
++ dstown=0:0
++ stat -c %a /root/etc/hosts
++ dstmode=644
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/hosts ]
++ [ transition = transition ]
++ cp -a /root/etc/hosts /root/writable/system-data/etc/hosts
++ [ -e /root/writable/system-data//etc/hosts ]
++ mount -o bind /root/writable/system-data//etc/hosts /root//etc/hosts
++ read line
++ set -- /etc/iproute2 auto persistent transition none
++ [ -z /etc/iproute2 ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/iproute2
++ [ ! -e /root/etc/iproute2 ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/iproute2
++ path=/writable/system-data/etc/iproute2
++ [ ! -e /root/writable/system-data/etc/iproute2 ]
++ stat -c %u:%g /root/etc/iproute2
++ dstown=0:0
++ stat -c %a /root/etc/iproute2
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/iproute2 ]
++ [ transition = transition ]
++ cp -aR /root/etc/iproute2 /root/writable/system-data/etc/iproute2
++ [ -e /root/writable/system-data//etc/iproute2 ]
++ mount -o bind /root/writable/system-data//etc/iproute2 /root//etc/iproute2
++ read line
++ set -- /etc/modprobe.d auto persistent transition none
++ [ -z /etc/modprobe.d ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/modprobe.d
++ [ ! -e /root/etc/modprobe.d ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/modprobe.d
++ path=/writable/system-data/etc/modprobe.d
++ [ ! -e /root/writable/system-data/etc/modprobe.d ]
++ stat -c %u:%g /root/etc/modprobe.d
++ dstown=0:0
++ stat -c %a /root/etc/modprobe.d
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/modprobe.d ]
++ [ transition = transition ]
++ cp -aR /root/etc/modprobe.d /root/writable/system-data/etc/modprobe.d
++ [ -e /root/writable/system-data//etc/modprobe.d ]
++ mount -o bind /root/writable/system-data//etc/modprobe.d /root//etc/modprobe.d
++ read line
++ set -- /etc/modules-load.d auto persistent transition none
++ [ -z /etc/modules-load.d ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/modules-load.d
++ [ ! -e /root/etc/modules-load.d ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/modules-load.d
++ path=/writable/system-data/etc/modules-load.d
++ [ ! -e /root/writable/system-data/etc/modules-load.d ]
++ stat -c %u:%g /root/etc/modules-load.d
++ dstown=0:0
++ stat -c %a /root/etc/modules-load.d
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/modules-load.d ]
++ [ transition = transition ]
++ cp -aR /root/etc/modules-load.d /root/writable/system-data/etc/modules-load.d
++ [ -e /root/writable/system-data//etc/modules-load.d ]
++ mount -o bind /root/writable/system-data//etc/modules-load.d /root//etc/modules-load.d
++ read line
++ set -- /etc/netplan auto persistent transition none
++ [ -z /etc/netplan ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/netplan
++ [ ! -e /root/etc/netplan ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/netplan
++ path=/writable/system-data/etc/netplan
++ [ ! -e /root/writable/system-data/etc/netplan ]
++ stat -c %u:%g /root/etc/netplan
++ dstown=0:0
++ stat -c %a /root/etc/netplan
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/netplan ]
++ [ transition = transition ]
++ cp -aR /root/etc/netplan /root/writable/system-data/etc/netplan
++ [ -e /root/writable/system-data//etc/netplan ]
++ mount -o bind /root/writable/system-data//etc/netplan /root//etc/netplan
++ read line
++ set -- /etc/network/if-up.d auto persistent transition none
++ [ -z /etc/network/if-up.d ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/network/if-up.d
++ [ ! -e /root/etc/network/if-up.d ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/network/if-up.d
++ path=/writable/system-data/etc/network/if-up.d
++ [ ! -e /root/writable/system-data/etc/network/if-up.d ]
++ stat -c %u:%g /root/etc/network/if-up.d
++ dstown=0:0
++ stat -c %a /root/etc/network/if-up.d
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc/network
++ [ ! -d /root/etc/network/if-up.d ]
++ [ transition = transition ]
++ cp -aR /root/etc/network/if-up.d /root/writable/system-data/etc/network/if-up.d
++ [ -e /root/writable/system-data//etc/network/if-up.d ]
++ mount -o bind /root/writable/system-data//etc/network/if-up.d /root//etc/network/if-up.d
++ read line
++ set -- /etc/ssh auto persistent transition none
++ [ -z /etc/ssh ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/ssh
++ [ ! -e /root/etc/ssh ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/ssh
++ path=/writable/system-data/etc/ssh
++ [ ! -e /root/writable/system-data/etc/ssh ]
++ stat -c %u:%g /root/etc/ssh
++ dstown=0:0
++ stat -c %a /root/etc/ssh
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/ssh ]
++ [ transition = transition ]
++ cp -aR /root/etc/ssh /root/writable/system-data/etc/ssh
++ [ -e /root/writable/system-data//etc/ssh ]
++ mount -o bind /root/writable/system-data//etc/ssh /root//etc/ssh
++ read line
++ set -- /etc/sudoers.d auto persistent transition none
++ [ -z /etc/sudoers.d ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/sudoers.d
++ [ ! -e /root/etc/sudoers.d ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/sudoers.d
++ path=/writable/system-data/etc/sudoers.d
++ [ ! -e /root/writable/system-data/etc/sudoers.d ]
++ stat -c %u:%g /root/etc/sudoers.d
++ dstown=0:0
++ stat -c %a /root/etc/sudoers.d
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/sudoers.d ]
++ [ transition = transition ]
++ cp -aR /root/etc/sudoers.d /root/writable/system-data/etc/sudoers.d
++ [ -e /root/writable/system-data//etc/sudoers.d ]
++ mount -o bind /root/writable/system-data//etc/sudoers.d /root//etc/sudoers.d
++ read line
++ set -- # systemd
++ [ -z # ]
++ [ -z systemd ]
++ [ -z  ]
++ continue
++ read line
++ set -- /etc/systemd auto persistent transition none
++ [ -z /etc/systemd ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/systemd
++ [ ! -e /root/etc/systemd ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/systemd
++ path=/writable/system-data/etc/systemd
++ [ ! -e /root/writable/system-data/etc/systemd ]
++ stat -c %u:%g /root/etc/systemd
++ dstown=0:0
++ stat -c %a /root/etc/systemd
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/systemd ]
++ [ transition = transition ]
++ cp -aR /root/etc/systemd /root/writable/system-data/etc/systemd
++ [ -e /root/writable/system-data//etc/systemd ]
++ mount -o bind /root/writable/system-data//etc/systemd /root//etc/systemd
++ read line
++ set -- /var/lib/systemd auto persistent transition none
++ [ -z /var/lib/systemd ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/lib/systemd
++ [ ! -e /root/var/lib/systemd ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/systemd
++ path=/writable/system-data/var/lib/systemd
++ [ ! -e /root/writable/system-data/var/lib/systemd ]
++ stat -c %u:%g /root/var/lib/systemd
++ dstown=0:0
++ stat -c %a /root/var/lib/systemd
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib
++ [ ! -d /root/var/lib/systemd ]
++ [ transition = transition ]
++ cp -aR /root/var/lib/systemd /root/writable/system-data/var/lib/systemd
++ [ none = none ]
++ echo /writable/system-data/var/lib/systemd /var/lib/systemd none bind 0 0
++ read line
++ set -- /var/lib/private/systemd auto persistent transition none
++ [ -z /var/lib/private/systemd ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/lib/private/systemd
++ [ ! -e /root/var/lib/private/systemd ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/private/systemd
++ path=/writable/system-data/var/lib/private/systemd
++ [ ! -e /root/writable/system-data/var/lib/private/systemd ]
++ stat -c %u:%g /root/var/lib/private/systemd
++ dstown=0:0
++ stat -c %a /root/var/lib/private/systemd
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib/private
++ [ ! -d /root/var/lib/private/systemd ]
++ [ transition = transition ]
++ cp -aR /root/var/lib/private/systemd /root/writable/system-data/var/lib/private/systemd
++ [ none = none ]
++ echo /writable/system-data/var/lib/private/systemd /var/lib/private/systemd none bind 0 0
++ read line
++ set -- # udev
++ [ -z # ]
++ [ -z udev ]
++ [ -z  ]
++ continue
++ read line
++ set -- /etc/udev/rules.d auto persistent transition none
++ [ -z /etc/udev/rules.d ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/udev/rules.d
++ [ ! -e /root/etc/udev/rules.d ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/udev/rules.d
++ path=/writable/system-data/etc/udev/rules.d
++ [ ! -e /root/writable/system-data/etc/udev/rules.d ]
++ stat -c %u:%g /root/etc/udev/rules.d
++ dstown=0:0
++ stat -c %a /root/etc/udev/rules.d
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc/udev
++ [ ! -d /root/etc/udev/rules.d ]
++ [ transition = transition ]
++ cp -aR /root/etc/udev/rules.d /root/writable/system-data/etc/udev/rules.d
++ [ -e /root/writable/system-data//etc/udev/rules.d ]
++ mount -o bind /root/writable/system-data//etc/udev/rules.d /root//etc/udev/rules.d
++ read line
++ set -- /var/lib/extrausers auto persistent transition none
++ [ -z /var/lib/extrausers ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/lib/extrausers
++ [ ! -e /root/var/lib/extrausers ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/extrausers
++ path=/writable/system-data/var/lib/extrausers
++ [ ! -e /root/writable/system-data/var/lib/extrausers ]
++ stat -c %u:%g /root/var/lib/extrausers
++ dstown=0:0
++ stat -c %a /root/var/lib/extrausers
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib
++ [ ! -d /root/var/lib/extrausers ]
++ [ transition = transition ]
++ cp -aR /root/var/lib/extrausers /root/writable/system-data/var/lib/extrausers
++ [ none = none ]
++ echo /writable/system-data/var/lib/extrausers /var/lib/extrausers none bind 0 0
++ read line
++ set -- /var/lib/misc auto persistent transition none
++ [ -z /var/lib/misc ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/lib/misc
++ [ ! -e /root/var/lib/misc ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/misc
++ path=/writable/system-data/var/lib/misc
++ [ ! -e /root/writable/system-data/var/lib/misc ]
++ stat -c %u:%g /root/var/lib/misc
++ dstown=0:0
++ stat -c %a /root/var/lib/misc
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib
++ [ ! -d /root/var/lib/misc ]
++ [ transition = transition ]
++ cp -aR /root/var/lib/misc /root/writable/system-data/var/lib/misc
++ [ none = none ]
++ echo /writable/system-data/var/lib/misc /var/lib/misc none bind 0 0
++ read line
++ set -- /var/lib/sudo auto temporary none defaults,mode=0700
++ [ -z /var/lib/sudo ]
++ [ -z auto ]
++ [ -z temporary ]
++ [ -z none ]
++ [ -z defaults,mode=0700 ]
++ dstpath=/root/var/lib/sudo
++ [ ! -e /root/var/lib/sudo ]
++ [ temporary = temporary ]
++ echo tmpfs /var/lib/sudo tmpfs defaults,mode=0700 0 0
++ read line
++ set -- /var/log auto persistent transition none
++ [ -z /var/log ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/log
++ [ ! -e /root/var/log ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/log
++ path=/writable/system-data/var/log
++ [ ! -e /root/writable/system-data/var/log ]
++ stat -c %u:%g /root/var/log
++ dstown=0:0
++ stat -c %a /root/var/log
++ dstmode=755
++ mkdir -p /root/writable/system-data/var
++ [ ! -d /root/var/log ]
++ [ transition = transition ]
++ cp -aR /root/var/log /root/writable/system-data/var/log
++ [ none = none ]
++ echo /writable/system-data/var/log /var/log none bind 0 0
++ read line
++ set --
++ [ -z  ]
++ continue
++ read line
++ set -- /var/lib/console-conf auto persistent transition none
++ [ -z /var/lib/console-conf ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/lib/console-conf
++ [ ! -e /root/var/lib/console-conf ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/console-conf
++ path=/writable/system-data/var/lib/console-conf
++ [ ! -e /root/writable/system-data/var/lib/console-conf ]
++ stat -c %u:%g /root/var/lib/console-conf
++ dstown=0:0
++ stat -c %a /root/var/lib/console-conf
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib
++ [ ! -d /root/var/lib/console-conf ]
++ [ transition = transition ]
++ cp -aR /root/var/lib/console-conf /root/writable/system-data/var/lib/console-conf
++ [ none = none ]
++ echo /writable/system-data/var/lib/console-conf /var/lib/console-conf none bind 0 0
++ read line
++ set -- /var/lib/apparmor auto persistent transition none
++ [ -z /var/lib/apparmor ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/var/lib/apparmor
++ [ ! -e /root/var/lib/apparmor ]
++ continue
++ read line
++ set -- /var/lib/dbus auto persistent none none
++ [ -z /var/lib/dbus ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z none ]
++ [ -z none ]
++ dstpath=/root/var/lib/dbus
++ [ ! -e /root/var/lib/dbus ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/dbus
++ path=/writable/system-data/var/lib/dbus
++ [ ! -e /root/writable/system-data/var/lib/dbus ]
++ stat -c %u:%g /root/var/lib/dbus
++ dstown=0:0
++ stat -c %a /root/var/lib/dbus
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib
++ [ ! -d /root/var/lib/dbus ]
++ [ none = transition ]
++ [ persistent = synced ]
++ mkdir /root/writable/system-data/var/lib/dbus
++ chown 0:0 /root/writable/system-data/var/lib/dbus
++ chmod 755 /root/writable/system-data/var/lib/dbus
++ [ none = none ]
++ echo /writable/system-data/var/lib/dbus /var/lib/dbus none bind 0 0
++ read line
++ set -- /var/lib/dhcp auto persistent none none
++ [ -z /var/lib/dhcp ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z none ]
++ [ -z none ]
++ dstpath=/root/var/lib/dhcp
++ [ ! -e /root/var/lib/dhcp ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/dhcp
++ path=/writable/system-data/var/lib/dhcp
++ [ ! -e /root/writable/system-data/var/lib/dhcp ]
++ stat -c %u:%g /root/var/lib/dhcp
++ dstown=0:0
++ stat -c %a /root/var/lib/dhcp
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib
++ [ ! -d /root/var/lib/dhcp ]
++ [ none = transition ]
++ [ persistent = synced ]
++ mkdir /root/writable/system-data/var/lib/dhcp
++ chown 0:0 /root/writable/system-data/var/lib/dhcp
++ chmod 755 /root/writable/system-data/var/lib/dhcp
++ [ none = none ]
++ echo /writable/system-data/var/lib/dhcp /var/lib/dhcp none bind 0 0
++ read line
++ set -- # cloud-init
++ [ -z # ]
++ [ -z cloud-init ]
++ [ -z  ]
++ continue
++ read line
++ set -- # FIXME: we currently write an empty /writable/system-data/etc/cloud directory
++ [ -z # ]
++ [ -z FIXME: ]
++ [ -z we ]
++ [ -z currently ]
++ [ -z write ]
++ continue
++ read line
++ set -- # when creating the image. So setting /etc/cloud to "persistent"
++ [ -z # ]
++ [ -z when ]
++ [ -z creating ]
++ [ -z the ]
++ [ -z image. ]
++ continue
++ read line
++ set -- # instead of "synced" will result all writes getting skipped. Once
++ [ -z # ]
++ [ -z instead ]
++ [ -z of ]
++ [ -z "synced" ]
++ [ -z will ]
++ continue
++ read line
++ set -- # the image does no longer contains this empty dir this patch can be
++ [ -z # ]
++ [ -z the ]
++ [ -z image ]
++ [ -z does ]
++ [ -z no ]
++ continue
++ read line
++ set -- # reverted.
++ [ -z # ]
++ [ -z reverted. ]
++ [ -z  ]
++ continue
++ read line
++ set -- /etc/cloud auto synced none none
++ [ -z /etc/cloud ]
++ [ -z auto ]
++ [ -z synced ]
++ [ -z none ]
++ [ -z none ]
++ dstpath=/root/etc/cloud
++ [ ! -e /root/etc/cloud ]
++ [ synced = temporary ]
++ [ synced = persistent ]
++ [ synced = synced ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/cloud
++ path=/writable/system-data/etc/cloud
++ [ ! -e /root/writable/system-data/etc/cloud ]
++ stat -c %u:%g /root/etc/cloud
++ dstown=0:0
++ stat -c %a /root/etc/cloud
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/cloud ]
++ [ none = transition ]
++ [ synced = synced ]
++ cp -aR /root/etc/cloud /root/writable/system-data/etc/cloud
++ [ -e /root/writable/system-data//etc/cloud ]
++ mount -o bind /root/writable/system-data//etc/cloud /root//etc/cloud
++ read line
++ set -- /var/lib/cloud auto persistent none none
++ [ -z /var/lib/cloud ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z none ]
++ [ -z none ]
++ dstpath=/root/var/lib/cloud
++ [ ! -e /root/var/lib/cloud ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/var/lib/cloud
++ path=/writable/system-data/var/lib/cloud
++ [ ! -e /root/writable/system-data/var/lib/cloud ]
++ stat -c %u:%g /root/var/lib/cloud
++ dstown=0:0
++ stat -c %a /root/var/lib/cloud
++ dstmode=755
++ mkdir -p /root/writable/system-data/var/lib
++ [ ! -d /root/var/lib/cloud ]
++ [ none = transition ]
++ [ persistent = synced ]
++ mkdir /root/writable/system-data/var/lib/cloud
++ chown 0:0 /root/writable/system-data/var/lib/cloud
++ chmod 755 /root/writable/system-data/var/lib/cloud
++ [ none = none ]
++ echo /writable/system-data/var/lib/cloud /var/lib/cloud none bind 0 0
++ read line
++ set -- # for various clouds like GCE
++ [ -z # ]
++ [ -z for ]
++ [ -z various ]
++ [ -z clouds ]
++ [ -z like ]
++ continue
++ read line
++ set -- /etc/sysctl.d auto persistent transition none
++ [ -z /etc/sysctl.d ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/sysctl.d
++ [ ! -e /root/etc/sysctl.d ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/sysctl.d
++ path=/writable/system-data/etc/sysctl.d
++ [ ! -e /root/writable/system-data/etc/sysctl.d ]
++ stat -c %u:%g /root/etc/sysctl.d
++ dstown=0:0
++ stat -c %a /root/etc/sysctl.d
++ dstmode=755
++ mkdir -p /root/writable/system-data/etc
++ [ ! -d /root/etc/sysctl.d ]
++ [ transition = transition ]
++ cp -aR /root/etc/sysctl.d /root/writable/system-data/etc/sysctl.d
++ [ -e /root/writable/system-data//etc/sysctl.d ]
++ mount -o bind /root/writable/system-data//etc/sysctl.d /root//etc/sysctl.d
++ read line
++ set -- # swapfile
++ [ -z # ]
++ [ -z swapfile ]
++ [ -z  ]
++ continue
++ read line
++ set -- /etc/default/swapfile auto persistent transition none
++ [ -z /etc/default/swapfile ]
++ [ -z auto ]
++ [ -z persistent ]
++ [ -z transition ]
++ [ -z none ]
++ dstpath=/root/etc/default/swapfile
++ [ ! -e /root/etc/default/swapfile ]
++ [ persistent = temporary ]
++ [ persistent = persistent ]
++ [ auto = auto ]
++ srcpath=/root/writable/system-data/etc/default/swapfile
++ path=/writable/system-data/etc/default/swapfile
++ [ ! -e /root/writable/system-data/etc/default/swapfile ]
++ stat -c %u:%g /root/etc/default/swapfile
++ dstown=0:0
++ stat -c %a /root/etc/default/swapfile
++ dstmode=644
++ mkdir -p /root/writable/system-data/etc/default
++ [ ! -d /root/etc/default/swapfile ]
++ [ transition = transition ]
++ cp -a /root/etc/default/swapfile /root/writable/system-data/etc/default/swapfile
++ [ -e /root/writable/system-data//etc/default/swapfile ]
++ mount -o bind /root/writable/system-data//etc/default/swapfile /root//etc/default/swapfile
++ read line
++ sync
++ findfs LABEL=system-boot
++ boot_partition=/dev/sda2
++ [ -n /dev/sda2 ]
++ grubdir=/boot/grub
++ ubootdir=/boot/uboot
++ tmpboot_mnt=/tmpmnt_system-boot
++ mkdir -p /tmpmnt_system-boot
++ mount -o ro /dev/sda2 /tmpmnt_system-boot
++ [ -f /tmpmnt_system-boot/EFI/ubuntu/grub/grub.cfg ]
++ [ -f /tmpmnt_system-boot/EFI/ubuntu/grub.cfg ]
++ efidir=/boot/efi
++ efibinddir=/boot/efi/EFI/ubuntu/
++ [ -d /root//boot/efi ]
++ echo /dev/sda2 /boot/efi auto defaults 0 2
++ echo /boot/efi/EFI/ubuntu/ /boot/grub none bind 0 0
++ umount /tmpmnt_system-boot
++ mkdir -p /root/writable/system-data/etc/systemd/system
++ mount -o bind /root/writable/system-data/etc/systemd/system /root/etc/systemd/system
++ [ ! -e /root/writable/system-data/etc/machine-id ]
++ cat /proc/sys/kernel/random/uuid
++ tr -d -
++ mount -o bind /root/writable/system-data/etc/machine-id /root/etc/machine-id
++ [ -d /root/custom/home ]
++ [ n != y ]
++ log_begin_msg Running /scripts/local-bottom
++ _log_msg Begin: Running /scripts/local-bottom ... 
++ [ n = y ]
++ printf Begin: Running /scripts/local-bottom ... 
+Begin: Running /scripts/local-bottom ... + run_scripts /scripts/local-bottom
++ initdir=/scripts/local-bottom
++ [ ! -d /scripts/local-bottom ]
++ shift
++ . /scripts/local-bottom/ORDER
++ /scripts/local-bottom/fixrtc-mount
++ [ -e /conf/param.conf ]
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ read_fstab_entry /usr
++ found=1
++ [ -f /root/etc/fstab ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ continue
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ continue
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ continue
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ / = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /writable = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /home = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /snap = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/snapd = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/cache = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/snap = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /media = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /mnt = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /root = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /tmp = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/tmp = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/systemd = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/private/systemd = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/extrausers = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/misc = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/sudo = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/log = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/console-conf = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/dbus = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/dhcp = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /var/lib/cloud = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /boot/efi = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ [ /boot/grub = /usr ]
++ read MNT_FSNAME MNT_DIR MNT_TYPE MNT_OPTS MNT_FREQ MNT_PASS MNT_JUNK
++ return 1
++ mount_bottom
++ nfs_bottom
++ [ yes = yes ]
++ [ n != y ]
++ log_begin_msg Running /scripts/nfs-bottom
++ _log_msg Begin: Running /scripts/nfs-bottom ... 
++ [ n = y ]
++ printf Begin: Running /scripts/nfs-bottom ... 
+Begin: Running /scripts/nfs-bottom ... + run_scripts /scripts/nfs-bottom
++ initdir=/scripts/nfs-bottom
++ [ ! -d /scripts/nfs-bottom ]
++ return
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ nfs_premount_used=no
++ nfs_top_used=no
++ nfs_bottom
++ [ no = yes ]
++ [ no = yes ]
++ nfs_premount_used=no
++ nfs_top_used=no
++ local_bottom
++ [  = yes ]
++ [  = yes ]
++ local_premount_used=no
++ local_top_used=no
++ unset local_top_time
++ maybe_break bottom
++ [ n != y ]
++ log_begin_msg Running /scripts/init-bottom
++ _log_msg Begin: Running /scripts/init-bottom ... 
++ [ n = y ]
++ printf Begin: Running /scripts/init-bottom ... 
+Begin: Running /scripts/init-bottom ... + run_scripts /scripts/init-bottom
++ initdir=/scripts/init-bottom
++ [ ! -d /scripts/init-bottom ]
++ shift
++ . /scripts/init-bottom/ORDER
++ /scripts/init-bottom/udev
++ [ -e /conf/param.conf ]
++ [ n != y ]
++ log_end_msg
++ _log_msg done.\n
++ [ n = y ]
++ printf done.\n
+done.
++ mount -n -o move /run /root/run
++ validate_init /lib/systemd/systemd
++ run-init -n /root /lib/systemd/systemd
++ validate_init /lib/systemd/systemd
++ run-init -n /root /lib/systemd/systemd
++ maybe_break init
++ unset debug
++ unset MODPROBE_OPTIONS
++ unset DPKG_ARCH
++ unset ROOTFLAGS
++ unset ROOTFSTYPE
++ unset ROOTDELAY
++ unset ROOT
++ unset IP
++ unset IP6
++ unset BOOT
++ unset BOOTIF
++ unset UBIMTD
++ unset blacklist
++ unset break
++ unset noresume
++ unset panic
++ unset quiet
++ unset readonly
++ unset resume
++ unset resume_offset
++ unset fastboot
++ unset forcefsck
++ unset fsckfix
++ mount -n -o move /sys /root/sys
++ mount -n -o move /proc /root/proc
++ exec run-init /root /lib/systemd/systemd
