@@ -1,0 +1,55 @@
+#!/usr/bin/python3
+import argparse
+import os
+import subprocess
+
+
+def create_efi(args):
+    subprocess.check_call(
+        [
+            "objcopy",
+            "--add-section",
+            ".linux=%s" % args.kernel,
+            "--change-section-vma",
+            ".linux=0x40000",
+            "--add-section",
+            ".initrd=%s" % args.initrd,
+            "--change-section-vma",
+            ".initrd=0x3000000",
+            args.stub,
+            args.output,
+        ]
+    )
+    os.chmod(args.output, 0o600)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers(dest="subcmd", required=True)
+    createefi_parser = subparser.add_parser("create-efi")
+    createefi_parser.add_argument("--root", help="path to root", default="")
+    createefi_parser.add_argument(
+        "--stub",
+        help="path to stub",
+        default="/usr/lib/systemd/boot/efi/linuxx64.efi.stub",
+    )
+    createefi_parser.add_argument(
+        "--kernel", help="path to kernel", default="/boot/vmlinuz"
+    )
+    createefi_parser.add_argument(
+        "--initrd", help="path to initramfs", default="/boot/initrd.img"
+    )
+    createefi_parser.add_argument(
+        "--output", help="path to output", default="/boot/kernel.efi"
+    )
+    args = parser.parse_args()
+    if args.root:
+        args.stub = os.path.join(args.root, args.stub)
+        args.kernel = os.path.join(args.root, args.kernel)
+        args.initrd = os.path.join(args.root, args.initrd)
+        args.output = os.path.join(args.root, args.output)
+    globals()[args.subcmd.replace("-", "_")](args)
+
+
+if __name__ == "__main__":
+    main()
