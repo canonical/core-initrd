@@ -1,0 +1,5 @@
+ubuntu-core-initramfs (1) focal; urgency=medium
+
+  * Initial Release.
+
+ -- Dimitri John Ledkov <xnox@ubuntu.com>  Tue, 19 Nov 2019 12:24:25 +0000
