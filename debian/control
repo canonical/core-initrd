@@ -10,7 +10,7 @@ Homepage: https://launchpad.net/ubuntu-core-initramfs
 
 Package: ubuntu-core-initramfs
 Architecture: all
-Depends: ${python3:Depends}, ${misc:Depends}, binutils
+Depends: ${python3:Depends}, ${misc:Depends}, binutils, systemd
 Description: standard embedded initrd
  Standard embedded initrd implementation to be used with Ubuntu Core
  systems. Currently targetting creating BLS Type2 like binaries.
