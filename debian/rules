@@ -1,5 +1,121 @@
 #!/usr/bin/make -f
+include /usr/share/dpkg/default.mk
 
 %:
-	dh $@ --with python3
+	dh $@ --buildsystem=meson+ninja --sourcedir=vendor/systemd --with python3
 
+override_dh_auto_configure:
+	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a
+	dh_auto_configure --buildsystem=meson+ninja --sourcedir=vendor/systemd -- \
+      -Db_lto=true \
+      -Db_pie=true \
+      -Ddebug=false \
+      -Dstrip=true \
+      -Dsplit-usr=false \
+      -Dsplit-bin=true \
+      -Dntp-servers=ntp.ubuntu.com \
+      -Ddns-servers='' \
+      --libdir=/usr/lib/$(DEB_HOST_MULTIARCH) \
+      -Drootlibdir=/usr/lib/$(DEB_HOST_MULTIARCH) \
+      -Dsysvinit-path='' \
+      -Dsysvrcnd-path='' \
+      -Dsulogin-path='/usr/bin/sh' \
+      -Drpmmacrosdir=no \
+      -Dlink-udev-shared=true \
+      -Dlink-systemctl-shared=true \
+      -Dstatic-libsystemd=false \
+      -Dstatic-libudev=false \
+      -Ddebug-shell='/usr/bin/sh' \
+      -Dvalgrind=false \
+      -Dutmp=false \
+      -Dhibernate=false \
+      -Dldconfig=false \
+      -Dresolve=false \
+      -Defi=true \
+      -Dtpm=false \
+      -Denvironment-d=false \
+      -Dbinfmt=false \
+      -Dcoredump=false \
+      -Dlogind=false \
+      -Dhostnamed=false \
+      -Dlocaled=false \
+      -Dmachined=false \
+      -Dportabled=false \
+      -Dnetworkd=false \
+      -Dtimedated=false \
+      -Dtimesyncd=false \
+      -Dremote=false \
+      -Dnss-myhostname=false \
+      -Dnss-mymachines=false \
+      -Dnss-resolve=false \
+      -Dnss-systemd=true \
+      -Dfirstboot=false \
+      -Drandomseed=false \
+      -Dbacklight=false \
+      -Dvconsole=false \
+      -Dquotacheck=false \
+      -Dsysusers=true \
+      -Dtmpfiles=true \
+      -Dimportd=false \
+      -Dhwdb=true \
+      -Drfkill=false \
+      -Dman=false \
+      -Dhtml=false \
+      -Dfallback-hostname=ubuntu \
+      -Dsystem-uid-max=999 \
+      -Dsystem-gid-max=999 \
+      -Dadm-group=true \
+      -Dwheel-group=false \
+      -Ddev-kvm-mode=0660 \
+      -Dgroup-render-mode=0660 \
+      -Ddefault-dnssec=no \
+      -Dselinux=true \
+      -Ddefault-kill-user-processes=false \
+      -Ddefault-hierarchy=hybrid \
+      -Ddefault-locale=C.UTF-8 \
+      -Dnobody-user=nobody \
+      -Dnobody-group=nogroup \
+      -Dbump-proc-sys-fs-nr-open=false \
+      -Dsupport-url=https://www.ubuntu.com/support \
+      -Dseccomp=true \
+      -Dapparmor=true \
+      -Dsmack=false \
+      -Dpolkit=false \
+      -Dima=false \
+      -Dacl=true \
+      -Daudit=true \
+      -Dblkid=true \
+      -Dkmod=true \
+      -Dpam=true \
+      -Dpamconfdir=no \
+      -Dmicrohttpd=false \
+      -Dlibcryptsetup=true \
+      -Dlibcurl=false \
+      -Dlibidn2=true \
+      -Dlibiptc=true \
+      -Dqrencode=false \
+      -Dgcrypt=false \
+      -Dgnutls=false \
+      -Dopenssl=false \
+      -Delfutils=false \
+      -Dzlib=false \
+      -Dbzip2=false \
+      -Dxz=false \
+      -Dlz4=true \
+      -Dxkbcommon=false \
+      -Dpcre2=true \
+      -Dglib=false \
+      -Ddbus=false \
+      -Dgnu-efi=false \
+      -Dbashcompletiondir=no \
+      -Dzshcompletiondir=no \
+      -Dtests=true \
+      -Dslow-tests=true \
+      -Dinstall-tests=false
+
+override_dh_auto_clean:
+	dh_auto_clean --buildsystem=meson+ninja --sourcedir=vendor/systemd
+	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a
+
+override_dh_auto_install:
+	
