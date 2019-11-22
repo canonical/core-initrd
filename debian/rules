@@ -116,6 +116,66 @@ override_dh_auto_configure:
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=meson+ninja --sourcedir=vendor/systemd
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a
+	rm -rf vendor/systemd/.pc
 
 override_dh_auto_install:
+	rm -rf debian/tmp
+	mkdir debian/tmp
+	cp -ar factory/* debian/tmp
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedir=vendor/systemd
+	clean_paths="etc/kernel \
+		etc/sysctl.d \
+		etc/modules-load.d \
+		etc/tmpfiles.d \
+		etc/systemd/user \
+		etc/systemd/journald.conf \
+		etc/systemd/user.conf \
+		etc/systemd/system/getty.target.wants \
+		etc/systemd/system.conf \
+		etc/systemd/sleep.conf \
+		etc/systemd/pstore.conf \
+		etc/udev \
+		etc/xdg \
+		etc/X11 \
+		usr/share/locale \
+		usr/share/factory \
+		usr/share/pkgconfig \
+		usr/share/polkit-1 \
+		usr/share/doc \
+		usr/bin/systemd-analyze \
+		usr/lib/kernel \
+		usr/lib/systemd/user \
+		usr/lib/systemd/system-preset \
+		usr/lib/systemd/catalog \
+		usr/lib/systemd/user-preset \
+		usr/lib/systemd/network \
+		usr/lib/sysusers.d \
+		usr/lib/*/pkgconfig \
+		usr/include \
+		usr/bin/busctl \
+		usr/bin/systemd-run \
+		usr/bin/systemd-cgtop \
+		usr/bin/systemd-cgls \
+		usr/bin/systemd-escape \
+		"; \
+	for p in $$clean_paths; do \
+		rm -rf debian/tmp/$$p ;\
+	done
+	touch debian/tmp/etc/machine-id
+
+	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/*/:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
+	rm -rf debian/tmp/usr/lib/udev/hwdb.d
+
+	export DESTDIR=$(CURDIR)/debian/tmp; \
+	export verbose=n; \
+	. /usr/share/initramfs-tools/hook-functions; \
+	. /usr/share/initramfs-tools/zz-busybox-initramfs
+
+	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*
+	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*
+
+	for e in $(find debian/tmp -type -f -executable); do \
+		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
+	done
+
+	ldconfig -r debian/tmp
