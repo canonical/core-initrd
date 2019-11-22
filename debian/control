@@ -2,7 +2,11 @@ Source: ubuntu-core-initramfs
 Section: utils
 Priority: optional
 Maintainer: Dimitri John Ledkov <xnox@ubuntu.com>
-Build-Depends: debhelper-compat (= 12), dh-python, python3:any, usrmerge, dracut-core, quilt, busybox-initramfs,
+Build-Depends: debhelper-compat (= 12), dh-python, python3:any, dracut-core, quilt, busybox-initramfs,
+               util-linux,
+               e2fsprogs,
+               dosfstools,
+               mount,
                pkg-config,
                xsltproc,
                docbook-xsl,

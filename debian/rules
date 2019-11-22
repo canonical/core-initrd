@@ -6,6 +6,7 @@ include /usr/share/dpkg/default.mk
 
 override_dh_auto_configure:
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a || true
+	sed -i '/"minix"/s/^/\/\//' vendor/systemd/src/test/test-path-util.c
 	dh_auto_configure --buildsystem=meson+ninja --sourcedirectory=vendor/systemd -- \
       -Db_lto=true \
       -Db_pie=true \
@@ -118,6 +119,7 @@ override_dh_auto_test:
 
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
+	sed -i '/"minix"/s/^\/*//' vendor/systemd/src/test/test-path-util.c
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a || true
 	rm -rf vendor/systemd/.pc
 
@@ -173,12 +175,15 @@ override_dh_auto_install:
 
 	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /usr/lib/initramfs-tools/bin/busybox usr/bin/busybox
 	set -e; \
-	for alias in `debian/tmp/usr/bin/busybox --list-long | grep -v -e busybox -e reboot`; do \
+	for alias in `debian/tmp/usr/bin/busybox --list-long | grep -v -e busybox -e reboot -e mount -e umount`; do \
 		ln -v -s busybox debian/tmp/usr/bin/$$alias; \
 	done
 
-	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*
-	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*
+	set -e; \
+	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount"; do \
+		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
+	done
+	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
 	for e in $(find debian/tmp -type -f -executable); do \
