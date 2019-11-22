@@ -2,194 +2,6 @@
 set -x
 set -e
 
-## configure and build systemd
-
-# maybe logind, vconsole, acl, kmod, pam
-
-#rm -rf build
-rm -rf install-tmp
-
-meson setup ~/canonical/systemd build \
-      -Db_lto=true \
-      -Db_pie=true \
-      -Ddebug=false \
-      -Dstrip=true \
-      -Dsplit-usr=false \
-      -Dsplit-bin=false \
-      -Dntp-servers=ntp.ubuntu.com \
-      -Ddns-servers='' \
-      -Drootlibdir=/usr/lib/x86_64-linux-gnu \
-      -Dsysvinit-path='' \
-      -Dsysvrcnd-path='' \
-      -Dsulogin-path='/usr/bin/sh' \
-      -Drpmmacrosdir=no \
-      -Dlink-udev-shared=true \
-      -Dlink-systemctl-shared=true \
-      -Dstatic-libsystemd=false \
-      -Dstatic-libudev=false \
-      -Ddebug-shell=/bin/false \
-      -Dvalgrind=false \
-      -Dutmp=false \
-      -Dhibernate=false \
-      -Dldconfig=false \
-      -Dresolve=false \
-      -Defi=false \
-      -Dtpm=false \
-      -Denvironment-d=false \
-      -Dbinfmt=false \
-      -Dcoredump=false \
-      -Dlogind=false \
-      -Dhostnamed=false \
-      -Dlocaled=false \
-      -Dmachined=false \
-      -Dportabled=false \
-      -Dnetworkd=false \
-      -Dtimedated=false \
-      -Dtimesyncd=false \
-      -Dremote=false \
-      -Dnss-myhostname=false \
-      -Dnss-mymachines=false \
-      -Dnss-resolve=false \
-      -Dnss-systemd=false \
-      -Dfirstboot=false \
-      -Drandomseed=false \
-      -Dbacklight=false \
-      -Dvconsole=true \
-      -Dquotacheck=false \
-      -Dsysusers=true \
-      -Dtmpfiles=true \
-      -Dimportd=false \
-      -Dhwdb=true \
-      -Drfkill=false \
-      -Dman=false \
-      -Dhtml=false \
-      -Dfallback-hostname=ubuntu \
-      -Dsystem-uid-max=999 \
-      -Dsystem-gid-max=999 \
-      -Dadm-group=true \
-      -Dwheel-group=false \
-      -Ddev-kvm-mode=0660 \
-      -Ddefault-kill-user-processes=false \
-      -Ddefault-locale=C.UTF-8 \
-      -Dnobody-user=nobody \
-      -Dnobody-group=nogroup \
-      -Dsupport-url=https://www.ubuntu.com/support \
-      -Dseccomp=true \
-      -Dselinux=false \
-      -Dapparmor=true \
-      -Dsmack=false \
-      -Dpolkit=false \
-      -Dima=false \
-      -Dacl=true \
-      -Daudit=true \
-      -Dblkid=true \
-      -Dkmod=true \
-      -Dpam=true \
-      -Dmicrohttpd=false \
-      -Dlibcryptsetup=true \
-      -Dlibcurl=false \
-      -Dlibidn=true \
-      -Dlibiptc=false \
-      -Dqrencode=false \
-      -Dgcrypt=false \
-      -Dgnutls=false \
-      -Dopenssl=false \
-      -Delfutils=false \
-      -Dzlib=false \
-      -Dbzip2=false \
-      -Dxz=false \
-      -Dlz4=true \
-      -Dxkbcommon=false \
-      -Dpcre2=false \
-      -Dglib=false \
-      -Ddbus=false \
-      -Dgnu-efi=false \
-      -Dbashcompletiondir=no \
-      -Dzshcompletiondir=no \
-      -Dtests=false \
-      -Dslow-tests=false \
-      -Dinstall-tests=false
-
-ninja -C build
-
-export DESTDIR=`pwd`/install-tmp
-
-ninja -C build install
-
-## Remove useless things
-
-clean_paths="etc/kernel
-etc/systemd/user
-etc/systemd/journald.conf
-etc/systemd/user.conf
-etc/systemd/system/getty.target.wants
-etc/systemd/system.conf
-etc/udev
-etc/xdg
-etc/X11
-usr/share/locale
-usr/share/factory
-usr/share/pkgconfig
-usr/share/polkit-1
-usr/share/doc
-usr/bin/systemd-analyze
-usr/lib/kernel
-usr/lib/systemd/user
-usr/lib/systemd/system-preset
-usr/lib/systemd/catalog
-usr/lib/systemd/user-preset
-usr/lib/systemd/network
-usr/lib/sysusers.d
-usr/lib/x86_64-linux-gnu/pkgconfig
-usr/include
-usr/bin/busctl
-usr/bin/systemd-run
-usr/bin/systemd-cgtop
-usr/bin/systemd-cgls
-usr/bin/systemd-escape
-"
-for p in $clean_paths; do
-	rm -rf $DESTDIR/$p
-done
-
-## Setup minimal environment
-
-> "$DESTDIR/etc/machine-id"
-rm -f $DESTDIR/etc/passwd
-grep '^systemd-journal:' /etc/group >> "$DESTDIR/etc/group"
-grep '^audio:' /etc/group >> "$DESTDIR/etc/group"
-grep '^cdrom:' /etc/group >> "$DESTDIR/etc/group"
-grep '^dialout:' /etc/group >> "$DESTDIR/etc/group"
-grep '^disk:' /etc/group >> "$DESTDIR/etc/group"
-grep '^input:' /etc/group >> "$DESTDIR/etc/group"
-grep '^kmem:' /etc/group >> "$DESTDIR/etc/group"
-grep '^kvm:' /etc/group >> "$DESTDIR/etc/group"
-grep '^lp:' /etc/group >> "$DESTDIR/etc/group"
-grep '^tape:' /etc/group >> "$DESTDIR/etc/group"
-grep '^tty:' /etc/group >> "$DESTDIR/etc/group"
-grep '^utmp:' /etc/group >> "$DESTDIR/etc/group"
-grep '^video:' /etc/group >> "$DESTDIR/etc/group"
-grep '^adm:' /etc/group >> "$DESTDIR/etc/group"
-grep '^utmp:' /etc/group >> "$DESTDIR/etc/group"
-grep '^root:' /etc/group >> "$DESTDIR/etc/group"
-# we don't use systemd-networkd, but the user is in systemd.conf tmpfiles snippet
-grep '^root:' /etc/passwd 2>/dev/null >> "$DESTDIR/etc/passwd"
-echo 'root::18074:0:99999:7:::' >"$DESTDIR/etc/shadow"
-chmod 600 "$DESTDIR/etc/shadow"
-
-grep '^systemd-network:' /etc/passwd 2>/dev/null >> "$DESTDIR/etc/passwd"
-grep '^systemd-network:' /etc/group >> "$DESTDIR/etc/group"
-
-mkdir -p "$DESTDIR/etc/systemd"
-# We must use a volatile journal, and we don't want rate-limiting
-{
-        echo "[Journal]"
-        echo "Storage=volatile"
-        echo "RateLimitInterval=0"
-        echo "RateLimitBurst=0"
-} >> "$DESTDIR/etc/systemd/journald.conf"
-
-systemctl --quiet --root $DESTDIR set-default initrd.target
 
 # for initramfs-tools hook-functions
 export WORKDIR=$(mktemp -d --suffix=.ubuntu-core-initramfs)
@@ -199,70 +11,22 @@ export verbose=n
 # for /usr/lib/dracut/dracut-install
 export DESTROOTDIR=$DESTDIR
 
-# base dirs
-mkdir -p $DESTDIR $EARLYDIR $DESTDIR/etc
-for d in bin lib lib64; do
-    mkdir -p $DESTDIR/usr/$d
-    ln -s usr/$d $DESTDIR/$d
-done
-ln -s usr/bin $DESTDIR/sbin
-ln -s bin $DESTDIR/usr/sbin
-
-
-# required for in_initrd() systemd detection, part of shutdown
-# spec/requirements this is equivalent to /etc/os-release
-cat > $DESTDIR/etc/initrd-release <<EOF
-NAME="Ubuntu Core Initramfs"
-VERSION="1"
-ID=ubuntucoreinitramfs
-PRETTY_NAME="Ubuntu Core Initramfs Kelly's Eye - Number One"
-VERSION_ID="1"
-VERSION_CODENAME=keelyseye
-
-EOF
-
 # our boot sequence is to be controled by systemd
 . /usr/share/initramfs-tools/hook-functions
-
-export LD_LIBRARY_PATH=install-tmp/usr/lib/systemd/
-for e in $(find install-tmp -type f -executable); do
-	copy_exec $e ${e##install-tmp} || true
-done
-unset LD_LIBRARY_PATH
-rm -r $DESTDIR/install-tmp/
-
-copy_exec /lib/x86_64-linux-gnu/libnss_files.so.2
-copy_exec /lib/x86_64-linux-gnu/libnss_compat.so.2
-copy_exec /lib/x86_64-linux-gnu/libnss_systemd.so.2
-for f in nsswitch.conf passwd shadow group gshadow; do
-	copy_file conf $f /etc/$f
-done
 
 # install everything
 cp -ar install-tmp/* $DESTDIR
 
-. /usr/share/initramfs-tools/hooks/zz-busybox-initramfs
-
-ln -s usr/lib/systemd/systemd $DESTDIR/init
-
 export version=${version-$(uname -r)}
 export MODULESDIR="/lib/modules/${version}"
-
 auto_add_modules base block scsi
 manual_add_modules $(cat modules.txt)
 for f in $MODULESDIR/modules.*; do
 	copy_file conf $f $f
 done
 
-# rebuild hwdb
-systemd-hwdb --root $DESTDIR update
-rm -rf $DESTDIR/usr/lib/udev/hwdb.d
-
-# rebuild ldconfig
-cp -Lr /etc/ld.so.conf* $DESTDIR/etc/
-ldconfig -r $DESTDIR
-
 sudo rm -f ubuntu-core-initramfs.img
+
 # create initrd
 cd $DESTDIR
 find . | cpio --create --format='newc' --owner=0:0 | lz4 -9 -l > $OLDPWD/ubuntu-core-initramfs.img
