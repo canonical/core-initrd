@@ -1,0 +1,19 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Tue, 3 Sep 2019 11:34:09 +0200
+Subject: docs: fix push recipe in RELEASE.md
+
+(cherry picked from commit 31e1bbd1cab7f27c60493938a0fd5d9f51ce7cd8)
+---
+ docs/RELEASE.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docs/RELEASE.md b/docs/RELEASE.md
+index d842afc..56debd6 100644
+--- a/docs/RELEASE.md
++++ b/docs/RELEASE.md
+@@ -16,4 +16,4 @@ title: Steps to a Successful Release
+ 10. "Draft" a new release on github (https://github.com/systemd/systemd/releases/new), mark "This is a pre-release" if appropriate.
+ 11. Check that announcement to systemd-devel, with a copy&paste from NEWS, was sent. This should happen automatically.
+ 12. Update IRC topic (`/msg chanserv TOPIC #systemd Version NNN released`)
+-13. [After final release] Also push commits to stable, create an empty -stable branch: `git push systemd-stable origin/master:master origin/master:v${version}-stable`, and change the default branch to latest release (https://github.com/systemd/systemd-stable/settings/branches).
++13. [After final release] Also push commits to stable, create an empty -stable branch: `git push systemd-stable origin/master:master origin/master:refs/heads/${version}-stable`, and change the default branch to latest release (https://github.com/systemd/systemd-stable/settings/branches).

@@ -1,0 +1,40 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Mon, 26 Mar 2018 13:17:01 +0100
+Subject: wait-online: exit, if no links are managed.
+
+(cherry picked from commit 19d11f607ac0f8b1e31f72a8e9d3d44371b9dadb)
+---
+ src/network/wait-online/manager.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/network/wait-online/manager.c b/src/network/wait-online/manager.c
+index 6de3df9..a2a0fb9 100644
+--- a/src/network/wait-online/manager.c
++++ b/src/network/wait-online/manager.c
+@@ -61,6 +61,7 @@ static int manager_link_is_online(Manager *m, Link *l, LinkOperationalState s) {
+ 
+ bool manager_configured(Manager *m) {
+         bool one_ready = false;
++        bool none_managed = true;
+         Iterator i;
+         const char *ifname;
+         void *p;
+@@ -105,13 +106,17 @@ bool manager_configured(Manager *m) {
+                 r = manager_link_is_online(m, l, _LINK_OPERSTATE_INVALID);
+                 if (r < 0 && !m->any)
+                         return false;
++                if (l->state && STR_IN_SET(l->state, "configured", "failed")) {
++                        log_info("managing: %s", l->ifname);
++                        none_managed = false;
++                }
+                 if (r > 0)
+                         /* we wait for at least one link to be ready,
+                          * regardless of who manages it */
+                         one_ready = true;
+         }
+ 
+-        return one_ready;
++        return one_ready || none_managed;
+ }
+ 
+ static int manager_process_link(sd_netlink *rtnl, sd_netlink_message *mm, void *userdata) {

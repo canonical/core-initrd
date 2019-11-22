@@ -1,0 +1,30 @@
+From: baybal <nikulinpi@gmail.com>
+Date: Wed, 11 Sep 2019 08:08:59 +0600
+Subject: hwdb: axis override for Dell 9360 touchpad
+
+and possibly other XPS models sharing the touchpad (#13472)
+
+(cherry picked from commit 26fe3af8ae7d52847eb3f2267eaa3df3af90d811)
+(cherry picked from commit 5412cc54a12129d53a56d4f95fdd2456302ccc9d)
+---
+ hwdb/60-evdev.hwdb | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/hwdb/60-evdev.hwdb b/hwdb/60-evdev.hwdb
+index 569b4cb..5142ef1 100644
+--- a/hwdb/60-evdev.hwdb
++++ b/hwdb/60-evdev.hwdb
+@@ -267,6 +267,13 @@ evdev:name:AlpsPS/2 ALPS DualPoint TouchPad:dmi:*svnDellInc.:pnPrecisionM4700*
+  EVDEV_ABS_35=0:1960:24
+  EVDEV_ABS_36=113:1436:30
+ 
++# Dell XPS13 9360
++evdev:name:SynPS/2 Synaptics TouchPad:dmi:*svnDellInc.:pnXPS139360:cvr:*
++ EVDEV_ABS_00=::42
++ EVDEV_ABS_01=::60
++ EVDEV_ABS_35=::42
++ EVDEV_ABS_36=::60
++
+ # Dell XPS15 9550
+ evdev:name:SynPS/2 Synaptics TouchPad:dmi:bvn*:bvr*:bd*:svnDellInc.:pnXPS159550*
+  EVDEV_ABS_00=::41

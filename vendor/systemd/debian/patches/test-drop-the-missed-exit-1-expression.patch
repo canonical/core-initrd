@@ -1,0 +1,33 @@
+From: Frantisek Sumsal <frantisek@sumsal.cz>
+Date: Sat, 10 Aug 2019 16:05:07 +0200
+Subject: test: drop the missed || exit 1 expression
+
+...as we've already done in the rest of the testsuite, see
+cc469c3dfc398210f38f819d367e68646c71d8da
+
+(cherry picked from commit 67c434b03f8a24f5350f017dfb4b2464406046db)
+(cherry picked from commit 9d4e65852998cf5ba0e0a273e3c67cee0c2df3c4)
+---
+ test/TEST-36-NUMAPOLICY/test.sh | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/test/TEST-36-NUMAPOLICY/test.sh b/test/TEST-36-NUMAPOLICY/test.sh
+index 5e775b2..a586f9d 100755
+--- a/test/TEST-36-NUMAPOLICY/test.sh
++++ b/test/TEST-36-NUMAPOLICY/test.sh
+@@ -1,5 +1,6 @@
+ #!/bin/bash
+ set -e
++
+ TEST_DESCRIPTION="test MUMAPolicy= and NUMAMask= options"
+ TEST_NO_NSPAWN=1
+ QEMU_OPTIONS="-numa node,nodeid=0"
+@@ -39,7 +40,7 @@ EOF
+         cp testsuite.sh $initdir/
+ 
+         setup_testsuite
+-    ) || return 1
++    )
+     setup_nspawn_root
+ }
+ 

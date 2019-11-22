@@ -1,0 +1,23 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Sat, 21 Sep 2019 17:06:25 +0200
+Subject: man: fix typo
+
+(cherry picked from commit decef551afaff9fb72f3cde499c9c1bcd23e5874)
+(cherry picked from commit b90549290e33dd09fb2677d4236228e1f3f2a4b1)
+---
+ man/systemd-time-wait-sync.service.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/systemd-time-wait-sync.service.xml b/man/systemd-time-wait-sync.service.xml
+index d51b272..c8a92f9 100644
+--- a/man/systemd-time-wait-sync.service.xml
++++ b/man/systemd-time-wait-sync.service.xml
+@@ -35,7 +35,7 @@
+ 
+     <para><filename>systemd-timesyncd.service</filename> notifies on successful synchronization.
+     <filename>systemd-time-wait-sync</filename> also tries to detect when the kernel marks the time as synchronized,
+-    but this detection is not reliable and is intended only as a fallback for other servies that can be used to
++    but this detection is not reliable and is intended only as a fallback for other services that can be used to
+     synchronize time (e.g., ntpd, chronyd).</para>
+ 
+   </refsect1>

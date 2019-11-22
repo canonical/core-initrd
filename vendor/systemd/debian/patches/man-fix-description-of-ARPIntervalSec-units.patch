@@ -1,0 +1,26 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Thu, 12 Sep 2019 11:15:35 +0200
+Subject: man: fix description of ARPIntervalSec= units
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1751363
+(cherry picked from commit 06c52cc2b7c6cf2729e130f2a23c5a7ce62e27b9)
+(cherry picked from commit 73e0f372d8100e635b95b0af39d4546e069c38e0)
+---
+ man/systemd.netdev.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/man/systemd.netdev.xml b/man/systemd.netdev.xml
+index 0775e00..4313355 100644
+--- a/man/systemd.netdev.xml
++++ b/man/systemd.netdev.xml
+@@ -1742,8 +1742,8 @@
+       <varlistentry>
+         <term><varname>ARPIntervalSec=</varname></term>
+         <listitem>
+-          <para>Specifies the ARP link monitoring frequency in milliseconds.
+-          A value of 0 disables ARP monitoring. The default value is 0.
++          <para>Specifies the ARP link monitoring frequency. A value of 0 disables ARP monitoring. The
++          default value is 0, and the default unit seconds.
+           </para>
+         </listitem>
+       </varlistentry>

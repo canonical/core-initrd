@@ -1,0 +1,48 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Wed, 18 Sep 2019 12:01:41 +0200
+Subject: units: make systemd-binfmt.service easier to work with no autofs
+
+See https://bugzilla.redhat.com/show_bug.cgi?id=1731772:
+when autofs4 is disabled in the kernel,
+proc-sys-fs-binfmt_misc.automount is not started, so the binfmt_misc module is
+never loaded. If we added a dependency on proc-sys-fs-binfmt_misc.mount
+to systemd-binfmt.service, things would work even if autofs4 was disabled, but
+we would unconditionally pull in the module and mount, which we don't want to do.
+(Right now we ony load the module if some binfmt is configured.)
+But let's make it easier to handle this case by doing two changes:
+1. order systemd-binfmt.service after the .mount unit (so that the .service
+   can count on the mount if both units are pulled in, even if .automount
+   is skipped)
+2. add [Install] section to the service unit. This way the user can do
+   'systemctl enable proc-sys-fs-binfmt_misc.mount' to get the appropriate behaviour.
+
+(cherry picked from commit 508133917d9628f8c0adc5db34d595196b72b1c8)
+(cherry picked from commit e151bf467494c042bbfd3a4c47ad83ac8e9df2fd)
+---
+ units/proc-sys-fs-binfmt_misc.mount | 3 +++
+ units/systemd-binfmt.service.in     | 1 +
+ 2 files changed, 4 insertions(+)
+
+diff --git a/units/proc-sys-fs-binfmt_misc.mount b/units/proc-sys-fs-binfmt_misc.mount
+index 66229ec..1587853 100644
+--- a/units/proc-sys-fs-binfmt_misc.mount
++++ b/units/proc-sys-fs-binfmt_misc.mount
+@@ -18,3 +18,6 @@ What=binfmt_misc
+ Where=/proc/sys/fs/binfmt_misc
+ Type=binfmt_misc
+ Options=nosuid,nodev,noexec
++
++[Install]
++WantedBy=sysinit.target
+diff --git a/units/systemd-binfmt.service.in b/units/systemd-binfmt.service.in
+index e940c7c..0c0f264 100644
+--- a/units/systemd-binfmt.service.in
++++ b/units/systemd-binfmt.service.in
+@@ -15,6 +15,7 @@ Documentation=https://www.freedesktop.org/wiki/Software/systemd/APIFileSystems
+ DefaultDependencies=no
+ Conflicts=shutdown.target
+ After=proc-sys-fs-binfmt_misc.automount
++After=proc-sys-fs-binfmt_misc.mount
+ Before=sysinit.target shutdown.target
+ ConditionPathIsReadWrite=/proc/sys/
+ ConditionDirectoryNotEmpty=|/lib/binfmt.d

@@ -1,0 +1,34 @@
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Sun, 29 Sep 2019 17:16:55 -0400
+Subject: src/core/automount: use DirectoryMode when calling mkdir -p
+
+mkdir -p is called both when setting up the autofs mount, as well
+as after being notified that the real mount unit should be called.
+However the first mkdir -p is hardcoded with 0555, while the second
+uses the value specified to DirectoryMode in the automount unit; the
+second mkdir -p is only needed when called from coldplug, so under
+normal operation the dirs are incorrectly created with mode 0555.
+
+This replaces the hardcoded 0555 mode with the value of DirectoryMode.
+
+Closes #13683.
+
+(cherry picked from commit 8084dcb9d759e93669127f200bf5ca755432b96e)
+(cherry picked from commit f406a691a7229628781686dfce4c8e276e1d46e3)
+---
+ src/core/automount.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/core/automount.c b/src/core/automount.c
+index bcdd7e1..a54e56c 100644
+--- a/src/core/automount.c
++++ b/src/core/automount.c
+@@ -568,7 +568,7 @@ static void automount_enter_waiting(Automount *a) {
+         if (r < 0)
+                 goto fail;
+ 
+-        (void) mkdir_p_label(a->where, 0555);
++        (void) mkdir_p_label(a->where, a->directory_mode);
+ 
+         unit_warn_if_dir_nonempty(UNIT(a), a->where);
+ 

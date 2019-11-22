@@ -1,0 +1,97 @@
+From: AsciiWolf <mail@asciiwolf.com>
+Date: Thu, 19 Sep 2019 14:34:31 +0200
+Subject: polkit: fix typo
+
+(cherry picked from commit 984b96aa7a793f74747b0349f0ed68e992ae17b2)
+(cherry picked from commit dbefe592596fd31581958fb2a556989c8c2621cf)
+---
+ po/ja.po                                    | 4 ++--
+ po/pl.po                                    | 2 +-
+ po/pt_BR.po                                 | 4 ++--
+ po/uk.po                                    | 2 +-
+ src/network/org.freedesktop.network1.policy | 2 +-
+ src/resolve/org.freedesktop.resolve1.policy | 2 +-
+ 6 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/po/ja.po b/po/ja.po
+index 6b550b1..cd1afe8 100644
+--- a/po/ja.po
++++ b/po/ja.po
+@@ -634,8 +634,8 @@ msgstr "DNSSEC Negative Trust Anchorsの設定"
+ 
+ #: src/network/org.freedesktop.network1.policy:111
+ #: src/resolve/org.freedesktop.resolve1.policy:122
+-msgid "Authentication is required to set DNSSEC Negative Trust Anchros."
+-msgstr "DNSSEC Negative Trust Anchrosを設定するには認証が必要です。"
++msgid "Authentication is required to set DNSSEC Negative Trust Anchors."
++msgstr "DNSSEC Negative Trust Anchorsを設定するには認証が必要です。"
+ 
+ #: src/network/org.freedesktop.network1.policy:121
+ msgid "Revert NTP settings"
+diff --git a/po/pl.po b/po/pl.po
+index 514625a..5c1588b 100644
+--- a/po/pl.po
++++ b/po/pl.po
+@@ -688,7 +688,7 @@ msgstr "Ustawienie negatywnych kotwic zaufania DNSSEC"
+ 
+ #: src/network/org.freedesktop.network1.policy:111
+ #: src/resolve/org.freedesktop.resolve1.policy:122
+-msgid "Authentication is required to set DNSSEC Negative Trust Anchros."
++msgid "Authentication is required to set DNSSEC Negative Trust Anchors."
+ msgstr ""
+ "Wymagane jest uwierzytelnienie, aby ustawić negatywne kotwice zaufania "
+ "DNSSEC."
+diff --git a/po/pt_BR.po b/po/pt_BR.po
+index 09779f7..70c1881 100644
+--- a/po/pt_BR.po
++++ b/po/pt_BR.po
+@@ -693,8 +693,8 @@ msgstr "Definir DNSSEC Negative Trust Anchors"
+ 
+ #: src/network/org.freedesktop.network1.policy:111
+ #: src/resolve/org.freedesktop.resolve1.policy:122
+-msgid "Authentication is required to set DNSSEC Negative Trust Anchros."
+-msgstr "É necessária autenticação para definir DNSSEC Negative Trust Anchros."
++msgid "Authentication is required to set DNSSEC Negative Trust Anchors."
++msgstr "É necessária autenticação para definir DNSSEC Negative Trust Anchors."
+ 
+ #: src/network/org.freedesktop.network1.policy:121
+ msgid "Revert NTP settings"
+diff --git a/po/uk.po b/po/uk.po
+index 9289360..96c0c55 100644
+--- a/po/uk.po
++++ b/po/uk.po
+@@ -668,7 +668,7 @@ msgid "Set DNSSEC Negative Trust Anchors"
+ msgstr "Встановлення прив'язок від'ємної довіри DNSSEC"
+ 
+ #: src/network/org.freedesktop.network1.policy:111
+-msgid "Authentication is required to set DNSSEC Negative Trust Anchros."
++msgid "Authentication is required to set DNSSEC Negative Trust Anchors."
+ msgstr ""
+ "Потрібна автентифікація, щоб встановити прив'язки від'ємної довіри DNSSEC."
+ 
+diff --git a/src/network/org.freedesktop.network1.policy b/src/network/org.freedesktop.network1.policy
+index 9babae8..d6b8dd9 100644
+--- a/src/network/org.freedesktop.network1.policy
++++ b/src/network/org.freedesktop.network1.policy
+@@ -108,7 +108,7 @@
+ 
+         <action id="org.freedesktop.network1.set-dnssec-negative-trust-anchors">
+                 <description gettext-domain="systemd">Set DNSSEC Negative Trust Anchors</description>
+-                <message gettext-domain="systemd">Authentication is required to set DNSSEC Negative Trust Anchros.</message>
++                <message gettext-domain="systemd">Authentication is required to set DNSSEC Negative Trust Anchors.</message>
+                 <defaults>
+                         <allow_any>auth_admin</allow_any>
+                         <allow_inactive>auth_admin</allow_inactive>
+diff --git a/src/resolve/org.freedesktop.resolve1.policy b/src/resolve/org.freedesktop.resolve1.policy
+index dc46987..fd27327 100644
+--- a/src/resolve/org.freedesktop.resolve1.policy
++++ b/src/resolve/org.freedesktop.resolve1.policy
+@@ -119,7 +119,7 @@
+ 
+         <action id="org.freedesktop.resolve1.set-dnssec-negative-trust-anchors">
+                 <description gettext-domain="systemd">Set DNSSEC Negative Trust Anchors</description>
+-                <message gettext-domain="systemd">Authentication is required to set DNSSEC Negative Trust Anchros.</message>
++                <message gettext-domain="systemd">Authentication is required to set DNSSEC Negative Trust Anchors.</message>
+                 <defaults>
+                         <allow_any>auth_admin</allow_any>
+                         <allow_inactive>auth_admin</allow_inactive>

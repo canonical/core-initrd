@@ -1,0 +1,23 @@
+From: Mike Kazantsev <mk.fraggod@gmail.com>
+Date: Thu, 3 Oct 2019 18:11:41 +0500
+Subject: cgroup: fix typo in BPF firewall support warning message
+
+(cherry picked from commit fc103b3e342429637527d3042bf7bdf15c12624d)
+(cherry picked from commit 25bb377a73e72ef1443d5de87b7a801b12a3839c)
+---
+ src/core/dbus-cgroup.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/core/dbus-cgroup.c b/src/core/dbus-cgroup.c
+index accd831..58be888 100644
+--- a/src/core/dbus-cgroup.c
++++ b/src/core/dbus-cgroup.c
+@@ -531,7 +531,7 @@ static int bus_cgroup_set_transient_property(
+                                         static bool warned = false;
+ 
+                                         log_full(warned ? LOG_DEBUG : LOG_WARNING,
+-                                                 "Transient unit %s configures an IP firewall with BPF, but the local system does not support BPF/cgroup firewalling with mulitiple filters.\n"
++                                                 "Transient unit %s configures an IP firewall with BPF, but the local system does not support BPF/cgroup firewalling with multiple filters.\n"
+                                                  "Starting this unit will fail! (This warning is only shown for the first started transient unit using IP firewalling.)", u->id);
+                                         warned = true;
+                                 }

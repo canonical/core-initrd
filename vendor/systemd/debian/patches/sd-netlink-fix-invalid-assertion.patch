@@ -1,0 +1,29 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Sun, 15 Sep 2019 22:50:36 +0900
+Subject: sd-netlink: fix invalid assertion
+
+It is natural that n_attiributes is less than type. But in that case,
+the message does not contain any message about the type. So, we should
+not abort execution with assertion, but just return -ENODATA.
+
+(cherry picked from commit 48fb0d1301c78112360df943f2b6ebeb545b8510)
+(cherry picked from commit a321507476af07b9ce743608a15156f2bc43da1d)
+---
+ src/libsystemd/sd-netlink/netlink-message.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/libsystemd/sd-netlink/netlink-message.c b/src/libsystemd/sd-netlink/netlink-message.c
+index ddfb3ae..1696471 100644
+--- a/src/libsystemd/sd-netlink/netlink-message.c
++++ b/src/libsystemd/sd-netlink/netlink-message.c
+@@ -577,7 +577,9 @@ static int netlink_message_read_internal(sd_netlink_message *m, unsigned short t
+ 
+         assert(m->n_containers < RTNL_CONTAINER_DEPTH);
+         assert(m->containers[m->n_containers].attributes);
+-        assert(type < m->containers[m->n_containers].n_attributes);
++
++        if (type >= m->containers[m->n_containers].n_attributes)
++                return -ENODATA;
+ 
+         attribute = &m->containers[m->n_containers].attributes[type];
+ 

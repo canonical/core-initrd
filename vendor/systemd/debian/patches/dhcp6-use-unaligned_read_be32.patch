@@ -1,0 +1,25 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Wed, 18 Sep 2019 22:14:45 +0900
+Subject: dhcp6: use unaligned_read_be32()
+
+Closes #13591.
+
+(cherry picked from commit 0eb5e6d3f08c6b3a41cfa7ac02bcc6302259ed4a)
+(cherry picked from commit fab6f010ac6c3bc93a10868de722d7c8c3622eb9)
+---
+ src/libsystemd-network/sd-dhcp6-client.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/libsystemd-network/sd-dhcp6-client.c b/src/libsystemd-network/sd-dhcp6-client.c
+index 5a3b0a6..9773a06 100644
+--- a/src/libsystemd-network/sd-dhcp6-client.c
++++ b/src/libsystemd-network/sd-dhcp6-client.c
+@@ -1005,7 +1005,7 @@ static int client_parse_message(
+                         if (optlen != 4)
+                                 return -EINVAL;
+ 
+-                        irt = be32toh(*(be32_t *) optval) * USEC_PER_SEC;
++                        irt = unaligned_read_be32((be32_t *) optval) * USEC_PER_SEC;
+                         break;
+                 }
+ 

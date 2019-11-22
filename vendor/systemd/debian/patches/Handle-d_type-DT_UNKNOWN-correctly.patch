@@ -1,0 +1,93 @@
+From: Michael Olbrich <m.olbrich@pengutronix.de>
+Date: Sun, 29 Sep 2019 13:43:00 +0200
+Subject: Handle d_type == DT_UNKNOWN correctly
+
+As documented in the man-page, readdir() may return a directory entry with
+d_type == DT_UNKNOWN. This must be handled for regular filesystems.
+
+dirent_ensure_type() is available to set d_type if necessary. Use it in
+some more places.
+
+Without this systemd will fail to boot correctly with nfsroot and some
+other filesystems.
+
+Closes #13609
+
+(cherry picked from commit 28e68bb23547cbc11cd3f62a1a38dbe2b387b370)
+(cherry picked from commit 5c0224c7bf3c4b0f18d44ee9da7e058833b1d8e2)
+---
+ src/core/smack-setup.c  | 2 ++
+ src/login/logind-dbus.c | 1 +
+ src/login/logind.c      | 1 +
+ src/shared/bootspec.c   | 1 +
+ src/shared/unit-file.c  | 1 +
+ 5 files changed, 6 insertions(+)
+
+diff --git a/src/core/smack-setup.c b/src/core/smack-setup.c
+index b95e623..e2d4c0d 100644
+--- a/src/core/smack-setup.c
++++ b/src/core/smack-setup.c
+@@ -84,6 +84,7 @@ static int write_access2_rules(const char *srcdir) {
+         FOREACH_DIRENT(entry, dir, return 0) {
+                 _cleanup_fclose_ FILE *policy = NULL;
+ 
++                dirent_ensure_type(dir, entry);
+                 if (!dirent_is_file(entry))
+                         continue;
+ 
+@@ -150,6 +151,7 @@ static int write_cipso2_rules(const char *srcdir) {
+         FOREACH_DIRENT(entry, dir, return 0) {
+                 _cleanup_fclose_ FILE *policy = NULL;
+ 
++                dirent_ensure_type(dir, entry);
+                 if (!dirent_is_file(entry))
+                         continue;
+ 
+diff --git a/src/login/logind-dbus.c b/src/login/logind-dbus.c
+index 30b9a66..679eb6a 100644
+--- a/src/login/logind-dbus.c
++++ b/src/login/logind-dbus.c
+@@ -1378,6 +1378,7 @@ static int flush_devices(Manager *m) {
+                 struct dirent *de;
+ 
+                 FOREACH_DIRENT_ALL(de, d, break) {
++                        dirent_ensure_type(d, de);
+                         if (!dirent_is_file(de))
+                                 continue;
+ 
+diff --git a/src/login/logind.c b/src/login/logind.c
+index 3a16e6c..d889d7b 100644
+--- a/src/login/logind.c
++++ b/src/login/logind.c
+@@ -291,6 +291,7 @@ static int manager_enumerate_linger_users(Manager *m) {
+         FOREACH_DIRENT(de, d, return -errno) {
+                 int k;
+ 
++                dirent_ensure_type(d, de);
+                 if (!dirent_is_file(de))
+                         continue;
+ 
+diff --git a/src/shared/bootspec.c b/src/shared/bootspec.c
+index aa3b773..ef9d972 100644
+--- a/src/shared/bootspec.c
++++ b/src/shared/bootspec.c
+@@ -475,6 +475,7 @@ static int boot_entries_find_unified(
+                 _cleanup_free_ char *j = NULL, *osrelease = NULL, *cmdline = NULL;
+                 _cleanup_close_ int fd = -1;
+ 
++                dirent_ensure_type(d, de);
+                 if (!dirent_is_file(de))
+                         continue;
+ 
+diff --git a/src/shared/unit-file.c b/src/shared/unit-file.c
+index 4a5f23e..c7a6d67 100644
+--- a/src/shared/unit-file.c
++++ b/src/shared/unit-file.c
+@@ -279,6 +279,7 @@ int unit_file_build_name_map(
+                         if (hashmap_contains(ids, de->d_name))
+                                 continue;
+ 
++                        dirent_ensure_type(d, de);
+                         if (de->d_type == DT_LNK) {
+                                 /* We don't explicitly check for alias loops here. unit_ids_map_get() which
+                                  * limits the number of hops should be used to access the map. */

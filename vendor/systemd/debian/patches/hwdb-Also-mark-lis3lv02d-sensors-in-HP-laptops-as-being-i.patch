@@ -1,0 +1,29 @@
+From: Bastien Nocera <hadess@hadess.net>
+Date: Thu, 12 Sep 2019 19:02:35 +0200
+Subject: hwdb: Also mark lis3lv02d sensors in "HP" laptops as being in the
+ base
+
+We matched "*Hewlett-Packard*" laptops but not "*HP*" laptops, which
+caused a regression for the HP Elite Book 850 G3.
+
+Fixes: 4247938ee13e23eae1afcecbe646de5283b7afc2
+
+Closes: #13543
+(cherry picked from commit d7cf4984b0e3255ef9d6872c96a210271b0c949a)
+(cherry picked from commit be3be29347817b5f8dfd4f6741a49b07acf630ea)
+---
+ hwdb/60-sensor.hwdb | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hwdb/60-sensor.hwdb b/hwdb/60-sensor.hwdb
+index 1fe3c57..82f37e4 100644
+--- a/hwdb/60-sensor.hwdb
++++ b/hwdb/60-sensor.hwdb
+@@ -285,6 +285,7 @@ sensor:modalias:acpi:KIOX000A*:dmi:bvnAmericanMegatrendsInc.:bvr5.11:bd05/25/201
+ # Most HP Laptop using the lis3lv02d device have it in the base,
+ # mark these sensors as such.
+ sensor:modalias:platform:lis3lv02d:dmi:*svn*Hewlett-Packard*:*
++sensor:modalias:platform:lis3lv02d:dmi:*svn*HP*:*
+  ACCEL_LOCATION=base
+ 
+ sensor:modalias:acpi:SMO8500*:dmi:*:svnHewlett-Packard:pnHPStream7Tablet:*

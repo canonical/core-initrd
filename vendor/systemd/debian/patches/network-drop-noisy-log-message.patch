@@ -1,0 +1,25 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Thu, 26 Sep 2019 00:21:00 +0900
+Subject: network: drop noisy log message
+
+Closes #13595.
+
+(cherry picked from commit 55a1729fd095f2e0733247e7b4911cf41bf6b2ed)
+(cherry picked from commit 9d0ae987a6345ad62ab8f4b89c8ab76637396b46)
+---
+ src/network/networkd-link.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index f296e5c..10f0ce0 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -856,8 +856,6 @@ static void link_enter_configured(Link *link) {
+         if (link->state != LINK_STATE_CONFIGURING)
+                 return;
+ 
+-        log_link_info(link, "Configured");
+-
+         link_set_state(link, LINK_STATE_CONFIGURED);
+ 
+         (void) link_join_netdevs_after_configured(link);

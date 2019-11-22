@@ -1,0 +1,106 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Mon, 21 Oct 2019 17:56:39 +0200
+Subject: Revert "network: prevent interfaces to be initialized multiple
+ times"
+
+The change broke netplan.io's ethernets autopkgtest.
+
+This reverts commit bd08ce56156751d58584a44e766ef61340cdae2d.
+---
+ src/network/networkd-link.c | 13 +++++--------
+ src/network/networkd-link.h | 13 ++++++-------
+ 2 files changed, 11 insertions(+), 15 deletions(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 860dd0a..41db04f 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -1232,7 +1232,7 @@ static int set_mtu_handler(sd_netlink *rtnl, sd_netlink_message *m, Link *link)
+         else
+                 log_link_debug(link, "Setting MTU done.");
+ 
+-        if (link->state == LINK_STATE_INITIALIZED) {
++        if (link->state == LINK_STATE_PENDING) {
+                 r = link_configure_after_setting_mtu(link);
+                 if (r < 0)
+                         link_enter_failed(link);
+@@ -2068,7 +2068,7 @@ static int link_enter_join_netdev(Link *link) {
+ 
+         assert(link);
+         assert(link->network);
+-        assert(link->state == LINK_STATE_INITIALIZED);
++        assert(link->state == LINK_STATE_PENDING);
+ 
+         link_set_state(link, LINK_STATE_CONFIGURING);
+ 
+@@ -2516,7 +2516,7 @@ static int link_configure(Link *link) {
+ 
+         assert(link);
+         assert(link->network);
+-        assert(link->state == LINK_STATE_INITIALIZED);
++        assert(link->state == LINK_STATE_PENDING);
+ 
+         if (link->iftype == ARPHRD_CAN)
+                 return link_configure_can(link);
+@@ -2641,7 +2641,7 @@ static int link_configure_after_setting_mtu(Link *link) {
+ 
+         assert(link);
+         assert(link->network);
+-        assert(link->state == LINK_STATE_INITIALIZED);
++        assert(link->state == LINK_STATE_PENDING);
+ 
+         if (link->setting_mtu)
+                 return 0;
+@@ -2798,11 +2798,10 @@ static int link_initialized_and_synced(Link *link) {
+ 
+         /* We may get called either from the asynchronous netlink callback,
+          * or directly for link_add() if running in a container. See link_add(). */
+-        if (!IN_SET(link->state, LINK_STATE_PENDING, LINK_STATE_INITIALIZED))
++        if (link->state != LINK_STATE_PENDING)
+                 return 0;
+ 
+         log_link_debug(link, "Link state is up-to-date");
+-        link_set_state(link, LINK_STATE_INITIALIZED);
+ 
+         r = link_new_bound_by_list(link);
+         if (r < 0)
+@@ -2882,7 +2881,6 @@ int link_initialized(Link *link, sd_device *device) {
+                 return 0;
+ 
+         log_link_debug(link, "udev initialized link");
+-        link_set_state(link, LINK_STATE_INITIALIZED);
+ 
+         link->sd_device = sd_device_ref(device);
+ 
+@@ -3845,7 +3843,6 @@ void link_clean(Link *link) {
+ 
+ static const char* const link_state_table[_LINK_STATE_MAX] = {
+         [LINK_STATE_PENDING] = "pending",
+-        [LINK_STATE_INITIALIZED] = "initialized",
+         [LINK_STATE_CONFIGURING] = "configuring",
+         [LINK_STATE_CONFIGURED] = "configured",
+         [LINK_STATE_UNMANAGED] = "unmanaged",
+diff --git a/src/network/networkd-link.h b/src/network/networkd-link.h
+index 3eff6fb..91ff103 100644
+--- a/src/network/networkd-link.h
++++ b/src/network/networkd-link.h
+@@ -23,13 +23,12 @@
+ #include "set.h"
+ 
+ typedef enum LinkState {
+-        LINK_STATE_PENDING,     /* udev has not initialized the link */
+-        LINK_STATE_INITIALIZED, /* udev has initialized the link */
+-        LINK_STATE_CONFIGURING, /* configuring addresses, routes, etc. */
+-        LINK_STATE_CONFIGURED,  /* everything is configured */
+-        LINK_STATE_UNMANAGED,   /* Unmanaged=yes is set */
+-        LINK_STATE_FAILED,      /* at least one configuration process failed */
+-        LINK_STATE_LINGER,      /* RTM_DELLINK for the link has been received */
++        LINK_STATE_PENDING,
++        LINK_STATE_CONFIGURING,
++        LINK_STATE_CONFIGURED,
++        LINK_STATE_UNMANAGED,
++        LINK_STATE_FAILED,
++        LINK_STATE_LINGER,
+         _LINK_STATE_MAX,
+         _LINK_STATE_INVALID = -1
+ } LinkState;

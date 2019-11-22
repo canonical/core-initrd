@@ -1,0 +1,22 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Thu, 4 Oct 2018 15:25:50 +0100
+Subject: units: Disable journald Watchdog
+ https://github.com/systemd/systemd/issues/9079
+
+LP: #1773148
+---
+ units/systemd-journald.service.in | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/units/systemd-journald.service.in b/units/systemd-journald.service.in
+index 00268fa..8a979eb 100644
+--- a/units/systemd-journald.service.in
++++ b/units/systemd-journald.service.in
+@@ -38,7 +38,6 @@ SystemCallArchitectures=native
+ SystemCallErrorNumber=EPERM
+ SystemCallFilter=@system-service
+ Type=notify
+-WatchdogSec=3min
+ 
+ # If there are many split up journal files we need a lot of fds to access them
+ # all in parallel.

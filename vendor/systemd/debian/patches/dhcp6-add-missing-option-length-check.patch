@@ -1,0 +1,37 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Tue, 17 Sep 2019 22:18:49 +0900
+Subject: dhcp6: add missing option length check
+
+Closes #13578.
+
+(cherry picked from commit 6ffe71d0e22326f8ea5775c188ae0e13573cd123)
+(cherry picked from commit f2d9af4322f74832d93e101abfcc1b3adf0e05c6)
+---
+ src/libsystemd-network/sd-dhcp6-client.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/libsystemd-network/sd-dhcp6-client.c b/src/libsystemd-network/sd-dhcp6-client.c
+index 7dab776..5a3b0a6 100644
+--- a/src/libsystemd-network/sd-dhcp6-client.c
++++ b/src/libsystemd-network/sd-dhcp6-client.c
+@@ -29,8 +29,8 @@
+ 
+ #define MAX_MAC_ADDR_LEN INFINIBAND_ALEN
+ 
+-#define IRT_DEFAULT 1 * USEC_PER_DAY
+-#define IRT_MINIMUM 600 * USEC_PER_SEC
++#define IRT_DEFAULT (1 * USEC_PER_DAY)
++#define IRT_MINIMUM (600 * USEC_PER_SEC)
+ 
+ /* what to request from the server, addresses (IA_NA) and/or prefixes (IA_PD) */
+ enum {
+@@ -1002,6 +1002,9 @@ static int client_parse_message(
+                         break;
+ 
+                 case SD_DHCP6_OPTION_INFORMATION_REFRESH_TIME:
++                        if (optlen != 4)
++                                return -EINVAL;
++
+                         irt = be32toh(*(be32_t *) optval) * USEC_PER_SEC;
+                         break;
+                 }

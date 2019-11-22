@@ -1,0 +1,7 @@
+[Unit]
+Description=Test for PrivateNetwork
+
+[Service]
+ExecStart=/bin/sh -x -c '! ip link | grep -E "^[0-9]+: " | grep -Ev ": (lo|(erspan|gre|gretap|ip_vti|ip6_vti|ip6gre|ip6tnl|sit|tunl)0@.*):"'
+Type=oneshot
+PrivateNetwork=yes

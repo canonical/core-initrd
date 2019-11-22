@@ -1,0 +1,23 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Tue, 10 Sep 2019 17:17:28 +0200
+Subject: Skip falling back to device name when net_get_name(device) fails
+
+This fixes network-manager and netplan.io autopkgtests by partially reverting
+upstream commit 6d36464065601f79a352367cf099be8907d8f9aa
+---
+ src/libsystemd-network/network-internal.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/libsystemd-network/network-internal.c b/src/libsystemd-network/network-internal.c
+index 1f2e5c7..0779bcf 100644
+--- a/src/libsystemd-network/network-internal.c
++++ b/src/libsystemd-network/network-internal.c
+@@ -51,8 +51,6 @@ int net_get_unique_predictable_data(sd_device *device, bool use_sysname, uint64_
+         /* net_get_name_persistent() will return one of the device names based on stable information about
+          * the device. If this is not available, we fall back to using the actual device name. */
+         name = net_get_name_persistent(device);
+-        if (!name && use_sysname)
+-                (void) sd_device_get_sysname(device, &name);
+         if (!name)
+                 return log_device_debug_errno(device, SYNTHETIC_ERRNO(ENODATA),
+                                               "No stable identifying information found");

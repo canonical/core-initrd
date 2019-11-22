@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -e
+
+# Enable machines.target by default on new installs
+if [ -z "$2" ]; then
+    systemctl enable machines.target || true
+fi
+
+#DEBHELPER#

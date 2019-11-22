@@ -1,0 +1,43 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Tue, 17 Sep 2019 21:29:23 +0900
+Subject: network: add missing link->network checks
+
+When the function is called, no network file may be assigned to the
+link.
+
+(cherry picked from commit b1b0b42e48303134731e017a108c6c334ef5f4c8)
+(cherry picked from commit dd83d5879661d46f85457d139f683c920875eb44)
+---
+ src/network/networkd-link.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index f5bb788..77df151 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -2393,9 +2393,9 @@ static int link_drop_foreign_config(Link *link) {
+                         continue;
+ 
+                 if (link_address_is_dynamic(link, address)) {
+-                        if (FLAGS_SET(link->network->keep_configuration, KEEP_CONFIGURATION_DHCP))
++                        if (link->network && FLAGS_SET(link->network->keep_configuration, KEEP_CONFIGURATION_DHCP))
+                                 continue;
+-                } else if (FLAGS_SET(link->network->keep_configuration, KEEP_CONFIGURATION_STATIC))
++                } else if (link->network && FLAGS_SET(link->network->keep_configuration, KEEP_CONFIGURATION_STATIC))
+                         continue;
+ 
+                 if (link_is_static_address_configured(link, address)) {
+@@ -2435,11 +2435,11 @@ static int link_drop_foreign_config(Link *link) {
+                     in_addr_equal(AF_INET6, &route->dst, &(union in_addr_union) { .in6 = {{{ 0xff,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 }}} }))
+                         continue;
+ 
+-                if (route->protocol == RTPROT_STATIC &&
++                if (route->protocol == RTPROT_STATIC && link->network &&
+                     FLAGS_SET(link->network->keep_configuration, KEEP_CONFIGURATION_STATIC))
+                         continue;
+ 
+-                if (route->protocol == RTPROT_DHCP &&
++                if (route->protocol == RTPROT_DHCP && link->network &&
+                     FLAGS_SET(link->network->keep_configuration, KEEP_CONFIGURATION_DHCP))
+                         continue;
+ 

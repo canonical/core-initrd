@@ -1,0 +1,33 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Tue, 17 Sep 2019 19:27:58 +0200
+Subject: networkd: unbreak routing_policy_rule_compare_func()
+
+!r is the same r == 0, so this was short-circuiting the comparison when
+streq(a->iff, b->iff) or streq(a->off, b->off). Before the parent commit which
+moved those comparisons to the end, this was short-circuiting quite a bit
+of the comparison function.
+
+(cherry picked from commit 314ed4f9948bb73300862935546a63294bba1d5c)
+(cherry picked from commit 19ac31c989d9facbd90c497f3708ee4d88686de8)
+---
+ src/network/networkd-routing-policy-rule.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/network/networkd-routing-policy-rule.c b/src/network/networkd-routing-policy-rule.c
+index f032169..40ac3f0 100644
+--- a/src/network/networkd-routing-policy-rule.c
++++ b/src/network/networkd-routing-policy-rule.c
+@@ -180,11 +180,11 @@ static int routing_policy_rule_compare_func(const RoutingPolicyRule *a, const Ro
+                         return r;
+ 
+                 r = strcmp_ptr(a->iif, b->iif);
+-                if (!r)
++                if (r != 0)
+                         return r;
+ 
+                 r = strcmp_ptr(a->oif, b->oif);
+-                if (!r)
++                if (r != 0)
+                         return r;
+ 
+                 r = CMP(a->protocol, b->protocol);

@@ -1,0 +1,41 @@
+From: Chris Down <chris@chrisdown.name>
+Date: Wed, 25 Sep 2019 17:09:38 +0100
+Subject: util-lib: Don't propagate EACCES from find_binary PATH lookup to
+ caller
+
+On one of my test machines, test-path-util was failing because the
+find_binary("xxxx-xxxx") was returning -EACCES instead of -ENOENT. This
+happens because the PATH entry on that host contains a directory which
+the user in question doesn't have access to. Typically applications
+ignore permission errors when searching through PATH, for example in
+bash:
+
+    $ whoami
+    cdown
+    $ PATH=/root:/bin type sh
+    sh is /bin/sh
+
+This behaviour is present on zsh and other shells as well, though. This
+patch brings our PATH search behaviour closer to other major Unix tools.
+
+(cherry picked from commit 4e1ddb661272ddb2f03d6046369c973657dfdd62)
+(cherry picked from commit 8282bc61df10dc1f2290c9c351d5ff6fdb157c24)
+---
+ src/basic/path-util.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/basic/path-util.c b/src/basic/path-util.c
+index 18c7dab..b9544b4 100644
+--- a/src/basic/path-util.c
++++ b/src/basic/path-util.c
+@@ -651,7 +651,9 @@ int find_binary(const char *name, char **ret) {
+                         return 0;
+                 }
+ 
+-                last_error = -errno;
++                /* PATH entries which we don't have access to are ignored, as per tradition. */
++                if (errno != EACCES)
++                        last_error = -errno;
+         }
+ 
+         return last_error;

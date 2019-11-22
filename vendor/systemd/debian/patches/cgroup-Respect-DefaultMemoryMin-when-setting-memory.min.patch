@@ -1,0 +1,29 @@
+From: Chris Down <chris@chrisdown.name>
+Date: Mon, 30 Sep 2019 18:25:09 +0100
+Subject: cgroup: Respect DefaultMemoryMin when setting memory.min
+
+This is an oversight from https://github.com/systemd/systemd/pull/12332.
+
+Sadly the tests didn't catch it since it requires a real cgroup
+hierarchy to see, and it wasn't seen in prod since we're only currently
+using DefaultMemoryLow, not DefaultMemoryMin. :-(
+
+(cherry picked from commit 64fe532e90b3e99bf7821ded8a1107c239099e40)
+(cherry picked from commit f14e3e02cca759dc92c87328e257acc6abe91cbc)
+---
+ src/core/cgroup.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/core/cgroup.c b/src/core/cgroup.c
+index 4ff88fb..94a83e0 100644
+--- a/src/core/cgroup.c
++++ b/src/core/cgroup.c
+@@ -1200,7 +1200,7 @@ static void cgroup_context_apply(
+                                         log_cgroup_compat(u, "Applying MemoryLimit=%" PRIu64 " as MemoryMax=", max);
+                         }
+ 
+-                        cgroup_apply_unified_memory_limit(u, "memory.min", c->memory_min);
++                        cgroup_apply_unified_memory_limit(u, "memory.min", unit_get_ancestor_memory_min(u));
+                         cgroup_apply_unified_memory_limit(u, "memory.low", unit_get_ancestor_memory_low(u));
+                         cgroup_apply_unified_memory_limit(u, "memory.high", c->memory_high);
+                         cgroup_apply_unified_memory_limit(u, "memory.max", max);

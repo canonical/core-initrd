@@ -1,0 +1,57 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Fri, 13 Sep 2019 17:12:59 +0900
+Subject: man: move TimeoutCleanSec= entry from .service to .exec
+
+Follow-up for 12213aed128456af33ff6131a14b637318227346.
+
+Closes #13546.
+
+(cherry picked from commit bd9014c360f86aefcf4d417d50372a5fc29af7ce)
+(cherry picked from commit 3ccafef0ad693d991212b6cc934e6aa1ddae37f7)
+---
+ man/systemd.exec.xml    | 10 ++++++++++
+ man/systemd.service.xml | 10 ----------
+ 2 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/man/systemd.exec.xml b/man/systemd.exec.xml
+index 5cb83af..6dcccc3 100644
+--- a/man/systemd.exec.xml
++++ b/man/systemd.exec.xml
+@@ -1035,6 +1035,16 @@ StateDirectory=aaa/bbb ccc</programlisting>
+         <varname>RuntimeDirectory=</varname> are removed when the system is rebooted.</para></listitem>
+       </varlistentry>
+ 
++      <varlistentry>
++        <term><varname>TimeoutCleanSec=</varname></term>
++        <listitem><para>Configures a timeout on the clean-up operation requested through <command>systemctl
++        clean …</command>, see
++        <citerefentry><refentrytitle>systemctl</refentrytitle><manvolnum>1</manvolnum></citerefentry> for
++        details. Takes the usual time values and defaults to <constant>infinity</constant>, i.e. by default
++        no time-out is applied. If a time-out is configured the clean operation will be aborted forcibly when
++        the time-out is reached, potentially leaving resources on disk.</para></listitem>
++      </varlistentry>
++
+       <varlistentry>
+         <term><varname>ReadWritePaths=</varname></term>
+         <term><varname>ReadOnlyPaths=</varname></term>
+diff --git a/man/systemd.service.xml b/man/systemd.service.xml
+index 40ac052..14840c2 100644
+--- a/man/systemd.service.xml
++++ b/man/systemd.service.xml
+@@ -636,16 +636,6 @@
+         </para></listitem>
+       </varlistentry>
+ 
+-      <varlistentry>
+-        <term><varname>TimeoutCleanSec=</varname></term>
+-        <listitem><para>Configures a timeout on the clean-up operation requested through <command>systemctl
+-        clean …</command>, see
+-        <citerefentry><refentrytitle>systemctl</refentrytitle><manvolnum>1</manvolnum></citerefentry> for
+-        details. Takes the usual time values and defaults to <constant>infinity</constant>, i.e. by default
+-        no time-out is applied. If a time-out is configured the clean operation will be aborted forcibly when
+-        the time-out is reached, potentially leaving resources on disk.</para></listitem>
+-      </varlistentry>
+-
+       <varlistentry>
+         <term><varname>RuntimeMaxSec=</varname></term>
+ 

@@ -1,0 +1,49 @@
+From: =?utf-8?q?Georg_M=C3=BCller?= <georgmueller@gmx.net>
+Date: Fri, 20 Sep 2019 10:23:45 +0200
+Subject: sd-radv: if lifetime < SD_RADV_DEFAULT_MAX_TIMEOUT_USEC,
+ adjust timeout (#13491)
+
+The RFC states that lifetime (AdvDefaultLifetime) must be at least
+MaxRtrAdvInterval (which more or less corresponds to SD_RADV_DEFAULT_MAX_TIMEOUT_USEC
+in systemd).
+
+To fulfill this limit, virtually lower MaxRtrAdvInterval and MinRtrAdvInterval
+accordingly.
+
+Also check that min is not lower than 3s and max is not lower than 4s.
+
+(cherry picked from commit ef90b6a4fb9509f61b9b917bbe4db7343afe1853)
+(cherry picked from commit d4cd0e9d3242f85141d835dd5a78d880b47a0817)
+---
+ src/libsystemd-network/sd-radv.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/libsystemd-network/sd-radv.c b/src/libsystemd-network/sd-radv.c
+index 185b55e..0844462 100644
+--- a/src/libsystemd-network/sd-radv.c
++++ b/src/libsystemd-network/sd-radv.c
+@@ -269,6 +269,10 @@ static int radv_recv(sd_event_source *s, int fd, uint32_t revents, void *userdat
+ static usec_t radv_compute_timeout(usec_t min, usec_t max) {
+         assert_return(min <= max, SD_RADV_DEFAULT_MIN_TIMEOUT_USEC);
+ 
++        /* RFC 4861: min must be no less than 3s, max must be no less than 4s */
++        min = MAX(min, 3*USEC_PER_SEC);
++        max = MAX(max, 4*USEC_PER_SEC);
++
+         return min + (random_u32() % (max - min));
+ }
+ 
+@@ -298,6 +302,13 @@ static int radv_timeout(sd_event_source *s, uint64_t usec, void *userdata) {
+                 min_timeout = SD_RADV_MAX_INITIAL_RTR_ADVERT_INTERVAL_USEC / 3;
+         }
+ 
++        /* RFC 4861, Section 6.2.1, lifetime must be at least MaxRtrAdvInterval,
++           so lower the interval here */
++        if (ra->lifetime > 0 && (ra->lifetime * USEC_PER_SEC) < max_timeout) {
++                max_timeout = ra->lifetime * USEC_PER_SEC;
++                min_timeout = max_timeout / 3;
++        }
++
+         timeout = radv_compute_timeout(min_timeout, max_timeout);
+ 
+         log_radv("Next Router Advertisement in %s",

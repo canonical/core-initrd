@@ -1,0 +1,28 @@
+From: cbzxt <38526218+cbzxt@users.noreply.github.com>
+Date: Wed, 25 Sep 2019 20:32:46 +0530
+Subject: Updated log message when the timesync happens for the first time
+ (#13624)
+
+(cherry picked from commit 37afb0ac787783a1635165b8a4e3ba5fbd007dfd)
+(cherry picked from commit f67f0e4ec45a7aef177cf19c689dbd76460e8540)
+---
+ src/timesync/timesyncd-manager.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/timesync/timesyncd-manager.c b/src/timesync/timesyncd-manager.c
+index 3c3a7fe..e76f1b9 100644
+--- a/src/timesync/timesyncd-manager.c
++++ b/src/timesync/timesyncd-manager.c
+@@ -617,9 +617,9 @@ static int manager_receive_response(sd_event_source *source, int fd, uint32_t re
+                 m->good = true;
+ 
+                 server_address_pretty(m->current_server_address, &pretty);
+-                /* "for the first time", as further successful syncs will not be logged. */
+-                log_info("Synchronized to time server for the first time %s (%s).", strna(pretty), m->current_server_name->string);
+-                sd_notifyf(false, "STATUS=Synchronized to time server for the first time %s (%s).", strna(pretty), m->current_server_name->string);
++                /* "Initial", as further successful syncs will not be logged. */
++                log_info("Initial synchronization to time server %s (%s).", strna(pretty), m->current_server_name->string);
++                sd_notifyf(false, "STATUS=Initial synchronization to time server %s (%s).", strna(pretty), m->current_server_name->string);
+         }
+ 
+         r = manager_arm_timer(m, m->poll_interval_usec);

@@ -1,0 +1,22 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Wed, 18 Sep 2019 00:52:07 +0900
+Subject: udevadm: missing initialization of descriptor
+
+(cherry picked from commit 2f5b282aab78bd2378df428c57c5fd1cc09e9f4f)
+(cherry picked from commit 477bf86c911a9fdc57341cbf2acf70ae1965edfd)
+---
+ src/udev/udev-ctrl.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/udev/udev-ctrl.c b/src/udev/udev-ctrl.c
+index b383708..751e034 100644
+--- a/src/udev/udev-ctrl.c
++++ b/src/udev/udev-ctrl.c
+@@ -76,6 +76,7 @@ int udev_ctrl_new_from_fd(struct udev_ctrl **ret, int fd) {
+         *uctrl = (struct udev_ctrl) {
+                 .n_ref = 1,
+                 .sock = fd >= 0 ? fd : TAKE_FD(sock),
++                .sock_connect = -1,
+                 .bound = fd >= 0,
+         };
+ 

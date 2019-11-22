@@ -1,0 +1,25 @@
+From: Susant Sahani <ssahani@vmware.com>
+Date: Mon, 16 Sep 2019 20:46:39 +0200
+Subject: network DHCP4: Don't mislead the logs.
+
+The debug log making sense to the end user as an error.
+
+(cherry picked from commit 61cda4d7964ff00dfa6260f84219720d9b97671a)
+(cherry picked from commit 91db81e4dda8d322a4a771fc4f173ce2f147dc88)
+---
+ src/network/networkd-dhcp4.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/network/networkd-dhcp4.c b/src/network/networkd-dhcp4.c
+index 662770b..c5644f8 100644
+--- a/src/network/networkd-dhcp4.c
++++ b/src/network/networkd-dhcp4.c
+@@ -198,7 +198,7 @@ static int link_set_dhcp_routes(Link *link) {
+         if (n == -ENODATA)
+                 log_link_debug_errno(link, n, "DHCP: No routes received from DHCP server: %m");
+         else if (n < 0)
+-                log_link_debug_errno(link, n, "DHCP error: could not get routes: %m");
++                log_link_debug_errno(link, n, "DHCP: could not get routes: %m");
+ 
+         for (i = 0; i < n; i++) {
+                 switch (sd_dhcp_route_get_option(static_routes[i])) {

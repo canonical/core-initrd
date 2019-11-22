@@ -1,0 +1,27 @@
+From: Kenneth D'souza <kdsouza@redhat.com>
+Date: Mon, 30 Sep 2019 16:01:21 +0530
+Subject: Consider smb3 as remote filesystem
+
+Currently systemd will treat smb3 as local filesystem and cause
+can't boot failures. Add smb3 to the list of remote filesystems
+to fix this issue.
+
+Signed-off-by: Kenneth D'souza <kdsouza@redhat.com>
+(cherry picked from commit ff7d6a740b0c6fa3be63d3908a0858730a0837c5)
+(cherry picked from commit 19a43dc38a136d2e95ae79ee1cd28335557216b9)
+---
+ src/basic/mountpoint-util.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/basic/mountpoint-util.c b/src/basic/mountpoint-util.c
+index cb8ddcc..74cf139 100644
+--- a/src/basic/mountpoint-util.c
++++ b/src/basic/mountpoint-util.c
+@@ -298,6 +298,7 @@ bool fstype_is_network(const char *fstype) {
+         return STR_IN_SET(fstype,
+                           "afs",
+                           "cifs",
++                          "smb3",
+                           "smbfs",
+                           "sshfs",
+                           "ncpfs",

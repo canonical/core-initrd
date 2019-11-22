@@ -1,0 +1,29 @@
+From: Norbert Lange <norbert.lange@andritz.com>
+Date: Thu, 19 Sep 2019 17:49:20 +0200
+Subject: fix build with compilers with default stack-protector enabled
+
+building systemd fails with a compiler that supports
+-fstack-protector but does not enable it by default.
+(will miss several __stack_chk_* symbols).
+
+fix this by also adding the switch during linking.
+
+Signed-off-by: Norbert Lange <nolange79@gmail.com>
+(cherry picked from commit 68e70ac2b27dcb5007fc4009553472f0b9700e66)
+(cherry picked from commit 6d97aca0d50343d46cad79af3cabb46dcd56b82f)
+---
+ meson.build | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/meson.build b/meson.build
+index e5ceb1e..4fc7dfa 100644
+--- a/meson.build
++++ b/meson.build
+@@ -382,6 +382,7 @@ possible_cc_flags = [
+ possible_link_flags = [
+         '-Wl,-z,relro',
+         '-Wl,-z,now',
++        '-fstack-protector',
+ ]
+ 
+ if cc.get_id() == 'clang'

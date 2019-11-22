@@ -1,0 +1,39 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Wed, 30 Jan 2019 10:38:38 +0000
+Subject: Revert "namespace: be more careful when handling namespacing
+ failures gracefully"
+
+This partially reverts commit 1beab8b0d0ff2d7d1436b52d4a0c3d56dc908962.
+
+Until after
+https://github.com/lxc/lxd/commit/a6b780703350faff8328f3d565f6bac7b6dcf59f is
+released in the snap store.
+---
+ src/core/execute.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/execute.c b/src/core/execute.c
+index 4de85b7..29ee273 100644
+--- a/src/core/execute.c
++++ b/src/core/execute.c
+@@ -2548,14 +2548,18 @@ static int apply_mount_namespace(
+                         log_unit_debug(u, "Failed to set up namespace, assuming containerized execution and ignoring.");
+                         return 0;
+                 }
+-
+                 log_unit_debug(u, "Failed to set up namespace, and refusing to continue since the selected namespacing options alter mount environment non-trivially.\n"
+                                "Bind mounts: %zu, temporary filesystems: %zu, root directory: %s, root image: %s, dynamic user: %s",
+                                n_bind_mounts, context->n_temporary_filesystems, yes_no(root_dir), yes_no(root_image), yes_no(context->dynamic_user));
+ 
+                 return -EOPNOTSUPP;
+         }
+-
++        /* If we couldn't set up the namespace this is probably due to a
++         * missing capability. In this case, silently proceeed. */
++        if (IN_SET(r, -EPERM, -EACCES)) {
++                log_unit_debug_errno(u, r, "Failed to set up namespace, assuming containerized execution, ignoring: %m");
++                return 0;
++        }
+         return r;
+ }
+ 

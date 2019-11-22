@@ -1,0 +1,26 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Tue, 17 Sep 2019 21:34:06 +0900
+Subject: network: do not enter failed state if device's sysfs entry does not
+ exist yet
+
+(cherry picked from commit 4d59e14f321d50cbdec1a2ef702e2d258e377356)
+(cherry picked from commit 45dca7fe864d88edd366f15322c7a7d6bff32897)
+---
+ src/network/networkd-link.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 77df151..f296e5c 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -3116,8 +3116,8 @@ int link_add(Manager *m, sd_netlink_message *message, Link **ret) {
+                 sprintf(ifindex_str, "n%d", link->ifindex);
+                 r = sd_device_new_from_device_id(&device, ifindex_str);
+                 if (r < 0) {
+-                        log_link_warning_errno(link, r, "Could not find device: %m");
+-                        goto failed;
++                        log_link_warning_errno(link, r, "Could not find device, waiting for device initialization: %m");
++                        return 0;
+                 }
+ 
+                 r = sd_device_get_is_initialized(device);

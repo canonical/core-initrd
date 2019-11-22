@@ -1,0 +1,40 @@
+From: Filipe Brandenburger <filbranden@gmail.com>
+Date: Tue, 24 Sep 2019 15:31:27 -0700
+Subject: log: Add missing "%" in "%m" log format strings
+
+These were clearly intended to be "%m" to display the human readable version
+of the error stored in errno.
+
+(cherry picked from commit 28b77ab246b88d05076080bbd69ca3c353fa0f27)
+(cherry picked from commit 693e983988691df9ce701f44f0dd936744aa8d34)
+---
+ src/core/unit.c       | 2 +-
+ src/shared/bootspec.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/unit.c b/src/core/unit.c
+index cedcb3f..a1dc76a 100644
+--- a/src/core/unit.c
++++ b/src/core/unit.c
+@@ -2788,7 +2788,7 @@ int unit_enqueue_rewatch_pids(Unit *u) {
+ 
+                 r = sd_event_source_set_priority(s, SD_EVENT_PRIORITY_IDLE);
+                 if (r < 0)
+-                        return log_error_errno(r, "Failed to adjust priority of event source for tidying watched PIDs: m");
++                        return log_error_errno(r, "Failed to adjust priority of event source for tidying watched PIDs: %m");
+ 
+                 (void) sd_event_source_set_description(s, "tidy-watch-pids");
+ 
+diff --git a/src/shared/bootspec.c b/src/shared/bootspec.c
+index b0c6e48..aa3b773 100644
+--- a/src/shared/bootspec.c
++++ b/src/shared/bootspec.c
+@@ -876,7 +876,7 @@ static int verify_esp_blkid(
+         errno = 0;
+         r = blkid_probe_lookup_value(b, "PART_ENTRY_NUMBER", &v, NULL);
+         if (r != 0)
+-                return log_error_errno(errno ?: SYNTHETIC_ERRNO(EIO), "Failed to probe partition number of \"%s\": m", node);
++                return log_error_errno(errno ?: SYNTHETIC_ERRNO(EIO), "Failed to probe partition number of \"%s\": %m", node);
+         r = safe_atou32(v, &part);
+         if (r < 0)
+                 return log_error_errno(r, "Failed to parse PART_ENTRY_NUMBER field.");

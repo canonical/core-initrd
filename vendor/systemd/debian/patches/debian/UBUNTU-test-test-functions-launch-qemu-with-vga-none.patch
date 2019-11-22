@@ -1,0 +1,23 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Fri, 16 Feb 2018 13:28:31 +0000
+Subject: test/test-functions: launch qemu with -vga none
+
+When booting ppc64el virtual machines, they require seabios, unless -vga none
+is specified. Since we do a direct kernel & initrd boot, with -nographic, we
+really have no need for vga or seabios in this case.
+---
+ test/test-functions | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/test/test-functions b/test/test-functions
+index a8b527b..7d44a99 100644
+--- a/test/test-functions
++++ b/test/test-functions
+@@ -211,6 +211,7 @@ $KERNEL_APPEND \
+ -net none \
+ -m $QEMU_MEM \
+ -nographic \
++-vga none \
+ -kernel $KERNEL_BIN \
+ -drive format=raw,cache=unsafe,file=${TESTDIR}/rootdisk.img \
+ $QEMU_OPTIONS \

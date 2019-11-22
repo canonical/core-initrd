@@ -1,0 +1,55 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Fri, 27 Sep 2019 14:51:53 +0200
+Subject: nspawn: default to unified hierarchy if --as-pid2 is used
+
+See comment added in the patch.
+
+Fixes https://bugzilla.redhat.com/show_bug.cgi?id=1756143.
+
+(cherry picked from commit 75b0d8b89d6e86319e75eaead3f4b0d187a66729)
+(cherry picked from commit 40e169b304231d02de387a8dd2c5f0f075973227)
+---
+ src/nspawn/nspawn.c | 23 +++++++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/src/nspawn/nspawn.c b/src/nspawn/nspawn.c
+index 2aec804..ff6983e 100644
+--- a/src/nspawn/nspawn.c
++++ b/src/nspawn/nspawn.c
+@@ -433,8 +433,8 @@ static int detect_unified_cgroup_hierarchy_from_environment(void) {
+ static int detect_unified_cgroup_hierarchy_from_image(const char *directory) {
+         int r;
+ 
+-        /* Let's inherit the mode to use from the host system, but let's take into consideration what systemd in the
+-         * image actually supports. */
++        /* Let's inherit the mode to use from the host system, but let's take into consideration what systemd
++         * in the image actually supports. */
+         r = cg_all_unified();
+         if (r < 0)
+                 return log_error_errno(r, "Failed to determine whether we are in all unified mode.");
+@@ -1440,6 +1440,25 @@ static int parse_argv(int argc, char *argv[]) {
+ static int verify_arguments(void) {
+         int r;
+ 
++        if (arg_start_mode == START_PID2 && arg_unified_cgroup_hierarchy == CGROUP_UNIFIED_UNKNOWN) {
++                /* If we are running the stub init in the container, we don't need to look at what the init
++                 * in the container supports, because we are not using it. Let's immediately pick the right
++                 * setting based on the host system configuration.
++                 *
++                 * We only do this, if the user didn't use an environment variable to override the detection.
++                 */
++
++                r = cg_all_unified();
++                if (r < 0)
++                        return log_error_errno(r, "Failed to determine whether we are in all unified mode.");
++                if (r > 0)
++                        arg_unified_cgroup_hierarchy = CGROUP_UNIFIED_ALL;
++                else if (cg_unified_controller(SYSTEMD_CGROUP_CONTROLLER) > 0)
++                        arg_unified_cgroup_hierarchy = CGROUP_UNIFIED_SYSTEMD;
++                else
++                        arg_unified_cgroup_hierarchy = CGROUP_UNIFIED_NONE;
++        }
++
+         if (arg_userns_mode != USER_NAMESPACE_NO)
+                 arg_mount_settings |= MOUNT_USE_USERNS;
+ 

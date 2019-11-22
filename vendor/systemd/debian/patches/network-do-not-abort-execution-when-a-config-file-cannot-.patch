@@ -1,0 +1,39 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Wed, 11 Sep 2019 18:24:41 +0900
+Subject: network: do not abort execution when a config file cannot be loaded
+
+Closes #13516.
+
+(cherry picked from commit be7110826eb4d7d0fafee4790562e0dedb9d817b)
+(cherry picked from commit 19e9fc4262f9063f4986d7336e3921095d6e51ed)
+---
+ src/network/netdev/netdev.c    | 2 +-
+ src/network/networkd-network.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/network/netdev/netdev.c b/src/network/netdev/netdev.c
+index 7735b45..7853e19 100644
+--- a/src/network/netdev/netdev.c
++++ b/src/network/netdev/netdev.c
+@@ -844,7 +844,7 @@ int netdev_load(Manager *manager) {
+         STRV_FOREACH(f, files) {
+                 r = netdev_load_one(manager, *f);
+                 if (r < 0)
+-                        return r;
++                        log_error_errno(r, "Failed to load %s, ignoring: %m", *f);
+         }
+ 
+         return 0;
+diff --git a/src/network/networkd-network.c b/src/network/networkd-network.c
+index 2b8d0eb..fe81f1b 100644
+--- a/src/network/networkd-network.c
++++ b/src/network/networkd-network.c
+@@ -506,7 +506,7 @@ int network_load(Manager *manager) {
+         STRV_FOREACH(f, files) {
+                 r = network_load_one(manager, *f);
+                 if (r < 0)
+-                        return r;
++                        log_error_errno(r, "Failed to load %s, ignoring: %m", *f);
+         }
+ 
+         return 0;

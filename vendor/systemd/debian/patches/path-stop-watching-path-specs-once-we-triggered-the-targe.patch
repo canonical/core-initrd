@@ -1,0 +1,32 @@
+From: Michal Sekletar <msekleta@redhat.com>
+Date: Mon, 9 Sep 2019 14:38:35 +0200
+Subject: path: stop watching path specs once we triggered the target unit
+
+We start watching them again once we get a notification that triggered
+unit entered inactive or failed state.
+
+Fixes: #10503
+(cherry picked from commit 8fca6944c2ee20c63d62154c8badddc77170b176)
+(cherry picked from commit b294305888da171f393bbb4c3dc0be332e8d50c1)
+---
+ src/core/path.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/path.c b/src/core/path.c
+index 562cd35..ac1289a 100644
+--- a/src/core/path.c
++++ b/src/core/path.c
+@@ -480,11 +480,9 @@ static void path_enter_running(Path *p) {
+ 
+         p->inotify_triggered = false;
+ 
+-        r = path_watch(p);
+-        if (r < 0)
+-                goto fail;
+-
+         path_set_state(p, PATH_RUNNING);
++        path_unwatch(p);
++
+         return;
+ 
+ fail:

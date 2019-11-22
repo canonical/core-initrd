@@ -1,0 +1,26 @@
+From: Steve Traylen <steve.traylen@cern.ch>
+Date: Tue, 24 Sep 2019 09:48:03 +0200
+Subject: Corect man page reference in systemd-nologin.conf comments
+
+The reference to the man page of `systemd-user-sessions.service`
+in the comments of `tmpfiles.d/systemd-nologin.conf` is corrected.
+
+(cherry picked from commit 7a72a95741970fa4919f137f6844fe11b951efd3)
+(cherry picked from commit 2b8e574d8242e5d878252e5fc8f26a993a9c794f)
+---
+ tmpfiles.d/systemd-nologin.conf | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tmpfiles.d/systemd-nologin.conf b/tmpfiles.d/systemd-nologin.conf
+index df4dd63..39cfd06 100644
+--- a/tmpfiles.d/systemd-nologin.conf
++++ b/tmpfiles.d/systemd-nologin.conf
+@@ -5,7 +5,7 @@
+ #  the Free Software Foundation; either version 2.1 of the License, or
+ #  (at your option) any later version.
+ 
+-# See tmpfiles.d(5), systemd-user-session.service(5) and pam_nologin(8).
++# See tmpfiles.d(5), systemd-user-sessions.service(8) and pam_nologin(8).
+ # This file has special suffix so it is not run by mistake.
+ 
+ F! /run/nologin 0644 - - - "System is booting up. Unprivileged users are not permitted to log in yet. Please come back later. For technical details, see pam_nologin(8)."

@@ -1,0 +1,22 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Tue, 22 Oct 2019 17:10:17 +0200
+Subject: test: expect mmap to fail in seccomp test on s390 and s390x
+
+(cherry picked from commit a81f7aad9a5ddeebbce002e2da36e1dd84f51b36)
+---
+ src/test/test-seccomp.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/test/test-seccomp.c b/src/test/test-seccomp.c
+index a906070..9881768 100644
+--- a/src/test/test-seccomp.c
++++ b/src/test/test-seccomp.c
+@@ -489,7 +489,7 @@ static void test_memory_deny_write_execute_mmap(void) {
+                 assert_se(seccomp_memory_deny_write_execute() >= 0);
+ 
+                 p = mmap(NULL, page_size(), PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_ANONYMOUS, -1,0);
+-#if defined(__x86_64__) || defined(__i386__) || defined(__powerpc64__) || defined(__arm__) || defined(__aarch64__)
++#if defined(__x86_64__) || defined(__i386__) || defined(__powerpc64__) || defined(__arm__) || defined(__aarch64__) || defined(__s390__) || defined(__s390x__)
+                 assert_se(p == MAP_FAILED);
+                 assert_se(errno == EPERM);
+ #else /* unknown architectures */

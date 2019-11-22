@@ -1,0 +1,22 @@
+From: Carlo Teubner <435950+c4rlo@users.noreply.github.com>
+Date: Wed, 4 Sep 2019 18:58:56 +0100
+Subject: man/systemctl.xml: fix missing "not"
+
+(cherry picked from commit f06530d86ba7688067fc2758b5e54599bda1e4a0)
+---
+ man/systemctl.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/systemctl.xml b/man/systemctl.xml
+index 0f06a88..9abbb85 100644
+--- a/man/systemctl.xml
++++ b/man/systemctl.xml
+@@ -818,7 +818,7 @@ Sun 2017-02-26 20:57:49 EST  2h 3min left  Sun 2017-02-26 11:56:36 EST  6h ago
+           <listitem>
+             <para>Stop (deactivate) one or more units specified on the command line.</para>
+ 
+-            <para>This command will fail if the unit does exist or if stopping of the unit is prohibited (see
++            <para>This command will fail if the unit does not exist or if stopping of the unit is prohibited (see
+             <varname>RefuseManualStop=</varname> in
+             <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>).
+             It will <emphasis>not</emphasis> fail if any of the commands configured to stop the unit

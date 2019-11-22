@@ -1,0 +1,30 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Mon, 3 Dec 2018 12:31:20 +0000
+Subject: core: set /run size to 10%, like initramfs-tools does.
+
+Currently there is a difference between initrd and initrd-less boots,
+w.r.t. size= mount option of /run. This yields different runtime journald caps
+(1% vs 10%), and on dense deployments of containers may result in OOM kills.
+
+LP: #1799251
+---
+ src/core/mount-setup.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/mount-setup.c b/src/core/mount-setup.c
+index 31e8f7a..1f36bbf 100644
+--- a/src/core/mount-setup.c
++++ b/src/core/mount-setup.c
+@@ -78,10 +78,10 @@ static const MountPoint mount_table[] = {
+         { "devpts",      "/dev/pts",                  "devpts",     "mode=620,gid=" STRINGIFY(TTY_GID), MS_NOSUID|MS_NOEXEC,
+           NULL,          MNT_IN_CONTAINER           },
+ #if ENABLE_SMACK
+-        { "tmpfs",       "/run",                      "tmpfs",      "mode=755,smackfsroot=*",  MS_NOSUID|MS_NODEV|MS_STRICTATIME,
++        { "tmpfs",       "/run",                      "tmpfs",      "mode=755,size=10%,smackfsroot=*",  MS_NOSUID|MS_NODEV|MS_STRICTATIME,
+           mac_smack_use, MNT_FATAL                  },
+ #endif
+-        { "tmpfs",       "/run",                      "tmpfs",      "mode=755",                MS_NOSUID|MS_NODEV|MS_STRICTATIME,
++        { "tmpfs",       "/run",                      "tmpfs",      "mode=755,size=10%",                MS_NOSUID|MS_NODEV|MS_STRICTATIME,
+           NULL,          MNT_FATAL|MNT_IN_CONTAINER },
+         { "tmpfs",       "/run/lock",                 "tmpfs",      "mode=1777,size=5242880",  MS_NOSUID|MS_NODEV|MS_NOEXEC,
+           NULL,          MNT_FATAL|MNT_IN_CONTAINER },

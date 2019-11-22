@@ -1,0 +1,48 @@
+From: =?utf-8?q?Renaud_M=C3=A9trich?= <rmetrich@redhat.com>
+Date: Fri, 13 Sep 2019 11:18:18 +0200
+Subject: Call getgroups() to know size of supplementary groups array to
+ allocate
+
+Resolves RHBZ #1743230 - journalctl dumps core when stack limit is reduced to 256 KB
+
+(cherry picked from commit f5e0b942af1e86993c21f4e5c84342bb10403dac)
+(cherry picked from commit 8ca1e561657575a619a071ab0c22f474094ef21d)
+---
+ src/basic/user-util.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/basic/user-util.c b/src/basic/user-util.c
+index 3b253bc..957285c 100644
+--- a/src/basic/user-util.c
++++ b/src/basic/user-util.c
+@@ -410,9 +410,8 @@ char* gid_to_name(gid_t gid) {
+ }
+ 
+ int in_gid(gid_t gid) {
+-        long ngroups_max;
+         gid_t *gids;
+-        int r, i;
++        int ngroups, r, i;
+ 
+         if (getgid() == gid)
+                 return 1;
+@@ -423,12 +422,15 @@ int in_gid(gid_t gid) {
+         if (!gid_is_valid(gid))
+                 return -EINVAL;
+ 
+-        ngroups_max = sysconf(_SC_NGROUPS_MAX);
+-        assert(ngroups_max > 0);
++        ngroups = getgroups(0, NULL);
++        if (ngroups < 0)
++                return -errno;
++        if (ngroups == 0)
++                return 0;
+ 
+-        gids = newa(gid_t, ngroups_max);
++        gids = newa(gid_t, ngroups);
+ 
+-        r = getgroups(ngroups_max, gids);
++        r = getgroups(ngroups, gids);
+         if (r < 0)
+                 return -errno;
+ 

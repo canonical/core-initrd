@@ -1,0 +1,24 @@
+From: Philip Withnall <withnall@endlessm.com>
+Date: Tue, 24 Sep 2019 16:07:23 +0100
+Subject: man: Add a missing space in machinectl(1)
+
+Signed-off-by: Philip Withnall <withnall@endlessm.com>
+(cherry picked from commit abdc57dfe149bfba79af094fd623eb9929eff5e3)
+(cherry picked from commit a0577353f191affac1273bf68f4de4483a1d0a6a)
+---
+ man/machinectl.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/machinectl.xml b/man/machinectl.xml
+index 357574f..ebec723 100644
+--- a/man/machinectl.xml
++++ b/man/machinectl.xml
+@@ -695,7 +695,7 @@
+         server, under the same URL as the <filename>.tar</filename> file.
+         With <option>--verify=checksum</option>, only the SHA256 checksum
+         for the file is verified, based on the <filename>.sha256</filename>
+-        suffixed file or the<filename>SHA256SUMS</filename> file.
++        suffixed file or the <filename>SHA256SUMS</filename> file.
+         With <option>--verify=signature</option>, the sha checksum file is
+         first verified with the inline signature in the
+         <filename>.sha256</filename> file or the detached GPG signature file

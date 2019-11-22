@@ -1,0 +1,24 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Fri, 27 Sep 2019 19:56:05 +0200
+Subject: test-execute: Filter /dev/.lxc in exec-dynamicuser-statedir.service
+
+It appears in nested LXC containers and broke the test in Ubuntu CI.
+
+BugLink: https://bugs.launchpad.net/bugs/1845337
+---
+ test/test-execute/exec-dynamicuser-statedir.service | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test/test-execute/exec-dynamicuser-statedir.service b/test/test-execute/exec-dynamicuser-statedir.service
+index 2fb7b86..ca40934 100644
+--- a/test/test-execute/exec-dynamicuser-statedir.service
++++ b/test/test-execute/exec-dynamicuser-statedir.service
+@@ -13,7 +13,7 @@ ExecStart=test -f /var/lib/private/quux/pief/yayyay
+ ExecStart=/bin/sh -x -c 'test "$$STATE_DIRECTORY" = "%S/waldo:%S/quux/pief"'
+ 
+ # Make sure that /var/lib/private/waldo is really the only writable directory besides the obvious candidates
+-ExecStart=sh -x -c 'test $$(find / \( -path /var/tmp -o -path /tmp -o -path /proc -o -path /dev/mqueue -o -path /dev/shm -o -path /sys/fs/bpf \) -prune -o -type d -writable -print 2>/dev/null | sort -u | tr -d '\\\\n') = /var/lib/private/quux/pief/var/lib/private/waldo'
++ExecStart=sh -x -c 'test $$(find / \( -path /var/tmp -o -path /tmp -o -path /proc -o -path /dev/mqueue -o -path /dev/shm -o -path /sys/fs/bpf -o -path /dev/.lxc \) -prune -o -type d -writable -print 2>/dev/null | sort -u | tr -d '\\\\n') = /var/lib/private/quux/pief/var/lib/private/waldo'
+ 
+ Type=oneshot
+ DynamicUser=yes

@@ -1,0 +1,51 @@
+From: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Date: Wed, 12 Sep 2018 13:10:24 +0100
+Subject: Bump the self-test timeouts to increase autopkgtest success rate
+
+Especially on i386 tests the systemd selftests were flaky for quite a while.
+It turned out that 5/8 tests checked seemed to have worked fine but were
+killed early by the timeouts expiring.
+It was brought up that spectre and L1TF mitigations might have further
+opened the window for these issues to trigger more often now.
+Lets in our package bump the timeout which will worst case make a real bad test
+slightly longer but probably safes many hours of wasted tests especially
+considering how often they are jsut retried these days.
+.
+We might forward that upstream if for a while this proves to increase
+the success rate of systemd autopkgtests.
+Forwarded: no
+Forward-info: need to prove with test success rate
+Author: Christian Ehrhardt <christian.ehrhardt@canonical.com>
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1789841
+Last-Update: 2018-08-30
+---
+ test/TEST-08-ISSUE-2730/test.sh | 2 +-
+ test/TEST-09-ISSUE-2691/test.sh | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/test/TEST-08-ISSUE-2730/test.sh b/test/TEST-08-ISSUE-2730/test.sh
+index 8643842..91f1888 100755
+--- a/test/TEST-08-ISSUE-2730/test.sh
++++ b/test/TEST-08-ISSUE-2730/test.sh
+@@ -4,7 +4,7 @@ TEST_DESCRIPTION="https://github.com/systemd/systemd/issues/2730"
+ TEST_NO_NSPAWN=1
+ 
+ . $TEST_BASE_DIR/test-functions
+-QEMU_TIMEOUT=180
++QEMU_TIMEOUT=300
+ FSTYPE=ext4
+ 
+ test_setup() {
+diff --git a/test/TEST-09-ISSUE-2691/test.sh b/test/TEST-09-ISSUE-2691/test.sh
+index 1a8b900..f1a162a 100755
+--- a/test/TEST-09-ISSUE-2691/test.sh
++++ b/test/TEST-09-ISSUE-2691/test.sh
+@@ -4,7 +4,7 @@ TEST_DESCRIPTION="https://github.com/systemd/systemd/issues/2691"
+ TEST_NO_NSPAWN=1
+ 
+ . $TEST_BASE_DIR/test-functions
+-QEMU_TIMEOUT=180
++QEMU_TIMEOUT=300
+ 
+ test_setup() {
+     create_empty_image_rootdir

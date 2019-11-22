@@ -1,0 +1,25 @@
+From: "Donald A. Cupp Jr" <doncuppjr@yahoo.com>
+Date: Thu, 5 Sep 2019 15:03:54 -0700
+Subject: Update m4 for selective utmp support. 	modified:
+   tmpfiles.d/systemd.conf.m4
+
+(cherry picked from commit d34a58222de4c2ee93c68411b4f9042f08e5132f)
+(cherry picked from commit 6af590838b17e9ca38cde05ecfe6da3faa51704f)
+---
+ tmpfiles.d/systemd.conf.m4 | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/tmpfiles.d/systemd.conf.m4 b/tmpfiles.d/systemd.conf.m4
+index d39c9cb..9c57d3b 100644
+--- a/tmpfiles.d/systemd.conf.m4
++++ b/tmpfiles.d/systemd.conf.m4
+@@ -8,7 +8,9 @@
+ # See tmpfiles.d(5) for details
+ 
+ d /run/user 0755 root root -
++m4_ifdef(`ENABLE_UTMP',
+ F! /run/utmp 0664 root utmp -
++)m4_dnl
+ 
+ d /run/systemd/ask-password 0755 root root -
+ d /run/systemd/seats 0755 root root -

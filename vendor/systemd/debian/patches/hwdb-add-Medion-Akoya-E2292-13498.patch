@@ -1,0 +1,27 @@
+From: matthiasroos <40145019+matthiasroos@users.noreply.github.com>
+Date: Mon, 16 Sep 2019 21:10:15 +0200
+Subject: hwdb: add Medion Akoya E2292 (#13498)
+
+Fixes #13480.
+
+(cherry picked from commit 358e50fa7fab98509f2ef96cd8d6d7d1af6ed59a)
+(cherry picked from commit 2cd636c437965b4a2d86aa3b6c74d4117a719f7f)
+---
+ hwdb/60-sensor.hwdb | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hwdb/60-sensor.hwdb b/hwdb/60-sensor.hwdb
+index 82f37e4..97e8dc8 100644
+--- a/hwdb/60-sensor.hwdb
++++ b/hwdb/60-sensor.hwdb
+@@ -417,6 +417,10 @@ sensor:modalias:acpi:KIOX010A*:dmi:*:svnMEDION:pnE3221MD61237:*
+ sensor:modalias:acpi:KIOX010A*:dmi:*:svnMEDION*:pnE3222*:*
+  ACCEL_MOUNT_MATRIX=0, -1, 0; -1, 0, 0; 0, 0, 1
+ 
++# Medion Akoya E2292 MD63390
++sensor:modalias:acpi:KIOX010A*:dmi:*:svnMEDION:pnE2292MD63390:*
++ ACCEL_MOUNT_MATRIX=0, -1, 0; -1, 0, 0; 0, 0, 1
++
+ # Medion Akoya E2293 MD61130
+ sensor:modalias:acpi:KIOX010A*:dmi:*:svnMEDION:pnE2293MD61130:*
+  ACCEL_MOUNT_MATRIX=0, -1, 0; -1, 0, 0; 0, 0, 1

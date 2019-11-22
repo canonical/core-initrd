@@ -1,0 +1,22 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Mon, 26 Mar 2018 13:41:15 +0100
+Subject: journald.service: set Nice=-1 to dodge watchdog on soft lockups.
+
+LP: #1696970
+(cherry picked from commit c5b77c35b4ec0e1812702240f272fbeea3ad4152)
+---
+ units/systemd-journald.service.in | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/units/systemd-journald.service.in b/units/systemd-journald.service.in
+index 089bc38..00268fa 100644
+--- a/units/systemd-journald.service.in
++++ b/units/systemd-journald.service.in
+@@ -27,6 +27,7 @@ MemoryDenyWriteExecute=yes
+ NoNewPrivileges=yes
+ Restart=always
+ RestartSec=0
++Nice=-1
+ RestrictAddressFamilies=AF_UNIX AF_NETLINK
+ RestrictNamespaces=yes
+ RestrictRealtime=yes

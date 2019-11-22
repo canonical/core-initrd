@@ -1,0 +1,34 @@
+From: ypf791 <ypf791@gmail.com>
+Date: Fri, 19 Jul 2019 18:28:04 +0800
+Subject: core: coldplug possible nop_job
+
+(cherry picked from commit b49e14d5f3081dfcd363d8199a14c0924ae9152f)
+(cherry picked from commit a20a2157a85dd277c5dc1398fd75f565ca941933)
+---
+ src/core/unit.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/unit.c b/src/core/unit.c
+index 64eb127..cedcb3f 100644
+--- a/src/core/unit.c
++++ b/src/core/unit.c
+@@ -3900,6 +3900,7 @@ int unit_add_node_dependency(Unit *u, const char *what, bool wants, UnitDependen
+ int unit_coldplug(Unit *u) {
+         int r = 0, q;
+         char **i;
++        Job *uj;
+ 
+         assert(u);
+ 
+@@ -3922,8 +3923,9 @@ int unit_coldplug(Unit *u) {
+                         r = q;
+         }
+ 
+-        if (u->job) {
+-                q = job_coldplug(u->job);
++        uj = u->job ?: u->nop_job;
++        if (uj) {
++                q = job_coldplug(uj);
+                 if (q < 0 && r >= 0)
+                         r = q;
+         }

@@ -1,0 +1,66 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Fri, 20 Apr 2018 03:24:13 +0100
+Subject: UBUNTU: networkd: if RA was implicit, do not await ndisc_configured.
+
+If RA was iplicit, meaning not otherwise requested, and a kernel default was in
+use. Do not prevent link entering configured state, whilst ndisc configuration
+is pending. Implicit kernel RA, is expected to be asynchronous and
+non-blocking.
+
+LP: #1765173
+(cherry picked from commit 4b784890d000aab33a36f95e565469d5b76e6cbf)
+---
+ src/network/networkd-link.c | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 10f0ce0..2aa91d9 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -257,7 +257,7 @@ static bool link_proxy_arp_enabled(Link *link) {
+         return true;
+ }
+ 
+-static bool link_ipv6_accept_ra_enabled(Link *link) {
++static bool link_ipv6_accept_ra_enabled_implicit(Link *link, bool * implicit) {
+         assert(link);
+ 
+         if (!socket_ipv6_is_supported())
+@@ -276,9 +276,12 @@ static bool link_ipv6_accept_ra_enabled(Link *link) {
+          * disabled if local forwarding is enabled).
+          * If set, ignore or enforce RA independent of local forwarding state.
+          */
+-        if (link->network->ipv6_accept_ra < 0)
++        if (link->network->ipv6_accept_ra < 0) {
+                 /* default to accept RA if ip_forward is disabled and ignore RA if ip_forward is enabled */
++                if (implicit)
++                        *implicit = true;
+                 return !link_ipv6_forward_enabled(link);
++        }
+         else if (link->network->ipv6_accept_ra > 0)
+                 /* accept RA even if ip_forward is enabled */
+                 return true;
+@@ -287,6 +290,10 @@ static bool link_ipv6_accept_ra_enabled(Link *link) {
+                 return false;
+ }
+ 
++static bool link_ipv6_accept_ra_enabled(Link *link) {
++        return link_ipv6_accept_ra_enabled_implicit(link, NULL);
++}
++
+ static IPv6PrivacyExtensions link_ipv6_privacy_extensions(Link *link) {
+         assert(link);
+ 
+@@ -1033,8 +1040,10 @@ void link_check_ready(Link *link) {
+                          * an IPv4ll fallback address must be configured. */
+                         return;
+ 
+-                if (link_ipv6_accept_ra_enabled(link) && !link->ndisc_configured)
+-                        return;
++                 bool implicit = false;
++                 if (link_ipv6_accept_ra_enabled_implicit(link, &implicit) && !link->ndisc_configured)
++                         if (!implicit)
++                                 return;
+         }
+ 
+         if (link->state != LINK_STATE_CONFIGURED)

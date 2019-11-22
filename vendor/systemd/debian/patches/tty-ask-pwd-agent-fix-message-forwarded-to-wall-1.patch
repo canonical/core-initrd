@@ -1,0 +1,30 @@
+From: Franck Bui <fbui@suse.com>
+Date: Mon, 16 Sep 2019 22:03:43 +0200
+Subject: tty-ask-pwd-agent: fix message forwarded to wall(1)
+
+Commit a1c111c2d12429d2 wrongly replaced '!' with ':' when the message is
+forwarded to wall(1).
+
+Indeed in this case we are not requesting the user for providing a password but
+instead we are simply displaying a message to suggest starting
+tty-ask-password-agent for providing the password.
+
+(cherry picked from commit 65943cc3507bf54390d598e06df60771e913fb72)
+(cherry picked from commit eb552417420fa9680b508519e926b140d5a0be25)
+---
+ src/tty-ask-password-agent/tty-ask-password-agent.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/tty-ask-password-agent/tty-ask-password-agent.c b/src/tty-ask-password-agent/tty-ask-password-agent.c
+index 5f5245e..d0c070d 100644
+--- a/src/tty-ask-password-agent/tty-ask-password-agent.c
++++ b/src/tty-ask-password-agent/tty-ask-password-agent.c
+@@ -322,7 +322,7 @@ static int parse_password(const char *filename, char **wall) {
+ 
+                 if (asprintf(&_wall,
+                              "%s%sPassword entry required for \'%s\' (PID %u).\r\n"
+-                             "Please enter password with the systemd-tty-ask-password-agent tool:",
++                             "Please enter password with the systemd-tty-ask-password-agent tool.",
+                              strempty(*wall),
+                              *wall ? "\r\n\r\n" : "",
+                              message,

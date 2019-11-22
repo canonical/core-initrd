@@ -1,0 +1,22 @@
+From: nikolas <nikolas@gnu.org>
+Date: Wed, 4 Sep 2019 12:07:06 -0400
+Subject: pstore: fix typo in error message - directoy -> directory
+
+(cherry picked from commit 000e08ca70da3f05b6e71f4ef3a1c3373e1d1b0e)
+---
+ src/pstore/pstore.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/pstore/pstore.c b/src/pstore/pstore.c
+index df3efb3..c760b3e 100644
+--- a/src/pstore/pstore.c
++++ b/src/pstore/pstore.c
+@@ -157,7 +157,7 @@ static int move_file(PStoreEntry *pe, const char *subdir) {
+                 /* Move file from pstore to external storage */
+                 r = mkdir_parents(ofd_path, 0755);
+                 if (r < 0)
+-                        return log_error_errno(r, "Failed to create directoy %s: %m", ofd_path);
++                        return log_error_errno(r, "Failed to create directory %s: %m", ofd_path);
+                 r = copy_file_atomic(ifd_path, ofd_path, 0600, 0, 0, COPY_REPLACE);
+                 if (r < 0)
+                         return log_error_errno(r, "Failed to copy_file_atomic: %s to %s", ifd_path, ofd_path);

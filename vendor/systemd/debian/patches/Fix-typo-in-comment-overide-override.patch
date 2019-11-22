@@ -1,0 +1,22 @@
+From: nikolas <nikolas@gnu.org>
+Date: Wed, 4 Sep 2019 12:03:56 -0400
+Subject: Fix typo in comment: overide -> override
+
+(cherry picked from commit f7f9c69ac58748e37629015ab288d40b1966ac88)
+---
+ src/login/logind-brightness.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/login/logind-brightness.c b/src/login/logind-brightness.c
+index 8dfa97d..3f4b65e 100644
+--- a/src/login/logind-brightness.c
++++ b/src/login/logind-brightness.c
+@@ -213,7 +213,7 @@ int manager_write_brightness(
+                 if (r < 0)
+                         return log_error_errno(r, "Failed to add message to set: %m");
+ 
+-                /* We overide any previously requested brightness here: we coalesce writes, and the newest
++                /* We override any previously requested brightness here: we coalesce writes, and the newest
+                  * requested brightness is the one we'll put into effect. */
+                 existing->brightness = brightness;
+                 existing->again = true; /* request another iteration of the writer when the current one is

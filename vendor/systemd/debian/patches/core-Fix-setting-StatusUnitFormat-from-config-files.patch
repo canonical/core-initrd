@@ -1,0 +1,48 @@
+From: Maciej Stanczew <maciej.stanczew@gmail.com>
+Date: Mon, 16 Sep 2019 02:09:35 +0200
+Subject: core: Fix setting StatusUnitFormat from config files
+
+(cherry picked from commit 6327aa9f6c5701e44541e685c6bf44d3a8c40f50)
+(cherry picked from commit 1a3c53c06c878d44d8d0a87244261df55dfbb837)
+---
+ src/core/load-fragment.c | 1 +
+ src/core/load-fragment.h | 1 +
+ src/core/main.c          | 1 -
+ 3 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/load-fragment.c b/src/core/load-fragment.c
+index a7951a5..56cad2f 100644
+--- a/src/core/load-fragment.c
++++ b/src/core/load-fragment.c
+@@ -133,6 +133,7 @@ DEFINE_CONFIG_PARSE_PTR(config_parse_cg_weight, cg_weight_parse, uint64_t, "Inva
+ DEFINE_CONFIG_PARSE_PTR(config_parse_cpu_shares, cg_cpu_shares_parse, uint64_t, "Invalid CPU shares");
+ DEFINE_CONFIG_PARSE_PTR(config_parse_exec_mount_flags, mount_propagation_flags_from_string, unsigned long, "Failed to parse mount flag");
+ DEFINE_CONFIG_PARSE_ENUM_WITH_DEFAULT(config_parse_numa_policy, mpol, int, -1, "Invalid NUMA policy type");
++DEFINE_CONFIG_PARSE_ENUM(config_parse_status_unit_format, status_unit_format, StatusUnitFormat, "Failed to parse status unit format");
+ 
+ int config_parse_unit_deps(
+                 const char *unit,
+diff --git a/src/core/load-fragment.h b/src/core/load-fragment.h
+index 664643f..1183987 100644
+--- a/src/core/load-fragment.h
++++ b/src/core/load-fragment.h
+@@ -117,6 +117,7 @@ CONFIG_PARSER_PROTOTYPE(config_parse_numa_mask);
+ CONFIG_PARSER_PROTOTYPE(config_parse_ip_filter_bpf_progs);
+ CONFIG_PARSER_PROTOTYPE(config_parse_cpu_affinity2);
+ CONFIG_PARSER_PROTOTYPE(config_parse_show_status);
++CONFIG_PARSER_PROTOTYPE(config_parse_status_unit_format);
+ CONFIG_PARSER_PROTOTYPE(config_parse_output_restricted);
+ CONFIG_PARSER_PROTOTYPE(config_parse_crash_chvt);
+ CONFIG_PARSER_PROTOTYPE(config_parse_timeout_abort);
+diff --git a/src/core/main.c b/src/core/main.c
+index bcce717..4633184 100644
+--- a/src/core/main.c
++++ b/src/core/main.c
+@@ -538,7 +538,6 @@ DEFINE_SETTER(config_parse_level2, log_set_max_level_from_string, "log level");
+ DEFINE_SETTER(config_parse_target, log_set_target_from_string, "target");
+ DEFINE_SETTER(config_parse_color, log_show_color_from_string, "color" );
+ DEFINE_SETTER(config_parse_location, log_show_location_from_string, "location");
+-DEFINE_SETTER(config_parse_status_unit_format, status_unit_format_from_string, "value");
+ 
+ static int parse_config_file(void) {
+ 

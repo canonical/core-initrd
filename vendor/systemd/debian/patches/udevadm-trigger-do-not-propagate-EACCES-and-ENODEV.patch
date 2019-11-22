@@ -1,0 +1,34 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Thu, 26 Sep 2019 21:33:59 +0900
+Subject: udevadm trigger: do not propagate EACCES and ENODEV
+
+Inside container, writing file returns EACCESS. Moreover, some devices
+return ENODEV rather than EACCES. So, let's also ignore these two
+error causes.
+
+Closes #13652.
+
+(cherry picked from commit 67acde4869a9505f9721e31fa5167c82445e0e12)
+(cherry picked from commit 20438f96c3261e55fabf44c892225efe79dd49d5)
+---
+ src/udev/udevadm-trigger.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/udev/udevadm-trigger.c b/src/udev/udevadm-trigger.c
+index 77d95e5..11f2f1c 100644
+--- a/src/udev/udevadm-trigger.c
++++ b/src/udev/udevadm-trigger.c
+@@ -45,9 +45,11 @@ static int exec_list(sd_device_enumerator *e, const char *action, Set *settle_se
+ 
+                 r = write_string_file(filename, action, WRITE_STRING_FILE_DISABLE_BUFFER);
+                 if (r < 0) {
+-                        log_full_errno(r == -ENOENT ? LOG_DEBUG : LOG_ERR, r,
++                        bool ignore = IN_SET(r, -ENOENT, -EACCES, -ENODEV);
++
++                        log_full_errno(ignore ? LOG_DEBUG : LOG_ERR, r,
+                                        "Failed to write '%s' to '%s': %m", action, filename);
+-                        if (ret == 0 && r != -ENOENT)
++                        if (ret == 0 && !ignore)
+                                 ret = r;
+                         continue;
+                 }

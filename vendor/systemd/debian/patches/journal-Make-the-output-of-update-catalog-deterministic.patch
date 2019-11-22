@@ -1,0 +1,255 @@
+From: Daniel Edgecumbe <git@esotericnonsense.com>
+Date: Thu, 5 Sep 2019 15:34:52 +0100
+Subject: journal: Make the output of --update-catalog deterministic
+
+The use of an unordered hashmap means that the output of
+'journalctl --update-catalog' differs between runs despite there being no
+changes in the input files.
+
+By changing all instances of Hashmap to OrderedHashmap we fix this, and now
+the catalog is reproducible.
+
+Motivation: https://reproducible-builds.org
+
+Signed-off-by: Daniel Edgecumbe <git@esotericnonsense.com>
+(cherry picked from commit a95686bb5d615a73a14d451a25225a566f9af570)
+(cherry picked from commit f500d2fa81292046e5360b49b38a46f34ca1f397)
+---
+ src/fuzz/fuzz-catalog.c    |  4 ++--
+ src/journal/catalog.c      | 24 ++++++++++++------------
+ src/journal/catalog.h      |  2 +-
+ src/journal/test-catalog.c | 30 +++++++++++++++---------------
+ 4 files changed, 30 insertions(+), 30 deletions(-)
+
+diff --git a/src/fuzz/fuzz-catalog.c b/src/fuzz/fuzz-catalog.c
+index 7ee9750..ecf25b1 100644
+--- a/src/fuzz/fuzz-catalog.c
++++ b/src/fuzz/fuzz-catalog.c
+@@ -9,12 +9,12 @@
+ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+         _cleanup_(unlink_tempfilep) char name[] = "/tmp/fuzz-catalog.XXXXXX";
+         _cleanup_close_ int fd = -1;
+-        _cleanup_hashmap_free_free_free_ Hashmap *h = NULL;
++        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+ 
+         if (!getenv("SYSTEMD_LOG_LEVEL"))
+                 log_set_max_level(LOG_CRIT);
+ 
+-        assert_se(h = hashmap_new(&catalog_hash_ops));
++        assert_se(h = ordered_hashmap_new(&catalog_hash_ops));
+ 
+         fd = mkostemp_safe(name);
+         assert_se(fd >= 0);
+diff --git a/src/journal/catalog.c b/src/journal/catalog.c
+index 7beffc1..060193d 100644
+--- a/src/journal/catalog.c
++++ b/src/journal/catalog.c
+@@ -143,7 +143,7 @@ static char *combine_entries(const char *one, const char *two) {
+ }
+ 
+ static int finish_item(
+-                Hashmap *h,
++                OrderedHashmap *h,
+                 sd_id128_t id,
+                 const char *language,
+                 char *payload, size_t payload_size) {
+@@ -165,14 +165,14 @@ static int finish_item(
+                 strcpy(i->language, language);
+         }
+ 
+-        prev = hashmap_get(h, i);
++        prev = ordered_hashmap_get(h, i);
+         if (prev) {
+                 /* Already have such an item, combine them */
+                 combined = combine_entries(payload, prev);
+                 if (!combined)
+                         return log_oom();
+ 
+-                if (hashmap_update(h, i, combined) < 0)
++                if (ordered_hashmap_update(h, i, combined) < 0)
+                         return log_oom();
+                 combined = NULL;
+         } else {
+@@ -181,7 +181,7 @@ static int finish_item(
+                 if (!combined)
+                         return log_oom();
+ 
+-                if (hashmap_put(h, i, combined) < 0)
++                if (ordered_hashmap_put(h, i, combined) < 0)
+                         return log_oom();
+                 i = NULL;
+                 combined = NULL;
+@@ -247,7 +247,7 @@ static int catalog_entry_lang(
+         return 0;
+ }
+ 
+-int catalog_import_file(Hashmap *h, const char *path) {
++int catalog_import_file(OrderedHashmap *h, const char *path) {
+         _cleanup_fclose_ FILE *f = NULL;
+         _cleanup_free_ char *payload = NULL;
+         size_t payload_size = 0, payload_allocated = 0;
+@@ -446,7 +446,7 @@ int catalog_update(const char* database, const char* root, const char* const* di
+         _cleanup_strv_free_ char **files = NULL;
+         char **f;
+         _cleanup_(strbuf_cleanupp) struct strbuf *sb = NULL;
+-        _cleanup_hashmap_free_free_free_ Hashmap *h = NULL;
++        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+         _cleanup_free_ CatalogItem *items = NULL;
+         ssize_t offset;
+         char *payload;
+@@ -456,7 +456,7 @@ int catalog_update(const char* database, const char* root, const char* const* di
+         int r;
+         int64_t sz;
+ 
+-        h = hashmap_new(&catalog_hash_ops);
++        h = ordered_hashmap_new(&catalog_hash_ops);
+         sb = strbuf_new();
+         if (!h || !sb)
+                 return log_oom();
+@@ -472,18 +472,18 @@ int catalog_update(const char* database, const char* root, const char* const* di
+                         return log_error_errno(r, "Failed to import file '%s': %m", *f);
+         }
+ 
+-        if (hashmap_size(h) <= 0) {
++        if (ordered_hashmap_size(h) <= 0) {
+                 log_info("No items in catalog.");
+                 return 0;
+         } else
+-                log_debug("Found %u items in catalog.", hashmap_size(h));
++                log_debug("Found %u items in catalog.", ordered_hashmap_size(h));
+ 
+-        items = new(CatalogItem, hashmap_size(h));
++        items = new(CatalogItem, ordered_hashmap_size(h));
+         if (!items)
+                 return log_oom();
+ 
+         n = 0;
+-        HASHMAP_FOREACH_KEY(payload, i, h, j) {
++        ORDERED_HASHMAP_FOREACH_KEY(payload, i, h, j) {
+                 log_debug("Found " SD_ID128_FORMAT_STR ", language %s",
+                           SD_ID128_FORMAT_VAL(i->id),
+                           isempty(i->language) ? "C" : i->language);
+@@ -496,7 +496,7 @@ int catalog_update(const char* database, const char* root, const char* const* di
+                 items[n++] = *i;
+         }
+ 
+-        assert(n == hashmap_size(h));
++        assert(n == ordered_hashmap_size(h));
+         typesafe_qsort(items, n, catalog_compare_func);
+ 
+         strbuf_complete(sb);
+diff --git a/src/journal/catalog.h b/src/journal/catalog.h
+index 20497d1..092a014 100644
+--- a/src/journal/catalog.h
++++ b/src/journal/catalog.h
+@@ -9,7 +9,7 @@
+ #include "hashmap.h"
+ #include "strbuf.h"
+ 
+-int catalog_import_file(Hashmap *h, const char *path);
++int catalog_import_file(OrderedHashmap *h, const char *path);
+ int catalog_update(const char* database, const char* root, const char* const* dirs);
+ int catalog_get(const char* database, sd_id128_t id, char **data);
+ int catalog_list(FILE *f, const char* database, bool oneline);
+diff --git a/src/journal/test-catalog.c b/src/journal/test-catalog.c
+index 192bb0c..ba14d92 100644
+--- a/src/journal/test-catalog.c
++++ b/src/journal/test-catalog.c
+@@ -26,15 +26,15 @@ static const char *no_catalog_dirs[] = {
+         NULL
+ };
+ 
+-static Hashmap* test_import(const char* contents, ssize_t size, int code) {
++static OrderedHashmap* test_import(const char* contents, ssize_t size, int code) {
+         _cleanup_(unlink_tempfilep) char name[] = "/tmp/test-catalog.XXXXXX";
+         _cleanup_close_ int fd;
+-        Hashmap *h;
++        OrderedHashmap *h;
+ 
+         if (size < 0)
+                 size = strlen(contents);
+ 
+-        assert_se(h = hashmap_new(&catalog_hash_ops));
++        assert_se(h = ordered_hashmap_new(&catalog_hash_ops));
+ 
+         fd = mkostemp_safe(name);
+         assert_se(fd >= 0);
+@@ -46,14 +46,14 @@ static Hashmap* test_import(const char* contents, ssize_t size, int code) {
+ }
+ 
+ static void test_catalog_import_invalid(void) {
+-        _cleanup_hashmap_free_free_free_ Hashmap *h = NULL;
++        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+ 
+         h = test_import("xxx", -1, -EINVAL);
+-        assert_se(hashmap_isempty(h));
++        assert_se(ordered_hashmap_isempty(h));
+ }
+ 
+ static void test_catalog_import_badid(void) {
+-        _cleanup_hashmap_free_free_free_ Hashmap *h = NULL;
++        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+         const char *input =
+ "-- 0027229ca0644181a76c4e92458afaff dededededededededededededededede\n" \
+ "Subject: message\n" \
+@@ -63,7 +63,7 @@ static void test_catalog_import_badid(void) {
+ }
+ 
+ static void test_catalog_import_one(void) {
+-        _cleanup_hashmap_free_free_free_ Hashmap *h = NULL;
++        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+         char *payload;
+         Iterator j;
+ 
+@@ -78,9 +78,9 @@ static void test_catalog_import_one(void) {
+ "payload\n";
+ 
+         h = test_import(input, -1, 0);
+-        assert_se(hashmap_size(h) == 1);
++        assert_se(ordered_hashmap_size(h) == 1);
+ 
+-        HASHMAP_FOREACH(payload, h, j) {
++        ORDERED_HASHMAP_FOREACH(payload, h, j) {
+                 printf("expect: %s\n", expect);
+                 printf("actual: %s\n", payload);
+                 assert_se(streq(expect, payload));
+@@ -88,7 +88,7 @@ static void test_catalog_import_one(void) {
+ }
+ 
+ static void test_catalog_import_merge(void) {
+-        _cleanup_hashmap_free_free_free_ Hashmap *h = NULL;
++        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+         char *payload;
+         Iterator j;
+ 
+@@ -114,15 +114,15 @@ static void test_catalog_import_merge(void) {
+ "override payload\n";
+ 
+         h = test_import(input, -1, 0);
+-        assert_se(hashmap_size(h) == 1);
++        assert_se(ordered_hashmap_size(h) == 1);
+ 
+-        HASHMAP_FOREACH(payload, h, j) {
++        ORDERED_HASHMAP_FOREACH(payload, h, j) {
+                 assert_se(streq(combined, payload));
+         }
+ }
+ 
+ static void test_catalog_import_merge_no_body(void) {
+-        _cleanup_hashmap_free_free_free_ Hashmap *h = NULL;
++        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+         char *payload;
+         Iterator j;
+ 
+@@ -147,9 +147,9 @@ static void test_catalog_import_merge_no_body(void) {
+ "payload\n";
+ 
+         h = test_import(input, -1, 0);
+-        assert_se(hashmap_size(h) == 1);
++        assert_se(ordered_hashmap_size(h) == 1);
+ 
+-        HASHMAP_FOREACH(payload, h, j) {
++        ORDERED_HASHMAP_FOREACH(payload, h, j) {
+                 assert_se(streq(combined, payload));
+         }
+ }

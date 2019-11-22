@@ -1,0 +1,23 @@
+From: Jonas Thelemann <e-mail@jonas-thelemann.de>
+Date: Wed, 2 Oct 2019 02:42:58 +0200
+Subject: hwdb: Correct WWWW Pattern In Documentation Comment
+
+(cherry picked from commit 56783ddf228c406522af5e53910d095fa2572540)
+(cherry picked from commit 6480630bc397f13713f956ae02ab7877d3aa6ad9)
+---
+ hwdb/60-keyboard.hwdb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hwdb/60-keyboard.hwdb b/hwdb/60-keyboard.hwdb
+index ee40e12..8c79785 100644
+--- a/hwdb/60-keyboard.hwdb
++++ b/hwdb/60-keyboard.hwdb
+@@ -23,7 +23,7 @@
+ #      evdev:input:bZZZZvYYYYpXXXXeWWWW-VVVV
+ #    This matches on the kernel modalias of the input-device, mainly:
+ #    ZZZZ is the bus-id (see /usr/include/linux/input.h BUS_*), YYYY, XXXX and
+-#    WWW are the 4-digit hex uppercase vendor, product and version ID and VVVV
++#    WWWW are the 4-digit hex uppercase vendor, product and version ID and VVVV
+ #    is an arbitrary length input-modalias describing the device capabilities.
+ #    The vendor, product and version ID for a device node "eventX" is listed
+ #    in /sys/class/input/eventX/device/id.

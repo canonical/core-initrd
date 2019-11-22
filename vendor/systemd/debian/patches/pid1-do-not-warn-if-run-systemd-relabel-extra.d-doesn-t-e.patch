@@ -1,0 +1,28 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Wed, 18 Sep 2019 17:52:30 +0200
+Subject: pid1: do not warn if /run/systemd/relabel-extra.d/ doesn't exist
+
+After all, that is the expected state.
+
+(cherry picked from commit 90b059b608d6c53c8efb23b8791190dffadd1a17)
+(cherry picked from commit ea7151b8c4355f12d4be56f7b41e0a6ec5db7001)
+---
+ src/core/mount-setup.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/mount-setup.c b/src/core/mount-setup.c
+index fc6c5f6..3ac01ff 100644
+--- a/src/core/mount-setup.c
++++ b/src/core/mount-setup.c
+@@ -495,8 +495,9 @@ static int relabel_extra(void) {
+                         log_warning_errno(errno, "Failed to remove /run/systemd/relabel-extra.d/%s, ignoring: %m", de->d_name);
+         }
+ 
+-        /* Remove when we completing things. */
+-        if (rmdir("/run/systemd/relabel-extra.d") < 0)
++        /* Remove when we complete things. */
++        if (rmdir("/run/systemd/relabel-extra.d") < 0 &&
++            errno != ENOENT)
+                 log_warning_errno(errno, "Failed to remove /run/systemd/relabel-extra.d/ directory: %m");
+ 
+         return c;

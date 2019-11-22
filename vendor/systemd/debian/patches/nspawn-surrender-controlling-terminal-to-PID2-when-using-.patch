@@ -1,0 +1,28 @@
+From: Nicolas Douma <nicolas@serveur.io>
+Date: Tue, 17 Sep 2019 05:07:00 +0200
+Subject: nspawn: surrender controlling terminal to PID2 when using the PID1
+ stub
+
+(cherry picked from commit de1b29f375b13b0566814517bf81e3cdbdd9a610)
+(cherry picked from commit fbad077cec34c922a985d894d8181ceefc852ec8)
+---
+ src/nspawn/nspawn-stub-pid1.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/nspawn/nspawn-stub-pid1.c b/src/nspawn/nspawn-stub-pid1.c
+index ebf4f0f..0589685 100644
+--- a/src/nspawn/nspawn-stub-pid1.c
++++ b/src/nspawn/nspawn-stub-pid1.c
+@@ -53,6 +53,12 @@ int stub_pid1(sd_id128_t uuid) {
+         assert_se(sigfillset(&fullmask) >= 0);
+         assert_se(sigprocmask(SIG_BLOCK, &fullmask, &oldmask) >= 0);
+ 
++        /* Surrender the terminal this stub may control so that child processes can have a controlling terminal
++         * without resorting to setsid hacks. */
++        r = ioctl(STDIN_FILENO, TIOCNOTTY);
++        if (r < 0 && errno != ENOTTY)
++                return log_error_errno(errno, "Failed to surrender controlling terminal: %m");
++
+         pid = fork();
+         if (pid < 0)
+                 return log_error_errno(errno, "Failed to fork child pid: %m");

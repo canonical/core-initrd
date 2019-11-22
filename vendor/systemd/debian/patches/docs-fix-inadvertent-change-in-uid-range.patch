@@ -1,0 +1,24 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Sun, 6 Oct 2019 19:05:57 +0200
+Subject: docs: fix inadvertent change in uid range
+
+https://github.com/systemd/systemd/commit/a305eda35f18fbacc771cc1582b688d60890a9d2#r35378755
+(cherry picked from commit 581004bd336567d936e94e616d35679da8ce32a0)
+(cherry picked from commit 3f6398c450b8451e4e002f478be29db3b6aa4621)
+---
+ docs/UIDS-GIDS.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docs/UIDS-GIDS.md b/docs/UIDS-GIDS.md
+index 480ee23..1f3966f 100644
+--- a/docs/UIDS-GIDS.md
++++ b/docs/UIDS-GIDS.md
+@@ -237,7 +237,7 @@ the artifacts the container manager persistently leaves in the system.
+ |                 65535 | 16bit `(uid_t) -1`    | Linux         |                               |
+ |          65536…524287 | Unused                |               |                               |
+ |     524288…1879048191 | Container UID ranges  | `systemd`     | `nss-mymachines`              |
+-| 1879048191…2147483647 | Unused                |               |                               |
++| 1879048192…2147483647 | Unused                |               |                               |
+ | 2147483648…4294967294 | HIC SVNT LEONES       |               |                               |
+ |            4294967295 | 32bit `(uid_t) -1`    | Linux         |                               |
+ 

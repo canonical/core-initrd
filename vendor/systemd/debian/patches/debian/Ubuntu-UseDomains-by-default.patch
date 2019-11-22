@@ -1,0 +1,75 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Thu, 20 Jul 2017 13:48:31 +0100
+Subject: Set UseDomains to true, by default, on Ubuntu.
+
+On Ubuntu, fallback DNS servers are disabled, therefore we do not leak queries
+to a preset 3rd party by default. In resolved, dnssec is also disabled by
+default, as too much of the internet is broken and using Ubuntu users to debug
+the internet is not very productive - most of the time the end-user cannot fix
+or know how to notify the site owners about the dnssec mistakes. Inherintally
+the DHCP acquired DNS servers are therefore trusted, and are free to spoof
+records. Not trusting DNS search domains, in such scenario, provides limited
+security or privacy benefits. From user point of view, this also appears to be
+a regression from previous Ubuntu releases which do trust DHCP acquired search
+domains by default.
+
+Therefore we are enabling UseDomains by default on Ubuntu.
+
+Users may override this setting in the .network files by specifying
+[DHCP|IPv6AcceptRA] UseDomains=no|route options.
+---
+ man/systemd.network.xml        | 6 +++---
+ src/network/networkd-network.c | 2 ++
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/man/systemd.network.xml b/man/systemd.network.xml
+index 155c086..faef9db 100644
+--- a/man/systemd.network.xml
++++ b/man/systemd.network.xml
+@@ -321,7 +321,7 @@
+             <literal>IPv6AcceptRA=</literal>.</para>
+ 
+             <para>Furthermore, note that by default the domain name
+-            specified through DHCP is not used for name resolution.
++            specified through DHCP, on Ubuntu, are used for name resolution.
+             See option <option>UseDomains=</option> below.</para>
+ 
+             <para>See the <literal>[DHCPv4]</literal> or <literal>[DHCPv6]</literal> section below for
+@@ -1416,7 +1416,7 @@
+             the <option>Domains=</option> setting. If set to <literal>route</literal>, the domain name received from
+             the DHCP server will be used for routing DNS queries only, but not for searching, similar to the effect of
+             the <option>Domains=</option> setting when the argument is prefixed with <literal>~</literal>. Defaults to
+-            false.</para>
++            true on Ubuntu.</para>
+ 
+             <para>It is recommended to enable this option only on trusted networks, as setting this affects resolution
+             of all host names, in particular of single-label names. It is generally safer to use the supplied domain
+@@ -1639,7 +1639,7 @@
+             the effect of the <option>Domains=</option> setting. If set to <literal>route</literal>, the domain name
+             received via IPv6 RA will be used for routing DNS queries only, but not for searching, similar to the
+             effect of the <option>Domains=</option> setting when the argument is prefixed with
+-            <literal>~</literal>. Defaults to false.</para>
++            <literal>~</literal>. Defaults to true on Ubuntu.</para>
+ 
+             <para>It is recommended to enable this option only on trusted networks, as setting this affects resolution
+             of all host names, in particular of single-label names. It is generally safer to use the supplied domain
+diff --git a/src/network/networkd-network.c b/src/network/networkd-network.c
+index fe81f1b..dd1de10 100644
+--- a/src/network/networkd-network.c
++++ b/src/network/networkd-network.c
+@@ -368,6 +368,7 @@ int network_load_one(Manager *manager, const char *filename) {
+                 .dhcp_use_routes = true,
+                 /* NOTE: this var might be overwritten by network_apply_anonymize_if_set */
+                 .dhcp_send_hostname = true,
++                .dhcp_use_domains = DHCP_USE_DOMAINS_YES,
+                 /* To enable/disable RFC7844 Anonymity Profiles */
+                 .dhcp_anonymize = false,
+                 .dhcp_route_metric = DHCP_ROUTE_METRIC,
+@@ -428,6 +429,7 @@ int network_load_one(Manager *manager, const char *filename) {
+                 .multicast = -1,
+                 .allmulticast = -1,
+                 .ipv6_accept_ra_use_dns = true,
++                .ipv6_accept_ra_use_domains = DHCP_USE_DOMAINS_YES,
+                 .ipv6_accept_ra_use_autonomous_prefix = true,
+                 .ipv6_accept_ra_use_onlink_prefix = true,
+                 .ipv6_accept_ra_route_table = RT_TABLE_MAIN,

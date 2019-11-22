@@ -1,0 +1,24 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Sat, 7 Sep 2019 15:16:35 +0200
+Subject: man: remove repeated words
+
+https://github.com/systemd/systemd/commit/b5328434c91b10ad49647e2352e62b1fbdce329d#commitcomment-34989175
+(cherry picked from commit ff7cfff0c446ce8ba901f8fc531171fb727a9a5d)
+(cherry picked from commit 9a25d7552094a0233ea4745ac127926887bbd906)
+---
+ man/systemd.unit.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/systemd.unit.xml b/man/systemd.unit.xml
+index acb09d0..d812108 100644
+--- a/man/systemd.unit.xml
++++ b/man/systemd.unit.xml
+@@ -163,7 +163,7 @@
+     <varname>Wants=</varname>, see below. The preferred way to create symlinks in the
+     <filename>.wants/</filename> or <filename>.requires/</filename> directory of a unit file is by embedding
+     the dependency in [Install] section of the target unit, and creating the symlink in the file system with
+-    the with the <command>enable</command> or <command>preset</command> commands of
++    the <command>enable</command> or <command>preset</command> commands of
+     <citerefentry><refentrytitle>systemctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>.</para>
+ 
+     <para>Along with a unit file <filename>foo.service</filename>, a "drop-in" directory

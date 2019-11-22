@@ -1,0 +1,36 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Thu, 12 Sep 2019 14:52:08 +0200
+Subject: resolved: fix abort when recv() returns 0
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1703598
+(cherry picked from commit f731fd5be61858b724e0f13b3ff1131c1977654a)
+(cherry picked from commit 0556c247a24027f10b23445741e75ca913e29f06)
+---
+ src/resolve/resolved-dns-transaction.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/resolve/resolved-dns-transaction.c b/src/resolve/resolved-dns-transaction.c
+index 262f63c..fb54d16 100644
+--- a/src/resolve/resolved-dns-transaction.c
++++ b/src/resolve/resolved-dns-transaction.c
+@@ -1183,8 +1183,8 @@ static int on_dns_packet(sd_event_source *s, int fd, uint32_t revents, void *use
+         if (ERRNO_IS_DISCONNECT(-r)) {
+                 usec_t usec;
+ 
+-                /* UDP connection failure get reported via ICMP and then are possible delivered to us on the next
+-                 * recvmsg(). Treat this like a lost packet. */
++                /* UDP connection failures get reported via ICMP and then are possibly delivered to us on the
++                 * next recvmsg(). Treat this like a lost packet. */
+ 
+                 log_debug_errno(r, "Connection failure for DNS UDP packet: %m");
+                 assert_se(sd_event_now(t->scope->manager->event, clock_boottime_or_monotonic(), &usec) >= 0);
+@@ -1198,6 +1198,9 @@ static int on_dns_packet(sd_event_source *s, int fd, uint32_t revents, void *use
+                 t->answer_errno = -r;
+                 return 0;
+         }
++        if (r == 0)
++                /* Spurious wakeup without any data */
++                return 0;
+ 
+         r = dns_packet_validate_reply(p);
+         if (r < 0) {

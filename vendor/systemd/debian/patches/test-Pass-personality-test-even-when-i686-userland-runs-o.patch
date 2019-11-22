@@ -1,0 +1,23 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Tue, 8 Oct 2019 16:41:24 +0200
+Subject: test: Pass personality test even when i686 userland runs on x86_64
+ kernel
+
+(cherry picked from commit bd89d03544d2b8ea53af7af0a97d4d121ef048c4)
+(cherry picked from commit ef677436aa203c24816021dd698b57f219f0ff64)
+---
+ test/test-execute/exec-personality-x86.service | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test/test-execute/exec-personality-x86.service b/test/test-execute/exec-personality-x86.service
+index a623a08..4ece7de 100644
+--- a/test/test-execute/exec-personality-x86.service
++++ b/test/test-execute/exec-personality-x86.service
+@@ -2,6 +2,6 @@
+ Description=Test for Personality=x86
+ 
+ [Service]
+-ExecStart=/bin/sh -x -c 'c=$$(uname -m); test "$$c" = "i686"'
++ExecStart=/bin/sh -x -c 'c=$$(uname -m); test "$$c" = "i686" -o "$$c" = "x86_64"'
+ Type=oneshot
+ Personality=x86

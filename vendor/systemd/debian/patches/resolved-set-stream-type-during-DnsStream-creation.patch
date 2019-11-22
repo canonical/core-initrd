@@ -1,0 +1,43 @@
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Wed, 23 Oct 2019 14:47:59 -0400
+Subject: resolved: set stream type during DnsStream creation
+
+The DnsStreamType was added to track different types of DNS TCP streams,
+instead of refcounting all of them together.  However, the stream type was
+not actually set into the stream->type field, so while the reference count
+was correctly incremented per-stream-type, the reference count was always
+decremented in the cleanup function for stream type 0, leading to
+underflow for the type 0 stream (unsigned) refcount, and preventing new
+type 0 streams from being created.
+
+Since type 0 is DNS_STREAM_LOOKUP, which is used to communicate with
+upstream nameservers, once the refcount underflows the stub resolver
+no longer is able to successfully fall back to TCP upstream lookups
+for any truncated UDP packets.
+
+This was found because lookups of A records with a large number of
+addresses, too much to fit into a single 512 byte DNS UDP reply,
+were causing getaddrinfo() to fall back to TCP and trigger this bug,
+which then caused the TCP fallback for later large record lookups
+to fail with 'connection timed out; no servers could be reached'.
+
+The stream type was introduced in commit:
+652ba568c6624bf40d735645f029d83d21bdeaa6
+
+(cherry picked from commit 1c089741d3b56ab096c5c401089f68b293b5fa38)
+---
+ src/resolve/resolved-dns-stream.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/resolve/resolved-dns-stream.c b/src/resolve/resolved-dns-stream.c
+index 04ba1d9..562d0c3 100644
+--- a/src/resolve/resolved-dns-stream.c
++++ b/src/resolve/resolved-dns-stream.c
+@@ -515,6 +515,7 @@ int dns_stream_new(
+                 .n_ref = 1,
+                 .fd = -1,
+                 .protocol = protocol,
++                .type = type,
+         };
+ 
+         r = ordered_set_ensure_allocated(&s->write_queue, &dns_packet_hash_ops);

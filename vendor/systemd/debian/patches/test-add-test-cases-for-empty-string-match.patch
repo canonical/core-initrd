@@ -1,0 +1,87 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Wed, 11 Sep 2019 09:06:15 +0900
+Subject: test: add test cases for empty string match
+
+(cherry picked from commit 48d26c90852c22ec94be961f5fbdcf462bb9a6e8)
+(cherry picked from commit 5d84a7ad1c2d8d96a3ffb5c275e8704de361b7fc)
+---
+ test/udev-test.pl | 66 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+
+diff --git a/test/udev-test.pl b/test/udev-test.pl
+index 85ec41b..9501327 100755
+--- a/test/udev-test.pl
++++ b/test/udev-test.pl
+@@ -1256,6 +1256,72 @@ KERNEL=="dontknow|ttyACM0a|nothing|attyACM0", SYMLINK+="wrong1"
+ KERNEL=="X|attyACM0|dontknow|ttyACM0a|nothing|attyACM0", SYMLINK+="wrong2"
+ KERNEL=="all|dontknow|ttyACM0", SYMLINK+="right"
+ KERNEL=="ttyACM0a|nothing", SYMLINK+="wrong3"
++EOF
++        },
++        {
++                desc            => "test multi matches 5",
++                devpath         => "/devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda",
++                exp_name        => "found",
++                not_exp_name    => "bad",
++                rules           => <<EOF
++KERNEL=="sda", TAG="foo"
++TAGS=="|foo", SYMLINK+="found"
++TAGS=="|aaa", SYMLINK+="bad"
++EOF
++        },
++        {
++                desc            => "test multi matches 6",
++                devpath         => "/devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda",
++                exp_name        => "found",
++                not_exp_name    => "bad",
++                rules           => <<EOF
++KERNEL=="sda", TAG=""
++TAGS=="|foo", SYMLINK+="found"
++TAGS=="aaa|bbb", SYMLINK+="bad"
++EOF
++        },
++        {
++                desc            => "test multi matches 7",
++                devpath         => "/devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda",
++                exp_name        => "found",
++                not_exp_name    => "bad",
++                rules           => <<EOF
++KERNEL=="sda", TAG="foo"
++TAGS=="foo||bar", SYMLINK+="found"
++TAGS=="aaa||bbb", SYMLINK+="bad"
++EOF
++        },
++        {
++                desc            => "test multi matches 8",
++                devpath         => "/devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda",
++                exp_name        => "found",
++                not_exp_name    => "bad",
++                rules           => <<EOF
++KERNEL=="sda", TAG=""
++TAGS=="foo||bar", SYMLINK+="found"
++TAGS=="aaa|bbb", SYMLINK+="bad"
++EOF
++        },
++        {
++                desc            => "test multi matches 9",
++                devpath         => "/devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda",
++                exp_name        => "found",
++                not_exp_name    => "bad",
++                rules           => <<EOF
++KERNEL=="sda", TAG="foo"
++TAGS=="foo|", SYMLINK+="found"
++TAGS=="aaa|", SYMLINK+="bad"
++EOF
++        },
++        {
++                desc            => "test multi matches 10",
++                devpath         => "/devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda",
++                exp_name        => "found",
++                not_exp_name    => "bad",
++                rules           => <<EOF
++KERNEL=="sda", TAG=""
++TAGS=="foo|", SYMLINK+="found"
++TAGS=="aaa|bbb", SYMLINK+="bad"
+ EOF
+         },
+         {
