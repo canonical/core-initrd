@@ -2,11 +2,11 @@
 include /usr/share/dpkg/default.mk
 
 %:
-	dh $@ --buildsystem=meson+ninja --sourcedir=vendor/systemd --with python3
+	dh $@ --buildsystem=meson+ninja --sourcedirectory=vendor/systemd --with python3
 
 override_dh_auto_configure:
-	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a
-	dh_auto_configure --buildsystem=meson+ninja --sourcedir=vendor/systemd -- \
+	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a || true
+	dh_auto_configure --buildsystem=meson+ninja --sourcedirectory=vendor/systemd -- \
       -Db_lto=true \
       -Db_pie=true \
       -Ddebug=false \
@@ -32,7 +32,7 @@ override_dh_auto_configure:
       -Dldconfig=false \
       -Dresolve=false \
       -Defi=true \
-      -Dtpm=false \
+      -Dtpm=true \
       -Denvironment-d=false \
       -Dbinfmt=false \
       -Dcoredump=false \
@@ -106,23 +106,26 @@ override_dh_auto_configure:
       -Dpcre2=true \
       -Dglib=false \
       -Ddbus=false \
-      -Dgnu-efi=false \
+      -Dgnu-efi=true \
       -Dbashcompletiondir=no \
       -Dzshcompletiondir=no \
       -Dtests=true \
       -Dslow-tests=true \
       -Dinstall-tests=false
 
+override_dh_auto_test:
+	LD_LIBRARY_PATH= LD_PRELOAD= dh_auto_test --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
+
 override_dh_auto_clean:
-	dh_auto_clean --buildsystem=meson+ninja --sourcedir=vendor/systemd
-	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a
+	dh_auto_clean --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
+	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a || true
 	rm -rf vendor/systemd/.pc
 
 override_dh_auto_install:
 	rm -rf debian/tmp
 	mkdir debian/tmp
 	cp -ar factory/* debian/tmp
-	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedir=vendor/systemd
+	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
 	clean_paths="etc/kernel \
 		etc/sysctl.d \
 		etc/modules-load.d \
@@ -166,16 +169,31 @@ override_dh_auto_install:
 	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/*/:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
 
-	export DESTDIR=$(CURDIR)/debian/tmp; \
-	export verbose=n; \
-	. /usr/share/initramfs-tools/hook-functions; \
-	. /usr/share/initramfs-tools/zz-busybox-initramfs
+	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /usr/lib/initramfs-tools/bin/busybox usr/bin/busybox
+	set -e; \
+	for alias in `debian/tmp/usr/bin/busybox --list-long | grep -v -e busybox -e reboot`; do \
+		ln -v -s busybox debian/tmp/usr/bin/$$alias; \
+	done
 
 	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*
 	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*
 
+	set -e; \
 	for e in $(find debian/tmp -type -f -executable); do \
 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
 	done
 
 	ldconfig -r debian/tmp
+
+override_dh_install:
+	dh_install
+	rm -rf debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/main/usr/lib/systemd/boot
+
+override_dh_python3:
+	dh_python3 --no-ext-rename
+
+override_dh_makeshlibs:
+	dh_makeshlibs -Xusr/lib/ubuntu-core-initramfs/main
+override_dh_shlibdeps:
+	dh_shlibdeps -Xusr/lib/ubuntu-core-initramfs/main
+
