@@ -31,7 +31,7 @@ def main():
     createefi_parser.add_argument(
         "--stub",
         help="path to stub",
-        default="/usr/lib/systemd/boot/efi/linuxx64.efi.stub",
+        default="/usr/lib/ubuntu-core-initramfs/efi/linuxx64.efi.stub",
     )
     createefi_parser.add_argument(
         "--kernel", help="path to kernel", default="/boot/vmlinuz"
