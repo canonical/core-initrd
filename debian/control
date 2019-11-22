@@ -47,7 +47,6 @@ Build-Depends: debhelper-compat (= 12), dh-python, python3:any, usrmerge, dracut
                tzdata <!nocheck>,
                libcap2-bin <!nocheck>,
                iproute2 <!nocheck>,
-
 Standards-Version: 4.4.1
 Homepage: https://launchpad.net/ubuntu-core-initramfs
 

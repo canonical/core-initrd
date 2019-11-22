@@ -125,6 +125,8 @@ override_dh_auto_install:
 	rm -rf debian/tmp
 	mkdir debian/tmp
 	cp -ar factory/* debian/tmp
+	mkdir -p debian/tmp/usr/bin
+	mkdir -p debian/tmp/usr/lib64
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
 	clean_paths="etc/kernel \
 		etc/sysctl.d \
