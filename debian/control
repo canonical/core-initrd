@@ -8,7 +8,7 @@ Homepage: https://launchpad.net/ubuntu-core-initramfs
 
 Package: ubuntu-core-initramfs
 Architecture: amd64 arm64
-Depends: ${python3:Depends}, ${misc:Depends}, binutils, systemd, dracut-core
+Depends: ${python3:Depends}, ${misc:Depends}, binutils, dracut-core
 Description: standard embedded initrd
  Standard embedded initrd implementation to be used with Ubuntu Core
  systems. Currently targetting creating BLS Type2 like binaries.
