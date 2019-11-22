@@ -118,4 +118,4 @@ override_dh_auto_clean:
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a
 
 override_dh_auto_install:
-	
+	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedir=vendor/systemd
