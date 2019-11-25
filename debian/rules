@@ -36,6 +36,7 @@ override_dh_auto_configure:
       -Dresolve=false \
       -Defi=true \
       -Dtpm=true \
+      -Dtpm-pcrindex=12 \
       -Denvironment-d=false \
       -Dbinfmt=false \
       -Dcoredump=false \
