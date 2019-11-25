@@ -2,9 +2,86 @@
 import argparse
 import os
 import subprocess
+import tempfile
+
+
+def create_initrd(args):
+    if args.root:
+        args.skeleton = os.path.join(args.root, args.skeleton)
+        args.kerneldir = os.path.join(args.root, args.kerneldir)
+        args.firmwaredir = os.path.join(args.root, args.firmwaredir)
+        args.output = os.path.join(args.root, args.output)
+    with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
+        main = os.path.join(d, "main")
+        kvdir = os.path.join(args.kerneldir, args.kernelver)
+        subprocess.check_call(["cp", "-ar", "%s/main" % args.skeleton, d])
+        subprocess.check_call(
+            [
+                "/usr/lib/dracut/dracut-install",
+                "-D",
+                main,
+                "--kerneldir",
+                kvdir,
+                "--firmwaredirs",
+                args.firmwaredir,
+                "--module",
+                "--optional",
+                "squashfs",
+                "ahci",
+                "libahci",
+                "usb-storage",
+                "nls_iso8859-1",
+                "virtio_scsi",
+                "sdhci",
+                "sdhci-pci",
+                "sdhci-acpi",
+                "mmc-block",
+                "hv_storvsc",
+                "hv_vmbus",
+                "nvme",
+                "usbhid",
+                "hid-generic",
+                "algif_skcipher",
+                "dm_crypt",
+                "dm_mod",
+                "aes",
+                "cbc",
+                "chainiv",
+                "cryptomgr",
+                "krng",
+                "sha256",
+                "xts",
+                "aesni",
+            ]
+        )
+        subprocess.check_call(
+            [
+                "/usr/lib/dracut/dracut-install",
+                "-D",
+                main,
+                "--all",
+                os.path.join(kvdir, "modules.order"),
+                os.path.join(kvdir, "modules.builtin"),
+                os.path.join(kvdir, "modules.builtin.bin"),
+                os.path.join("/usr/lib/modules", args.kernelver),
+            ]
+        )
+        subprocess.check_call(["depmod", "-a", "-b", main, args.kernelver])
+        with open(args.output, "w") as output:
+            subprocess.check_call(
+                "find . | cpio --create --quiet --format='newc' --owner=0:0 | lz4 -9 -l",
+                cwd=main,
+                shell=True,
+                stdout=output,
+            )
 
 
 def create_efi(args):
+    if args.root:
+        args.stub = os.path.join(args.root, args.stub)
+        args.kernel = os.path.join(args.root, args.kernel)
+        args.initrd = os.path.join(args.root, args.initrd)
+        args.output = os.path.join(args.root, args.output)
     subprocess.check_call(
         [
             "objcopy",
@@ -26,28 +103,43 @@ def create_efi(args):
 def main():
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
-    createefi_parser = subparser.add_parser("create-efi")
-    createefi_parser.add_argument("--root", help="path to root", default="")
-    createefi_parser.add_argument(
+    efi_parser = subparser.add_parser("create-efi")
+    efi_parser.add_argument("--root", help="path to root", default="")
+    efi_parser.add_argument(
         "--stub",
         help="path to stub",
         default="/usr/lib/ubuntu-core-initramfs/efi/linuxx64.efi.stub",
     )
-    createefi_parser.add_argument(
-        "--kernel", help="path to kernel", default="/boot/vmlinuz"
-    )
-    createefi_parser.add_argument(
+    efi_parser.add_argument("--kernel", help="path to kernel", default="/boot/vmlinuz")
+    efi_parser.add_argument(
         "--initrd", help="path to initramfs", default="/boot/initrd.img"
     )
-    createefi_parser.add_argument(
+    efi_parser.add_argument(
         "--output", help="path to output", default="/boot/kernel.efi"
     )
+
+    initrd_parser = subparser.add_parser("create-initrd")
+    initrd_parser.add_argument("--root", help="path to root", default="")
+    initrd_parser.add_argument(
+        "--skeleton", help="path to skeleton", default="/usr/lib/ubuntu-core-initramfs/"
+    )
+    initrd_parser.add_argument(
+        "--kerneldir", help="path to kernel modules", default="/lib/modules"
+    )
+    initrd_parser.add_argument("--kernelver", help="kernel version")
+    initrd_parser.add_argument(
+        "--firmwaredir", help="path to kernel firmware", default="/lib/firmware"
+    )
+    initrd_parser.add_argument(
+        "--output", help="path to output", default="/boot/ubuntu-core-initramfs.img"
+    )
+    initrd_parser.set_defaults(
+        kernelver=subprocess.check_output(
+            ["uname", "-r"], universal_newlines=True
+        ).strip()
+    )
+
     args = parser.parse_args()
-    if args.root:
-        args.stub = os.path.join(args.root, args.stub)
-        args.kernel = os.path.join(args.root, args.kernel)
-        args.initrd = os.path.join(args.root, args.initrd)
-        args.output = os.path.join(args.root, args.output)
     globals()[args.subcmd.replace("-", "_")](args)
 
 
