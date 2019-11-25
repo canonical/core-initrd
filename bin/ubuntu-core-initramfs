@@ -67,6 +67,10 @@ def create_efi(args):
         args.kernel = os.path.join(args.root, args.kernel)
         args.initrd = os.path.join(args.root, args.initrd)
         args.output = os.path.join(args.root, args.output)
+    if args.kernelver:
+        args.kernel = "-".join([args.kernel, args.kernever])
+        args.initrd = "-".join([args.initrd, args.kernever])
+        args.output = "-".join([args.output, args.kernever])
     subprocess.check_call(
         [
             "objcopy",
@@ -86,9 +90,12 @@ def create_efi(args):
 
 
 def main():
+    kernelver = subprocess.check_output(
+        ["uname", "-r"], universal_newlines=True
+    ).strip()
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
-    efi_parser = subparser.add_parser("create-efi")
+    efi_parser = subparser.add_parser("create-efi", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     efi_parser.add_argument("--root", help="path to root", default="")
     efi_parser.add_argument(
         "--stub",
@@ -97,21 +104,23 @@ def main():
     )
     efi_parser.add_argument("--kernel", help="path to kernel", default="/boot/vmlinuz")
     efi_parser.add_argument(
-        "--initrd", help="path to initramfs", default="/boot/initrd.img"
+        "--kernelver", help="kernel version suffix", default=kernelver
+    )
+    efi_parser.add_argument(
+        "--initrd", help="path to initramfs", default="/boot/ubuntu-core-initramfs.img"
     )
     efi_parser.add_argument(
         "--output", help="path to output", default="/boot/kernel.efi"
     )
-
-    initrd_parser = subparser.add_parser("create-initrd")
+    initrd_parser = subparser.add_parser("create-initrd", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     initrd_parser.add_argument("--root", help="path to root", default="")
     initrd_parser.add_argument(
-        "--skeleton", help="path to skeleton", default="/usr/lib/ubuntu-core-initramfs/"
+        "--skeleton", help="path to skeleton", default="/usr/lib/ubuntu-core-initramfs"
     )
     initrd_parser.add_argument(
         "--kerneldir", help="path to kernel modules", default="/lib/modules"
     )
-    initrd_parser.add_argument("--kernelver", help="kernel version")
+    initrd_parser.add_argument("--kernelver", help="kernel version", default=kernelver)
     initrd_parser.add_argument(
         "--firmwaredir", help="path to kernel firmware", default="/lib/firmware"
     )

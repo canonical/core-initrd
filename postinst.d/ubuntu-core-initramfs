@@ -12,4 +12,8 @@ if [ -n "$DEB_MAINT_PARAMS" ]; then
 	fi
 fi
 
-ubuntu-core-initramfs create-efi
+ubuntu-core-initramfs create-initrd --kernelver $version
+
+if [ `dpkg --print-architecture` = 'amd64' ]; then
+    ubuntu-core-initramfs create-efi --kernelver $version
+fi
