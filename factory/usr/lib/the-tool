@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+cmd=systemd-mount --no-block --no-pager --no-ask-password --collect
+# Mount seed (| data)
+$cmd /dev/disk/by-label/ubuntu-seed /run/mnt/ubuntu-seed
+# Mound base
+$cmd /run/mnt/ubuntu-seed/snaps/core20_*.snap /sysroot
+# Mount writable (| data, again)
+$cmd --type=tmpfs tmpfs /sysroot/writable
+# Mount kernel
+$cmd /run/mnt/ubuntu-seed/snaps/pc-kernel_*.snap /run/mnt/kernel
+# Bind-mount things (Possibly core should be handling this!, or like code in a kernel snap)
+$cmd --type=none --options=bind /run/mnt/kernel/modules /sysroot/usr/lib/modules
+$cmd --type=none --options=bind /run/mnt/kernel/firmware /sysroot/usr/lib/firmware
+# chroot/call handle-writable paths
+$cmd --type=none --options=bind /run /sysroot/run
+/sysroot/usr/lib/core/handle-writable-paths /sysroot
+$cmd --umount /sysroot/run
