@@ -1,3 +1,6 @@
+[Unit]
+ConditionKernelCommandLine=snapd_recovery_mode
+
 [Service]
 Type=oneshot
 RemainAfterExt=true
