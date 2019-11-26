@@ -1,4 +1,4 @@
 bin/ubuntu-core-initramfs usr/bin
 postinst.d etc/kernel/
 debian/tmp/* usr/lib/ubuntu-core-initramfs/main
-debian/tmp/usr/lib/systemd/boot/efi/linuxx64.efi.stub usr/lib/ubuntu-core-initramfs/efi/
+debian/tmp/usr/lib/systemd/boot/efi/linux*.efi.stub usr/lib/ubuntu-core-initramfs/efi/
