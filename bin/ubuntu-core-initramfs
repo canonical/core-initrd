@@ -11,6 +11,8 @@ def create_initrd(args):
         args.kerneldir = os.path.join(args.root, args.kerneldir)
         args.firmwaredir = os.path.join(args.root, args.firmwaredir)
         args.output = os.path.join(args.root, args.output)
+    if args.kernelver:
+        args.output = "-".join([args.output, args.kernelver])
     with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
         main = os.path.join(d, "main")
         kvdir = os.path.join(args.kerneldir, args.kernelver)
@@ -68,9 +70,9 @@ def create_efi(args):
         args.initrd = os.path.join(args.root, args.initrd)
         args.output = os.path.join(args.root, args.output)
     if args.kernelver:
-        args.kernel = "-".join([args.kernel, args.kernever])
-        args.initrd = "-".join([args.initrd, args.kernever])
-        args.output = "-".join([args.output, args.kernever])
+        args.kernel = "-".join([args.kernel, args.kernelver])
+        args.initrd = "-".join([args.initrd, args.kernelver])
+        args.output = "-".join([args.output, args.kernelver])
     subprocess.check_call(
         [
             "objcopy",
