@@ -3,9 +3,10 @@ import argparse
 import os
 import subprocess
 import tempfile
+import platform
 
 
-def create_initrd(args):
+def create_initrd(parser, args):
     if args.root:
         args.skeleton = os.path.join(args.root, args.skeleton)
         args.kerneldir = os.path.join(args.root, args.kerneldir)
@@ -63,7 +64,9 @@ def create_initrd(args):
             )
 
 
-def create_efi(args):
+def create_efi(parser, args):
+    if not args.stub:
+        parser.error("--stub is required, and one was not automatically detected")
     if args.root:
         args.stub = os.path.join(args.root, args.stub)
         args.kernel = os.path.join(args.root, args.kernel)
@@ -95,17 +98,18 @@ def main():
     kernelver = subprocess.check_output(
         ["uname", "-r"], universal_newlines=True
     ).strip()
+    suffix = {"x86_64": "x64", "aarch64": "aa64"}.get(platform.machine())
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
     efi_parser = subparser.add_parser(
         "create-efi", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    efi_parser.add_argument("--root", help="path to root", default="")
-    efi_parser.add_argument(
-        "--stub",
-        help="path to stub",
-        default="/usr/lib/ubuntu-core-initramfs/efi/linuxx64.efi.stub",
-    )
+    efi_parser.add_argument("--root", help="path to root")
+    efi_parser.add_argument("--stub", help="path to stub")
+    if suffix:
+        efi_parser.set_defaults(
+            stub="/usr/lib/ubuntu-core-initramfs/efi/linux%s.efi.stub" % suffix
+        )
     efi_parser.add_argument("--kernel", help="path to kernel", default="/boot/vmlinuz")
     efi_parser.add_argument(
         "--kernelver", help="kernel version suffix", default=kernelver
@@ -140,7 +144,7 @@ def main():
     )
 
     args = parser.parse_args()
-    globals()[args.subcmd.replace("-", "_")](args)
+    globals()[args.subcmd.replace("-", "_")](parser, args)
 
 
 if __name__ == "__main__":
