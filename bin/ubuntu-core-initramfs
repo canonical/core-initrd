@@ -97,7 +97,9 @@ def main():
     ).strip()
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
-    efi_parser = subparser.add_parser("create-efi", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    efi_parser = subparser.add_parser(
+        "create-efi", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     efi_parser.add_argument("--root", help="path to root", default="")
     efi_parser.add_argument(
         "--stub",
@@ -114,7 +116,9 @@ def main():
     efi_parser.add_argument(
         "--output", help="path to output", default="/boot/kernel.efi"
     )
-    initrd_parser = subparser.add_parser("create-initrd", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    initrd_parser = subparser.add_parser(
+        "create-initrd", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     initrd_parser.add_argument("--root", help="path to root", default="")
     initrd_parser.add_argument(
         "--skeleton", help="path to skeleton", default="/usr/lib/ubuntu-core-initramfs"
