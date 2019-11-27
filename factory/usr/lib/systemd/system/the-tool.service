@@ -1,7 +1,10 @@
 [Unit]
 ConditionKernelCommandLine=snapd_recovery_mode
+After=run-mnt-ubuntu\x2dseed.mount
+Requires=run-mnt-ubuntu\x2dseed.mount
+DefaultDependencies=no
 
 [Service]
 Type=oneshot
-RemainAfterExt=true
+RemainAfterExit=true
 ExecStart=/usr/lib/the-tool

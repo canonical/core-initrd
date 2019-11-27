@@ -1,0 +1,9 @@
+[Unit]
+After=sysroot.mount
+After=run-mnt-kernel.mount
+Requires=sysroot.mount
+Requires=run-mnt-kernel.mount
+[Mount]
+What=/run/mnt/kernel/modules
+Type=none
+Options=bind
