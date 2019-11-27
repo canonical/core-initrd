@@ -4,6 +4,8 @@ import os
 import subprocess
 import tempfile
 import platform
+import glob
+import shutil
 
 
 def create_initrd(parser, args):
@@ -55,7 +57,10 @@ def create_initrd(parser, args):
             ]
         )
         subprocess.check_call(["depmod", "-a", "-b", main, args.kernelver])
-        with open(args.output, "w") as output:
+        with open(args.output, "wb") as output:
+            for early in glob.iglob("%s/early/*.cpio" % args.skeleton):
+                with open(early, "rb") as f:
+                    shutil.copyfileobj(f, output)
             subprocess.check_call(
                 "find . | cpio --create --quiet --format='newc' --owner=0:0 | lz4 -9 -l",
                 cwd=main,

@@ -51,11 +51,13 @@ Build-Depends: debhelper-compat (= 12), dh-python, python3:any, dracut-core, qui
                tzdata <!nocheck>,
                libcap2-bin <!nocheck>,
                iproute2 <!nocheck>,
+               amd64-microcode [amd64],
+               intel-microcode [amd64],
 Standards-Version: 4.4.1
 Homepage: https://launchpad.net/ubuntu-core-initramfs
 
 Package: ubuntu-core-initramfs
-Architecture: amd64 arm64
+Architecture: amd64 arm64 armhf
 Depends: ${python3:Depends}, ${misc:Depends}, binutils, dracut-core
 Description: standard embedded initrd
  Standard embedded initrd implementation to be used with Ubuntu Core
