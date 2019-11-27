@@ -1,0 +1,12 @@
+[Unit]
+Before=local-fs.target
+Requires=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
+After=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
+Before=the-tool.service
+Wants=the-tool.service
+
+[Mount]
+Where=/run/mnt/ubuntu-seed
+What=/dev/disk/by-label/ubuntu-seed
+Type=vfat
+Options=ro,umask=0077

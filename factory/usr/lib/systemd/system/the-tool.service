@@ -1,7 +1,5 @@
 [Unit]
 ConditionKernelCommandLine=snapd_recovery_mode
-After=run-mnt-ubuntu\x2dseed.mount
-Requires=run-mnt-ubuntu\x2dseed.mount
 DefaultDependencies=no
 
 [Service]
