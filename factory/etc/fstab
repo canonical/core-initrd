@@ -1,0 +1,2 @@
+LABEL=ubuntu-seed /run/mnt/ubuntu-seed vfat ro,umask=0077 0 1
+
