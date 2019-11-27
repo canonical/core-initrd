@@ -183,7 +183,7 @@ override_dh_auto_install:
 	done
 
 	set -e; \
-	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount"; do \
+	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod"; do \
 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
 	done
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
