@@ -1,4 +1,5 @@
 build
 install-tmp
 ubuntu-core-initramfs.img
-
+factory/usr/bin/snap-bootstrap
+debian/files

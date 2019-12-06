@@ -11,3 +11,5 @@ Type=oneshot
 RemainAfterExit=true
 ExecStart=/usr/bin/mount -o rbind /run /sysroot/run
 ExecStart=/usr/bin/chroot /sysroot /usr/lib/core/handle-writable-paths /
+ExecStart=/usr/lib/the-modeenv
+
