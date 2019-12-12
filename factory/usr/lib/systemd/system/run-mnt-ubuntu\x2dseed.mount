@@ -9,4 +9,4 @@ Wants=the-tool.service
 Where=/run/mnt/ubuntu-seed
 What=/dev/disk/by-label/ubuntu-seed
 Type=vfat
-Options=ro,umask=0077
+Options=rw,umask=0077
