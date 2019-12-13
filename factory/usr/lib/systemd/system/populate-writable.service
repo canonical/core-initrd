@@ -9,7 +9,8 @@ After=the-tool.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/bin/mount -o rbind /run /sysroot/run
-ExecStart=/usr/bin/chroot /sysroot /usr/lib/core/handle-writable-paths /
+ExecStart=/usr/bin/mount --type tmpfs tmpfs /sysroot/run
+ExecStart=/usr/bin/touch /sysroot/run/fstab
+ExecStart=/usr/bin/chroot /sysroot /usr/lib/core/handle-writable-paths / /etc/system-image/writable-paths /run/fstab
 ExecStart=/usr/lib/the-modeenv
 

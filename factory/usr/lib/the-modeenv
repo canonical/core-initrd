@@ -4,3 +4,7 @@ sed 's/.*snapd_recovery_mode=\([a-z]*\).*/mode=\1/' /proc/cmdline >> $o
 sed 's/.*snapd_recovery_system=\([0-9]*\).*/recovery_system=\1/' /proc/cmdline >> $o
 mount -o bind /run/mnt/ubuntu-seed/EFI/ubuntu/ /sysroot/boot/grub
 cp /run/mnt/ubuntu-seed/systems/*/grubenv /sysroot/boot/grub/
+umount /sysroot/run/fstab
+cp /sysroot/run/image.fstab /run/
+mount -o bind /run/image.fstab /sysroot/etc/fstab
+umount -lf /sysroot/run
