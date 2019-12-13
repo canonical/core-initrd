@@ -1,5 +1,5 @@
 [Unit]
-Before=basic.target
+Before=local-fs.target
 Requires=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
 After=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
 After=systemd-modules-load.service
