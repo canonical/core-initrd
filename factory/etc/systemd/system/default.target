@@ -1,1 +1,1 @@
-/lib/systemd/system/initrd.target
+/lib/systemd/system/basic.target
