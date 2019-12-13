@@ -1,16 +1,13 @@
 #!/bin/sh
 set -e
-cmd="systemd-mount --no-block --no-pager --no-ask-password"
-# Mount base
-#$cmd /run/mnt/ubuntu-seed/snaps/core20_*.snap /run/mnt/base
-# XXX: core20 can be under /snaps and /systems/$label/snaps
-# XXX2: snap-bootstrap initramfs-mounts should handle this correctly
-core20=$(find /run/mnt/ubuntu-seed/ -name "core20_*.snap")
-$cmd $core20 /sysroot -pBefore=initrd-cleanup.target -pLazyUnmount=true
+
+# Run snap-bootstrap
+cmd="systemd-mount --no-block --no-pager --no-ask-password "
+/usr/lib/snapd/snap-bootstrap initramfs-mounts | sed "s/^/$cmd/" > /root/bootstrap.cmds
+. /root/bootstrap.cmds
+
 cp /run/systemd/transient/*.mount /etc/systemd/system
-# Mount writable
-#$cmd --type=tmpfs tmpfs /run/mnt/ubuntu-data
-$cmd --type=tmpfs tmpfs /sysroot/writable -pAfter=sysroot.mount -pRequires=sysroot.mount -pWants=populate-writable.service -pBefore=initrd-cleanup.target
+
 mkdir -p /run/systemd/system/initrd-fs.target.d
 cat >/run/systemd/system/initrd-fs.target.d/core.conf <<EOF
 [Unit]
@@ -19,12 +16,5 @@ After=populate-writable.service
 EOF
 cp -r /run/systemd/system/initrd-fs.target.d /run/systemd/system/initrd.target.d
 cp -r /run/systemd/system/initrd-fs.target.d /run/systemd/system/initrd-switch-root.target.d
-cp /run/systemd/transient/*.mount /etc/systemd/system
-# Mount kernel
-$cmd /run/mnt/ubuntu-seed/snaps/pc-kernel_*.snap /run/mnt/kernel -pBefore=initrd-cleanup.target -pLazyUnmount=true
-cp /run/systemd/transient/*.mount /etc/systemd/system
-# Bind-mount things (Possibly core should be handling this!, or like code in a kernel snap)
-# chroot/call handle-writable paths
-#$cmd --type=none --options=bind /run /sysroot/run
-#/sysroot/usr/lib/core/handle-writable-paths /sysroot
-#$cmd --umount /sysroot/run
+
+

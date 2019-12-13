@@ -1,10 +1,15 @@
 [Unit]
-After=sysroot.mount
-Requires=sysroot.mount
-After=sysroot-writable.mount
-Requires=sysroot-writable.mount
 Before=initrd-cleanup.target
 After=the-tool.service
+After=run-mnt-ubuntu\x2ddata.mount
+After=run-mnt-base.mount
+After=sysroot.mount
+After=sysroot-writable.mount
+Requires=the-tool.service
+Requires=run-mnt-ubuntu\x2ddata.mount
+Requires=run-mnt-base.mount
+Requires=sysroot.mount
+Requires=sysroot-writable.mount
 
 [Service]
 Type=oneshot

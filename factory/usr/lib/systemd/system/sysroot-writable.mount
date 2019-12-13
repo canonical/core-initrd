@@ -1,0 +1,13 @@
+[Unit]
+Before=initrd-cleanup.target
+After=run-mnt-ubuntu\x2ddata.mount
+After=run-mnt-base.mount
+After=sysroot.mount
+Requires=run-mnt-ubuntu\x2ddata.mount
+Requires=run-mnt-base.mount
+Requires=sysroot.mount
+Wants=populate-writable.service
+[Mount]
+What=/run/mnt/ubuntu-data
+Type=none
+Options=bind

@@ -1,0 +1,6 @@
+[Unit]
+Before=initrd-cleanup.target
+[Mount]
+What=/run/mnt/base
+Type=none
+Options=bind
