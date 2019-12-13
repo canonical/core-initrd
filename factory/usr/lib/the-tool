@@ -3,7 +3,10 @@ set -e
 cmd="systemd-mount --no-block --no-pager --no-ask-password"
 # Mount base
 #$cmd /run/mnt/ubuntu-seed/snaps/core20_*.snap /run/mnt/base
-$cmd /run/mnt/ubuntu-seed/snaps/core20_*.snap /sysroot -pBefore=initrd-cleanup.target -pLazyUnmount=true
+# XXX: core20 can be under /snaps and /systems/$label/snaps
+# XXX2: snap-bootstrap initramfs-mounts should handle this correctly
+core20=$(find /run/mnt/ubuntu-seed/ -name "core20_*.snap")
+$cmd $core20 /sysroot -pBefore=initrd-cleanup.target -pLazyUnmount=true
 cp /run/systemd/transient/*.mount /etc/systemd/system
 # Mount writable
 #$cmd --type=tmpfs tmpfs /run/mnt/ubuntu-data
