@@ -2,6 +2,8 @@
 Before=basic.target
 Requires=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
 After=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
+After=systemd-modules-load.service
+Wants=systemd-moudles-load.service
 Before=the-tool.service
 Wants=the-tool.service
 
