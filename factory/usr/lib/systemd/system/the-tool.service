@@ -1,6 +1,7 @@
 [Unit]
 ConditionKernelCommandLine=snapd_recovery_mode
 DefaultDependencies=no
+After=systemd-tmpfiles-setup.service
 
 [Service]
 Type=oneshot
