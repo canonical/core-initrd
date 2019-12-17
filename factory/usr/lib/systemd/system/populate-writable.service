@@ -1,11 +1,15 @@
 [Unit]
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
 Before=initrd-cleanup.target
-After=the-tool.service
+After=the-tool@data.service
+After=run-mnt-ubuntu\x2dseed.mount
 After=run-mnt-ubuntu\x2ddata.mount
 After=run-mnt-base.mount
 After=sysroot.mount
 After=sysroot-writable.mount
-Requires=the-tool.service
+Requires=the-tool@data.service
+Requires=run-mnt-ubuntu\x2dseed.mount
 Requires=run-mnt-ubuntu\x2ddata.mount
 Requires=run-mnt-base.mount
 Requires=sysroot.mount

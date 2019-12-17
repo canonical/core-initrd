@@ -3,9 +3,11 @@ Before=initrd-cleanup.target
 After=run-mnt-ubuntu\x2ddata.mount
 After=run-mnt-base.mount
 After=sysroot.mount
+After=the-tool@data.service
 Requires=run-mnt-ubuntu\x2ddata.mount
 Requires=run-mnt-base.mount
 Requires=sysroot.mount
+Requires=the-tool@data.service
 Wants=populate-writable.service
 [Mount]
 What=/run/mnt/ubuntu-data

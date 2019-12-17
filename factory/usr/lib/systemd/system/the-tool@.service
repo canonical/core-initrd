@@ -1,8 +1,10 @@
 [Unit]
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
 DefaultDependencies=no
 After=systemd-tmpfiles-setup.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/lib/the-tool
+ExecStart=/usr/lib/the-tool %i

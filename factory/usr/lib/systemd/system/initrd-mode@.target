@@ -1,0 +1,6 @@
+[Unit]
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+Wants=basic.target
+After=basic.target
+Wants=the-tool@%i.service

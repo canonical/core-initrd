@@ -2,9 +2,11 @@
 set -e
 
 # Run snap-bootstrap
-cmd="systemd-mount --no-block --no-pager --no-ask-password "
-/usr/lib/snapd/snap-bootstrap initramfs-mounts | sed "s/^/$cmd/" > /root/bootstrap.cmds
-. /root/bootstrap.cmds
+cmd="systemd-mount --no-pager --no-ask-password "
+/usr/lib/snapd/snap-bootstrap initramfs-mounts | sed "s/^/$cmd/" > /root/bootstrap.cmds.$1
+set +e
+. /root/bootstrap.cmds.$1
+set -e
 
 cp /run/systemd/transient/*.mount /etc/systemd/system
 

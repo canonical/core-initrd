@@ -4,9 +4,7 @@ Requires=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dboot.service
 After=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dboot.service
 After=systemd-modules-load.service
 Wants=systemd-moudles-load.service
-Before=the-tool.service
-Wants=the-tool.service
-ConditionKernelCommandLine=snapd_recovery_mode=run
+Before=the-tool@run.service
 
 [Mount]
 Where=/run/mnt/ubuntu-boot
