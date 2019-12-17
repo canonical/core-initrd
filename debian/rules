@@ -186,7 +186,11 @@ override_dh_auto_install:
 	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod /usr/bin/unsquashfs /usr/lib/snapd/snap-bootstrap"; do \
 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
 	done
+ifeq ($(DEB_HOST_ARCH),amd64)
 	-cp $(CURDIR)/factory/usr/lib/snapd/snap-bootstrap $(CURDIR)/debian/tmp/usr/lib/snapd/snap-bootstrap
+else
+	-rm $(CURDIR)/factory/usr/lib/snapd/snap-bootstrap
+endif
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
@@ -213,3 +217,5 @@ override_dh_makeshlibs:
 	dh_makeshlibs -Xusr/lib/ubuntu-core-initramfs/main
 override_dh_shlibdeps:
 	dh_shlibdeps -Xusr/lib/ubuntu-core-initramfs/main
+override_dh_strip:
+	dh_strip -Xsnap-bootstrap
