@@ -1,8 +1,13 @@
 #!/bin/sh
 umount /sysroot/run/fstab
 cp /sysroot/run/image.fstab /run/
+if grep -q snapd_recovery_mode=run /proc/cmdline; then
+    echo 'LABEL=ubuntu-boot /run/mnt/ubuntu-boot auto defaults 0 0' >> /run/image.fstab
+    echo '/run/mnt/ubuntu-boot/EFI/ubuntu /boot/grub none bind 0 0' >> /run/image.fstab
+fi
 mount -o bind /run/image.fstab /sysroot/etc/fstab
 umount -lf /sysroot/run
 
 # write modeenv
 /usr/lib/snapd/snap-bootstrap initramfs-mounts
+
