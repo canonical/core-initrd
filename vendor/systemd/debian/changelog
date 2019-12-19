@@ -1,3 +1,27 @@
+systemd (244.1-0ubuntu1) focal; urgency=medium
+
+  * New upstream version 244.1
+    - network: set ipv6 mtu after link-up or device mtu change (LP: #1671951)
+    - & other changes
+  * Refresh patches.
+    - Dropped changes:
+      * d/p/lp-1853852-*: fix issues with muliplexed shmat calls (LP: #1853852)
+        Files:
+        - debian/patches/lp-1853852-seccomp-fix-multiplexed-system-calls.patch
+        - debian/patches/lp-1853852-seccomp-mmap-test-results-depend-on-kernel-libseccom.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=382271662c60c339b0a404c7a1772fe5670516ef
+  * pstore: Don't start systemd-pstore.service in containers.
+    Usually it is not useful and can also fail making
+    boot-and-services autopkgtest fail. (LP: #1856729)
+    File: debian/patches/pstore-Don-t-start-systemd-pstore.service-in-containers.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=28b5a03769cbed9d3170ebac38508b867530a2d6
+  * Revert: network: do not drop foreign config if interface is in initialized state.
+    This fixes FTBFS with the other network-related reverts.
+    File: debian/patches/Revert-network-do-not-drop-foreign-config-if-interface-is.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=22a9fa3bb03ba2a629926af39ea7df81fe33c9b8
+
+ -- Balint Reczey <rbalint@ubuntu.com>  Wed, 18 Dec 2019 21:40:27 +0100
+
 systemd (244-3ubuntu1) focal; urgency=medium
 
   [ Balint Reczey ]

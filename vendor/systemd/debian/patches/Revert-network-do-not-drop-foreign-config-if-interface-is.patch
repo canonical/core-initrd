@@ -1,0 +1,32 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Tue, 17 Dec 2019 21:33:44 +0100
+Subject: Revert "network: do not drop foreign config if interface is in
+ initialized state"
+
+This reverts commit e8b53300c4160f55447c2f6b02fcde05b47faedc.
+---
+ src/network/networkd-link.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 5499d5f..4195b98 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -2949,7 +2949,7 @@ int link_reconfigure(Link *link, bool force) {
+         if (r < 0)
+                 return r;
+ 
+-        if (!IN_SET(link->state, LINK_STATE_UNMANAGED, LINK_STATE_PENDING, LINK_STATE_INITIALIZED)) {
++        if (!IN_SET(link->state, LINK_STATE_UNMANAGED, LINK_STATE_PENDING)) {
+                 log_link_debug(link, "State is %s, dropping config", link_state_to_string(link->state));
+                 r = link_drop_foreign_config(link);
+                 if (r < 0)
+@@ -3442,7 +3442,7 @@ static int link_carrier_lost(Link *link) {
+         if (r < 0)
+                 return r;
+ 
+-        if (!IN_SET(link->state, LINK_STATE_UNMANAGED, LINK_STATE_PENDING, LINK_STATE_INITIALIZED)) {
++        if (!IN_SET(link->state, LINK_STATE_UNMANAGED, LINK_STATE_PENDING)) {
+                 log_link_debug(link, "State is %s, dropping config", link_state_to_string(link->state));
+                 r = link_drop_foreign_config(link);
+                 if (r < 0)
