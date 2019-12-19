@@ -1,0 +1,29 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Wed, 18 Dec 2019 20:37:22 +0000
+Subject: shutdown: do not detach autoclear loopback devices
+
+Autoclear devices will be cleared by the kernel itself, thus one shouldn't try
+detaching them. Moreover, detaching circular loopback devices can be unsafe
+leading to shutdown looping forever.
+
+(cherry picked from https://github.com/systemd/systemd/pull/14386)
+(cherry picked from commit feb8a325dae80b7ee319604204348989de9e2ae2)
+---
+ src/shutdown/umount.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/shutdown/umount.c b/src/shutdown/umount.c
+index 88dc03e..6767dbe 100644
+--- a/src/shutdown/umount.c
++++ b/src/shutdown/umount.c
+@@ -245,6 +245,10 @@ static int loopback_list_get(MountPoint **head) {
+         if (r < 0)
+                 return r;
+ 
++        r = sd_device_enumerator_add_match_sysattr(e, "loop/autoclear", "0", true);
++        if (r < 0)
++                return r;
++
+         FOREACH_DEVICE(e, d) {
+                 _cleanup_free_ char *p = NULL;
+                 const char *dn;
