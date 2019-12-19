@@ -1,0 +1,22 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Wed, 2 Aug 2017 00:40:28 +0100
+Subject: units: set ConditionVirtualization=!private-users on journald audit
+ socket
+
+As it fails to start in an unpriviledged container.
+---
+ units/systemd-journald-audit.socket | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/units/systemd-journald-audit.socket b/units/systemd-journald-audit.socket
+index cb8b774..6649934 100644
+--- a/units/systemd-journald-audit.socket
++++ b/units/systemd-journald-audit.socket
+@@ -14,6 +14,7 @@ DefaultDependencies=no
+ Before=sockets.target
+ ConditionSecurity=audit
+ ConditionCapability=CAP_AUDIT_READ
++ConditionVirtualization=!private-users
+ 
+ [Socket]
+ Service=systemd-journald.service

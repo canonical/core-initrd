@@ -1,0 +1,23 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Wed, 1 Aug 2018 20:09:39 +0100
+Subject: test-sleep: skip test_fiemap upon inapproriate ioctl for device.
+
+On v4.4 kernels, on top of btrfs ephemeral lxd v3.0 containers generate this
+other error code, instead of not supported. Skip the test for both error codes.
+---
+ src/test/test-sleep.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/test/test-sleep.c b/src/test/test-sleep.c
+index 014b1aa..753e3d2 100644
+--- a/src/test/test-sleep.c
++++ b/src/test/test-sleep.c
+@@ -53,7 +53,7 @@ static int test_fiemap(const char *path) {
+         if (fd < 0)
+                 return log_error_errno(errno, "failed to open %s: %m", path);
+         r = read_fiemap(fd, &fiemap);
+-        if (r == -EOPNOTSUPP)
++        if (IN_SET(r, -EOPNOTSUPP, -ENOTTY))
+                 exit(log_tests_skipped("Not supported"));
+         if (r < 0)
+                 return log_error_errno(r, "Unable to read extent map for '%s': %m", path);

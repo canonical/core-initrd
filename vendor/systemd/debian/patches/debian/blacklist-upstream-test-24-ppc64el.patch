@@ -1,0 +1,17 @@
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Wed, 6 Nov 2019 09:14:54 -0500
+Subject: blacklist-upstream-test-24-ppc64el
+
+Bug: https://github.com/systemd/systemd/issues/11612
+---
+ test/TEST-24-UNIT-TESTS/blacklist-upstream-ci-ppc64el | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 test/TEST-24-UNIT-TESTS/blacklist-upstream-ci-ppc64el
+
+diff --git a/test/TEST-24-UNIT-TESTS/blacklist-upstream-ci-ppc64el b/test/TEST-24-UNIT-TESTS/blacklist-upstream-ci-ppc64el
+new file mode 100644
+index 0000000..52877fc
+--- /dev/null
++++ b/test/TEST-24-UNIT-TESTS/blacklist-upstream-ci-ppc64el
+@@ -0,0 +1 @@
++# unknown reason for failing, tracked in https://github.com/systemd/systemd/issues/11612
