@@ -1,4 +1,5 @@
 pstore-Don-t-start-systemd-pstore.service-in-containers.patch
+shutdown-do-not-detach-autoclear-loopback-devices.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
