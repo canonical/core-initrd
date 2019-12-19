@@ -1,7 +1,0 @@
-[NetDev]
-Name=vtitun96
-Kind=vti
-
-[Tunnel]
-Local=any
-Remote=any
