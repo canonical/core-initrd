@@ -1,0 +1,24 @@
+%{
+#if __GNUC__ >= 7
+_Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
+#endif
+#include <stddef.h>
+#include "conf-parser.h"
+#include "networkd-conf.h"
+#include "networkd-manager.h"
+%}
+struct ConfigPerfItem;
+%null_strings
+%language=ANSI-C
+%define slot-name section_and_lvalue
+%define hash-function-name networkd_gperf_hash
+%define lookup-function-name networkd_gperf_lookup
+%readonly-tables
+%omit-struct-type
+%struct-type
+%includes
+%%
+Network.SpeedMeter,            config_parse_bool,                      0,          offsetof(Manager, use_speed_meter)
+Network.SpeedMeterIntervalSec, config_parse_sec,                       0,          offsetof(Manager, speed_meter_interval_usec)
+DHCP.DUIDType,                 config_parse_duid_type,                 0,          offsetof(Manager, duid)
+DHCP.DUIDRawData,              config_parse_duid_rawdata,              0,          offsetof(Manager, duid)
