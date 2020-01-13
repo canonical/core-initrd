@@ -1,4 +1,5 @@
 bin/ubuntu-core-initramfs usr/bin
 postinst.d etc/kernel/
+snakeoil/* usr/lib/ubuntu-core-initramfs/snakeoil/
 debian/tmp/* usr/lib/ubuntu-core-initramfs/main
 debian/tmp/usr/lib/systemd/boot/efi/linux*.efi.stub usr/lib/ubuntu-core-initramfs/efi/

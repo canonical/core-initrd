@@ -76,6 +76,8 @@ def create_efi(parser, args):
         args.stub = os.path.join(args.root, args.stub)
         args.kernel = os.path.join(args.root, args.kernel)
         args.initrd = os.path.join(args.root, args.initrd)
+        args.key = os.path.join(args.root, args.key)
+        args.cert = os.path.join(args.root, args.cert)
         args.output = os.path.join(args.root, args.output)
     if args.kernelver:
         args.kernel = "-".join([args.kernel, args.kernelver])
@@ -96,6 +98,19 @@ def create_efi(parser, args):
             args.output,
         ]
     )
+    if not args.unsigned:
+        subprocess.check_call(
+            [
+                "sbsign",
+                "--key",
+                args.key,
+                "--cert",
+                args.cert,
+                "--output",
+                args.output,
+                args.output,
+            ]
+        )
     os.chmod(args.output, 0o600)
 
 
@@ -121,6 +136,19 @@ def main():
     )
     efi_parser.add_argument(
         "--initrd", help="path to initramfs", default="/boot/ubuntu-core-initramfs.img"
+    )
+    efi_parser.add_argument(
+        "--unsigned", help="do not sign efi app", default=False, action="store_true"
+    )
+    efi_parser.add_argument(
+        "--key",
+        help="signing key",
+        default="/usr/lib/ubuntu-core-initramfs/snakeoil/PkKek-1-snakeoil.key",
+    )
+    efi_parser.add_argument(
+        "--cert",
+        help="certificate",
+        default="/usr/lib/ubuntu-core-initramfs/snakeoil/PkKek-1-snakeoil.pem",
     )
     efi_parser.add_argument(
         "--output", help="path to output", default="/boot/kernel.efi"
