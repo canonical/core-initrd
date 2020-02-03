@@ -183,7 +183,7 @@ override_dh_auto_install:
 	done
 
 	set -e; \
-	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod /usr/bin/unsquashfs /usr/lib/snapd/snap-bootstrap"; do \
+	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /usr/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1 /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod /usr/bin/unsquashfs /usr/lib/snapd/snap-bootstrap"; do \
 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
 	done
 ifeq ($(DEB_HOST_ARCH),amd64)
