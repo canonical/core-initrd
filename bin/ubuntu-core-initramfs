@@ -44,18 +44,16 @@ def create_initrd(parser, args):
                         ]
                     )
 
-        subprocess.check_call(
-            [
-                "/usr/lib/dracut/dracut-install",
-                "-D",
-                main,
-                "--all",
-                os.path.join(kvdir, "modules.order"),
-                os.path.join(kvdir, "modules.builtin"),
-                os.path.join(kvdir, "modules.builtin.bin"),
-                os.path.join("/usr/lib/modules", args.kernelver),
-            ]
-        )
+        for modulesf in ["modules.order", "modules.builtin", "modules.builtin.bin"]:
+            subprocess.check_call(
+                [
+                    "/usr/lib/dracut/dracut-install",
+                    "-D",
+                    main,
+                    os.path.join(kvdir, modulesf),
+                    os.path.join("usr/lib/modules", args.kernelver, modulesf),
+                ]
+            )
         subprocess.check_call(["depmod", "-a", "-b", main, args.kernelver])
         with open(args.output, "wb") as output:
             for early in glob.iglob("%s/early/*.cpio" % args.skeleton):
