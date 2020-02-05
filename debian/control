@@ -54,6 +54,7 @@ Build-Depends: debhelper-compat (= 12), dh-python, python3:any, dracut-core, qui
                amd64-microcode [amd64],
                intel-microcode [amd64],
                kmod,
+               libgcc-s1,
                squashfs-tools,
                snapd,
 Standards-Version: 4.4.1
