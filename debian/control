@@ -6,6 +6,7 @@ Build-Depends: debhelper-compat (= 12), dh-python, python3:any, dracut-core, qui
                util-linux,
                e2fsprogs,
                dosfstools,
+               dmsetup,
                mount,
                pkg-config,
                xsltproc,
