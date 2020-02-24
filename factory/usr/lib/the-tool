@@ -8,8 +8,6 @@ set +e
 . /root/bootstrap.cmds.$1
 set -e
 
-cp /run/systemd/transient/*.mount /etc/systemd/system
-
 mkdir -p /run/systemd/system/initrd-fs.target.d
 cat >/run/systemd/system/initrd-fs.target.d/core.conf <<EOF
 [Unit]
@@ -18,5 +16,4 @@ After=populate-writable.service
 EOF
 cp -r /run/systemd/system/initrd-fs.target.d /run/systemd/system/initrd.target.d
 cp -r /run/systemd/system/initrd-fs.target.d /run/systemd/system/initrd-switch-root.target.d
-
 
