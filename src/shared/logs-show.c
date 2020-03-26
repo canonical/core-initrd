@@ -17,8 +17,10 @@
 #include "format-util.h"
 #include "hashmap.h"
 #include "hostname-util.h"
+#include "id128-util.h"
 #include "io-util.h"
 #include "journal-internal.h"
+#include "journal-util.h"
 #include "json.h"
 #include "log.h"
 #include "logs-show.h"
@@ -26,8 +28,8 @@
 #include "namespace-util.h"
 #include "output-mode.h"
 #include "parse-util.h"
-#include "process-util.h"
 #include "pretty-print.h"
+#include "process-util.h"
 #include "sparse-endian.h"
 #include "stdio-util.h"
 #include "string-table.h"
@@ -654,7 +656,7 @@ static int output_export(
                 const size_t highlight[2]) {
 
         sd_id128_t boot_id;
-        char sid[33];
+        char sid[SD_ID128_STRING_MAX];
         int r;
         usec_t realtime, monotonic;
         _cleanup_free_ char *cursor = NULL;
@@ -1179,71 +1181,74 @@ int show_journal(
         }
 
         for (;;) {
-                for (;;) {
-                        usec_t usec;
+                usec_t usec;
 
-                        if (need_seek) {
-                                r = sd_journal_next(j);
-                                if (r < 0)
-                                        return log_error_errno(r, "Failed to iterate through journal: %m");
-                        }
-
-                        if (r == 0)
-                                break;
-
-                        need_seek = true;
-
-                        if (not_before > 0) {
-                                r = sd_journal_get_monotonic_usec(j, &usec, NULL);
-
-                                /* -ESTALE is returned if the
-                                   timestamp is not from this boot */
-                                if (r == -ESTALE)
-                                        continue;
-                                else if (r < 0)
-                                        return log_error_errno(r, "Failed to get journal time: %m");
-
-                                if (usec < not_before)
-                                        continue;
-                        }
-
-                        line++;
-                        maybe_print_begin_newline(f, &flags);
-
-                        r = show_journal_entry(f, j, mode, n_columns, flags, NULL, NULL, ellipsized);
+                if (need_seek) {
+                        r = sd_journal_next(j);
                         if (r < 0)
-                                return r;
+                                return log_error_errno(r, "Failed to iterate through journal: %m");
                 }
 
-                if (warn_cutoff && line < how_many && not_before > 0) {
-                        sd_id128_t boot_id;
-                        usec_t cutoff = 0;
-
-                        /* Check whether the cutoff line is too early */
-
-                        r = sd_id128_get_boot(&boot_id);
-                        if (r < 0)
-                                return log_error_errno(r, "Failed to get boot id: %m");
-
-                        r = sd_journal_get_cutoff_monotonic_usec(j, boot_id, &cutoff, NULL);
-                        if (r < 0)
-                                return log_error_errno(r, "Failed to get journal cutoff time: %m");
-
-                        if (r > 0 && not_before < cutoff) {
-                                maybe_print_begin_newline(f, &flags);
-                                fprintf(f, "Warning: Journal has been rotated since unit was started. Log output is incomplete or unavailable.\n");
-                        }
-
-                        warn_cutoff = false;
-                }
-
-                if (!(flags & OUTPUT_FOLLOW))
+                if (r == 0)
                         break;
 
-                r = sd_journal_wait(j, USEC_INFINITY);
-                if (r < 0)
-                        return log_error_errno(r, "Failed to wait for journal: %m");
+                need_seek = true;
 
+                if (not_before > 0) {
+                        r = sd_journal_get_monotonic_usec(j, &usec, NULL);
+
+                        /* -ESTALE is returned if the timestamp is not from this boot */
+                        if (r == -ESTALE)
+                                continue;
+                        else if (r < 0)
+                                return log_error_errno(r, "Failed to get journal time: %m");
+
+                        if (usec < not_before)
+                                continue;
+                }
+
+                line++;
+                maybe_print_begin_newline(f, &flags);
+
+                r = show_journal_entry(f, j, mode, n_columns, flags, NULL, NULL, ellipsized);
+                if (r < 0)
+                        return r;
+        }
+
+        if (warn_cutoff && line < how_many && not_before > 0) {
+                sd_id128_t boot_id;
+                usec_t cutoff = 0;
+
+                /* Check whether the cutoff line is too early */
+
+                r = sd_id128_get_boot(&boot_id);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to get boot id: %m");
+
+                r = sd_journal_get_cutoff_monotonic_usec(j, boot_id, &cutoff, NULL);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to get journal cutoff time: %m");
+
+                if (r > 0 && not_before < cutoff) {
+                        maybe_print_begin_newline(f, &flags);
+
+                        /* If we logged *something* and no permission error happened, than we can reliably
+                         * emit the warning about rotation. If we didn't log anything and access errors
+                         * happened, emit hint about permissions. Otherwise, give a generic message, since we
+                         * can't diagnose the issue. */
+
+                        bool noaccess = journal_access_blocked(j);
+
+                        if (line == 0 && noaccess)
+                                fprintf(f, "Warning: some journal files were not opened due to insufficient permissions.");
+                        else if (!noaccess)
+                                fprintf(f, "Warning: journal has been rotated since unit was started, output may be incomplete.\n");
+                        else
+                                fprintf(f, "Warning: journal has been rotated since unit was started and some journal "
+                                        "files were not opened due to insufficient permissions, output may be incomplete.\n");
+                }
+
+                warn_cutoff = false;
         }
 
         return 0;
@@ -1353,8 +1358,8 @@ int add_matches_for_user_unit(sd_journal *j, const char *unit, uid_t uid) {
 static int get_boot_id_for_machine(const char *machine, sd_id128_t *boot_id) {
         _cleanup_close_pair_ int pair[2] = { -1, -1 };
         _cleanup_close_ int pidnsfd = -1, mntnsfd = -1, rootfd = -1;
+        char buf[ID128_UUID_STRING_MAX];
         pid_t pid, child;
-        char buf[37];
         ssize_t k;
         int r;
 
@@ -1452,6 +1457,7 @@ int add_match_this_boot(sd_journal *j, const char *machine) {
 int show_journal_by_unit(
                 FILE *f,
                 const char *unit,
+                const char *log_namespace,
                 OutputMode mode,
                 unsigned n_columns,
                 usec_t not_before,
@@ -1472,7 +1478,7 @@ int show_journal_by_unit(
         if (how_many <= 0)
                 return 0;
 
-        r = sd_journal_open(&j, journal_open_flags);
+        r = sd_journal_open_namespace(&j, log_namespace, journal_open_flags | SD_JOURNAL_INCLUDE_DEFAULT_NAMESPACE);
         if (r < 0)
                 return log_error_errno(r, "Failed to open journal: %m");
 

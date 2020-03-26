@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <fcntl.h>
-#include <stdio.h>
 #include <getopt.h>
+#include <linux/loop.h>
+#include <stdio.h>
 
 #include "architecture.h"
 #include "dissect-image.h"
@@ -10,6 +11,7 @@
 #include "log.h"
 #include "loop-util.h"
 #include "main-func.h"
+#include "parse-util.h"
 #include "string-util.h"
 #include "strv.h"
 #include "user-util.h"
@@ -21,7 +23,7 @@ static enum {
 } arg_action = ACTION_DISSECT;
 static const char *arg_image = NULL;
 static const char *arg_path = NULL;
-static DissectImageFlags arg_flags = DISSECT_IMAGE_REQUIRE_ROOT|DISSECT_IMAGE_DISCARD_ON_LOOP;
+static DissectImageFlags arg_flags = DISSECT_IMAGE_REQUIRE_ROOT|DISSECT_IMAGE_DISCARD_ON_LOOP|DISSECT_IMAGE_RELAX_VAR_CHECK|DISSECT_IMAGE_FSCK;
 static void *arg_root_hash = NULL;
 static size_t arg_root_hash_size = 0;
 
@@ -35,6 +37,7 @@ static void help(void) {
                "     --version         Show package version\n"
                "  -m --mount           Mount the image to the specified directory\n"
                "  -r --read-only       Mount read-only\n"
+               "     --fsck=BOOL       Run fsck before mounting\n"
                "     --discard=MODE    Choose 'discard' mode (disabled, loop, all, crypto)\n"
                "     --root-hash=HASH  Specify root hash for verity\n",
                program_invocation_short_name,
@@ -47,6 +50,7 @@ static int parse_argv(int argc, char *argv[]) {
                 ARG_VERSION = 0x100,
                 ARG_DISCARD,
                 ARG_ROOT_HASH,
+                ARG_FSCK,
         };
 
         static const struct option options[] = {
@@ -56,6 +60,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "read-only", no_argument,       NULL, 'r'           },
                 { "discard",   required_argument, NULL, ARG_DISCARD   },
                 { "root-hash", required_argument, NULL, ARG_ROOT_HASH },
+                { "fsck",      required_argument, NULL, ARG_FSCK      },
                 {}
         };
 
@@ -122,6 +127,14 @@ static int parse_argv(int argc, char *argv[]) {
                         break;
                 }
 
+                case ARG_FSCK:
+                        r = parse_boolean(optarg);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to parse --fsck= parameter: %s", optarg);
+
+                        SET_FLAG(arg_flags, DISSECT_IMAGE_FSCK, r);
+                        break;
+
                 case '?':
                         return -EINVAL;
 
@@ -171,7 +184,7 @@ static int run(int argc, char *argv[]) {
         if (r <= 0)
                 return r;
 
-        r = loop_device_make_by_path(arg_image, (arg_flags & DISSECT_IMAGE_READ_ONLY) ? O_RDONLY : O_RDWR, &d);
+        r = loop_device_make_by_path(arg_image, (arg_flags & DISSECT_IMAGE_READ_ONLY) ? O_RDONLY : O_RDWR, LO_FLAGS_PARTSCAN, &d);
         if (r < 0)
                 return log_error_errno(r, "Failed to set up loopback device: %m");
 
@@ -260,6 +273,8 @@ static int run(int argc, char *argv[]) {
                         return r;
 
                 r = dissected_image_mount(m, arg_path, UID_INVALID, arg_flags);
+                if (r == -EUCLEAN)
+                        return log_error_errno(r, "File system check on image failed: %m");
                 if (r < 0)
                         return log_error_errno(r, "Failed to mount image: %m");
 

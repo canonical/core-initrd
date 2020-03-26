@@ -1,0 +1,23 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Tue, 11 Feb 2020 20:48:31 +0100
+Subject: network: Set link state to LINK_STATE_PENDING instead of to
+ LINK_STATE_INITIALIZED
+
+Changes introducing LINK_STATE_INITIALIZED broke netplan.io's ethernets autopkgtest.
+---
+ src/network/networkd-link-bus.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/network/networkd-link-bus.c b/src/network/networkd-link-bus.c
+index efb72b6..2f7b8f2 100644
+--- a/src/network/networkd-link-bus.c
++++ b/src/network/networkd-link-bus.c
+@@ -621,7 +621,7 @@ int bus_link_method_reconfigure(sd_bus_message *message, void *userdata, sd_bus_
+         if (r < 0)
+                 return r;
+ 
+-        link_set_state(l, LINK_STATE_INITIALIZED);
++        link_set_state(l, LINK_STATE_PENDING);
+         r = link_save(l);
+         if (r < 0)
+                 return r;

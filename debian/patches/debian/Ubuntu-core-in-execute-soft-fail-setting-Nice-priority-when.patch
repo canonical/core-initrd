@@ -7,33 +7,23 @@ In unpriviledged containers Nice priority setting may not be permitted. Thus
 log and ignore permission failure to set Nice priority in such
 environments. This is similar to how OOMScoreAdjust is treated.
 ---
- src/core/execute.c | 16 +++++++++++-----
- 1 file changed, 11 insertions(+), 5 deletions(-)
+ src/core/execute.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/src/core/execute.c b/src/core/execute.c
-index abc164f..85309ad 100644
+index 587b77a..c124f97 100644
 --- a/src/core/execute.c
 +++ b/src/core/execute.c
-@@ -3228,11 +3228,17 @@ static int exec_child(
-                 }
-         }
+@@ -3298,7 +3298,11 @@ static int exec_child(
  
--        if (context->nice_set)
--                if (setpriority(PRIO_PROCESS, 0, context->nice) < 0) {
--                        *exit_status = EXIT_NICE;
--                        return log_unit_error_errno(unit, errno, "Failed to set up process scheduling priority (nice level): %m");
--                }
-+        if (context->nice_set) {
-+                r = setpriority(PRIO_PROCESS, 0, context->nice);
-+                if (r == -EPERM || r == -EACCES) {
+         if (context->nice_set) {
+                 r = setpriority_closest(context->nice);
+-                if (r < 0)
++                if (ERRNO_IS_PRIVILEGE(r)) {
 +                        log_open();
 +                        log_unit_debug_errno(unit, r, "Failed to adjust Nice setting, assuming containerized execution, ignoring: %m");
 +                        log_close();
-+                } else if (r < 0) {
-+                         *exit_status = EXIT_NICE;
-+                         return log_unit_error_errno(unit, errno, "Failed to set up process scheduling priority (nice level): %m");
-+                 }
-+        }
++                } else if (r < 0)
+                         return log_unit_error_errno(unit, r, "Failed to set up process scheduling priority (nice level): %m");
+         }
  
-         if (context->cpu_sched_set) {
-                 struct sched_param param = {

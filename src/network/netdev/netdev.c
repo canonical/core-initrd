@@ -12,6 +12,7 @@
 #include "fd-util.h"
 #include "fou-tunnel.h"
 #include "geneve.h"
+#include "ifb.h"
 #include "ipvlan.h"
 #include "l2tp-tunnel.h"
 #include "list.h"
@@ -73,6 +74,7 @@ const NetDevVTable * const netdev_vtable[_NETDEV_KIND_MAX] = {
         [NETDEV_KIND_MACSEC] = &macsec_vtable,
         [NETDEV_KIND_NLMON] = &nlmon_vtable,
         [NETDEV_KIND_XFRM] = &xfrm_vtable,
+        [NETDEV_KIND_IFB] = &ifb_vtable,
 };
 
 static const char* const netdev_kind_table[_NETDEV_KIND_MAX] = {
@@ -109,6 +111,7 @@ static const char* const netdev_kind_table[_NETDEV_KIND_MAX] = {
         [NETDEV_KIND_MACSEC] = "macsec",
         [NETDEV_KIND_NLMON] = "nlmon",
         [NETDEV_KIND_XFRM] = "xfrm",
+        [NETDEV_KIND_IFB] = "ifb",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(netdev_kind, NetDevKind);
@@ -682,9 +685,9 @@ int netdev_load_one(Manager *manager, const char *filename) {
 
         dropin_dirname = strjoina(basename(filename), ".d");
         r = config_parse_many(filename, NETWORK_DIRS, dropin_dirname,
-                              "Match\0NetDev\0",
+                              NETDEV_COMMON_SECTIONS NETDEV_OTHER_SECTIONS,
                               config_item_perf_lookup, network_netdev_gperf_lookup,
-                              CONFIG_PARSE_WARN|CONFIG_PARSE_RELAXED, netdev_raw);
+                              CONFIG_PARSE_WARN, netdev_raw);
         if (r < 0)
                 return r;
 

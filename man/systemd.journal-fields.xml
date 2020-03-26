@@ -92,6 +92,16 @@
       </varlistentry>
 
       <varlistentry>
+        <term><varname>INVOCATION_ID=</varname></term>
+        <term><varname>USER_INVOCATION_ID=</varname></term>
+        <listitem>
+          <para>A randomized, unique 128-bit ID identifying each runtime cycle of the unit. This is different from
+          <varname>_SYSTEMD_INVOCATION_ID</varname> in that it is only used for messages coming from systemd code
+          (e.g. logs from the system/user manager or from forked processes performing systemd-related setup).</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><varname>SYSLOG_FACILITY=</varname></term>
         <term><varname>SYSLOG_IDENTIFIER=</varname></term>
         <term><varname>SYSLOG_PID=</varname></term>
@@ -346,6 +356,15 @@
           <option>eof</option> (if this was the last log record of a stream and the stream ended without a final
           newline character). Note that this record is not generated when a normal newline character was used for
           marking the log line end.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>_NAMESPACE=</varname></term>
+
+        <listitem><para>If this file was written by a <command>systemd-journald</command> instance managing a
+        journal namespace that is not the default, this field contains the namespace identifier. See
+        <citerefentry><refentrytitle>systemd-journald.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+        for details about journal namespaces.</para>
         </listitem>
       </varlistentry>
     </variablelist>

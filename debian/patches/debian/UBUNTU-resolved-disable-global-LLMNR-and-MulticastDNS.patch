@@ -9,7 +9,7 @@ LP: #1739672
  2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/src/resolve/resolved-manager.c b/src/resolve/resolved-manager.c
-index 95f698a..2755756 100644
+index 4f72077..f7508b6 100644
 --- a/src/resolve/resolved-manager.c
 +++ b/src/resolve/resolved-manager.c
 @@ -581,8 +581,8 @@ int manager_new(Manager **ret) {

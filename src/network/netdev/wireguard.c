@@ -902,7 +902,7 @@ static int wireguard_read_key_file(const char *filename, uint8_t dest[static WG_
 
         (void) warn_file_is_world_accessible(filename, NULL, NULL, 0);
 
-        r = read_full_file_full(filename, READ_FULL_FILE_SECURE | READ_FULL_FILE_UNBASE64, &key, &key_len);
+        r = read_full_file_full(AT_FDCWD, filename, READ_FULL_FILE_SECURE | READ_FULL_FILE_UNBASE64, &key, &key_len);
         if (r < 0)
                 return r;
 
@@ -967,7 +967,7 @@ static int wireguard_verify(NetDev *netdev, const char *filename) {
 
 const NetDevVTable wireguard_vtable = {
         .object_size = sizeof(Wireguard),
-        .sections = "Match\0NetDev\0WireGuard\0WireGuardPeer\0",
+        .sections = NETDEV_COMMON_SECTIONS "WireGuard\0WireGuardPeer\0",
         .post_create = netdev_wireguard_post_create,
         .init = wireguard_init,
         .done = wireguard_done,

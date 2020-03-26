@@ -28,6 +28,7 @@ You can disable these stable names and go back to the kernel-provided ones
 
   - Disable the default *.link rules with
     "ln -s /dev/null /etc/systemd/network/99-default.link"
+    "ln -s /dev/null /etc/systemd/network/73-usb-net-by-mac.link"
     and rebuild the initrd with "update-initramfs -u".
 
 See this page for more information:

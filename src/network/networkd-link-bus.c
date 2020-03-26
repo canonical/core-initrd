@@ -6,6 +6,7 @@
 
 #include "alloc-util.h"
 #include "bus-common-errors.h"
+#include "bus-polkit.h"
 #include "bus-util.h"
 #include "dns-domain.h"
 #include "networkd-link-bus.h"
@@ -620,6 +621,12 @@ int bus_link_method_reconfigure(sd_bus_message *message, void *userdata, sd_bus_
         if (r < 0)
                 return r;
 
+        link_set_state(l, LINK_STATE_INITIALIZED);
+        r = link_save(l);
+        if (r < 0)
+                return r;
+        link_clean(l);
+
         return sd_bus_reply_method_return(message, NULL);
 }
 
@@ -715,8 +722,8 @@ int link_object_find(sd_bus *bus, const char *path, const char *interface, void 
         if (r <= 0)
                 return 0;
 
-        r = parse_ifindex(identifier, &ifindex);
-        if (r < 0)
+        ifindex = parse_ifindex(identifier);
+        if (ifindex < 0)
                 return 0;
 
         r = link_get(m, ifindex, &link);

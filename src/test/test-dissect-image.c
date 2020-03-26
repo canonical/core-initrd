@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <fcntl.h>
+#include <linux/loop.h>
 #include <stdio.h>
 
 #include "dissect-image.h"
@@ -21,13 +22,13 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
         }
 
-        r = loop_device_make_by_path(argv[1], O_RDONLY, &d);
+        r = loop_device_make_by_path(argv[1], O_RDONLY, LO_FLAGS_PARTSCAN, &d);
         if (r < 0) {
                 log_error_errno(r, "Failed to set up loopback device: %m");
                 return EXIT_FAILURE;
         }
 
-        r = dissect_image(d->fd, NULL, 0, DISSECT_IMAGE_REQUIRE_ROOT, &m);
+        r = dissect_image(d->fd, NULL, 0, DISSECT_IMAGE_REQUIRE_ROOT|DISSECT_IMAGE_RELAX_VAR_CHECK, &m);
         if (r < 0) {
                 log_error_errno(r, "Failed to dissect image: %m");
                 return EXIT_FAILURE;

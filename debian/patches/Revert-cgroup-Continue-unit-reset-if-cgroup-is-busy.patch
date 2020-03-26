@@ -10,10 +10,10 @@ This reverts commit 0219b3524f414e23589e63c6de6a759811ef8474.
  1 file changed, 4 insertions(+), 7 deletions(-)
 
 diff --git a/src/core/cgroup.c b/src/core/cgroup.c
-index abcd057..979d28c 100644
+index ddd3f40..c5ef41f 100644
 --- a/src/core/cgroup.c
 +++ b/src/core/cgroup.c
-@@ -2437,13 +2437,10 @@ void unit_prune_cgroup(Unit *u) {
+@@ -2447,13 +2447,10 @@ void unit_prune_cgroup(Unit *u) {
          is_root_slice = unit_has_name(u, SPECIAL_ROOT_SLICE);
  
          r = cg_trim_everywhere(u->manager->cgroup_supported, u->cgroup_path, !is_root_slice);

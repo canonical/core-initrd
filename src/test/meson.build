@@ -325,6 +325,10 @@ tests += [
          [],
          []],
 
+        [['src/test/test-sysctl-util.c'],
+         [],
+         []],
+
         [['src/test/test-user-util.c'],
          [],
          []],
@@ -359,6 +363,10 @@ tests += [
          [libcap]],
 
         [['src/test/test-socket-util.c'],
+         [],
+         []],
+
+        [['src/test/test-socket-netlink.c'],
          [],
          []],
 

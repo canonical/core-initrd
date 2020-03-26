@@ -68,6 +68,12 @@ CONFFLAGS = \
 	-Dfirstboot=false \
 	-Dxkbcommon=false \
 	-Dwheel-group=false \
+	-Drepart=false \
+	-Duserdb=false \
+	-Dhomed=false \
+	-Dfdisk=false \
+	-Dpwquality=false \
+	-Dp11kit=false \
 	-Dntp-servers="$(DEFAULT_NTP_SERVERS)" \
 	-Ddns-servers='' \
 	-Dlink-udev-shared=false \
@@ -87,7 +93,7 @@ CONFFLAGS_deb = \
 	-Dselinux=true \
 	-Dhwdb=true \
 	-Dsysusers=true \
-	-Dinstall-tests=true \
+	-Dinstall-tests=$(if $(filter noinsttest,$(DEB_BUILD_PROFILES)),false,true) \
 	-Defi=true \
 	-Dman=true \
 	-Dnss-myhostname=true \
@@ -211,6 +217,7 @@ endif
 	rm -rf debian/install/ debian/shlibs.local
 	# remove Python byte code files
 	rm -rf tools/__pycache__/
+	rm -rf tools/chromiumos/__pycache__/
 	rm -f po/systemd.pot
 
 override_dh_install:

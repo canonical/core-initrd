@@ -1059,13 +1059,33 @@ int unit_add_exec_dependencies(Unit *u, ExecContext *c) {
             !IN_SET(c->std_error,
                     EXEC_OUTPUT_JOURNAL, EXEC_OUTPUT_JOURNAL_AND_CONSOLE,
                     EXEC_OUTPUT_KMSG, EXEC_OUTPUT_KMSG_AND_CONSOLE,
-                    EXEC_OUTPUT_SYSLOG, EXEC_OUTPUT_SYSLOG_AND_CONSOLE))
+                    EXEC_OUTPUT_SYSLOG, EXEC_OUTPUT_SYSLOG_AND_CONSOLE) &&
+            !c->log_namespace)
                 return 0;
 
-        /* If syslog or kernel logging is requested, make sure our own
-         * logging daemon is run first. */
+        /* If syslog or kernel logging is requested (or log namespacing is), make sure our own logging daemon
+         * is run first. */
 
-        r = unit_add_dependency_by_name(u, UNIT_AFTER, SPECIAL_JOURNALD_SOCKET, true, UNIT_DEPENDENCY_FILE);
+        if (c->log_namespace) {
+                _cleanup_free_ char *socket_unit = NULL, *varlink_socket_unit = NULL;
+
+                r = unit_name_build_from_type("systemd-journald", c->log_namespace, UNIT_SOCKET, &socket_unit);
+                if (r < 0)
+                        return r;
+
+                r = unit_add_two_dependencies_by_name(u, UNIT_AFTER, UNIT_REQUIRES, socket_unit, true, UNIT_DEPENDENCY_FILE);
+                if (r < 0)
+                        return r;
+
+                r = unit_name_build_from_type("systemd-journald-varlink", c->log_namespace, UNIT_SOCKET, &varlink_socket_unit);
+                if (r < 0)
+                        return r;
+
+                r = unit_add_two_dependencies_by_name(u, UNIT_AFTER, UNIT_REQUIRES, varlink_socket_unit, true, UNIT_DEPENDENCY_FILE);
+                if (r < 0)
+                        return r;
+        } else
+                r = unit_add_dependency_by_name(u, UNIT_AFTER, SPECIAL_JOURNALD_SOCKET, true, UNIT_DEPENDENCY_FILE);
         if (r < 0)
                 return r;
 
@@ -1639,7 +1659,7 @@ static bool unit_test_assert(Unit *u) {
         return u->assert_result;
 }
 
-void unit_status_printf(Unit *u, const char *status, const char *unit_status_msg_format) {
+void unit_status_printf(Unit *u, StatusType status_type, const char *status, const char *unit_status_msg_format) {
         const char *d;
 
         d = unit_status_string(u);
@@ -1647,7 +1667,7 @@ void unit_status_printf(Unit *u, const char *status, const char *unit_status_msg
                 d = strjoina(ANSI_HIGHLIGHT, d, ANSI_NORMAL);
 
         DISABLE_WARNING_FORMAT_NONLITERAL;
-        manager_status_printf(u->manager, STATUS_TYPE_NORMAL, status, unit_status_msg_format, d);
+        manager_status_printf(u->manager, status_type, status, unit_status_msg_format, d);
         REENABLE_WARNING;
 }
 
@@ -2937,11 +2957,27 @@ int unit_add_dependency(
                 return 0;
         }
 
-        if ((d == UNIT_BEFORE && other->type == UNIT_DEVICE) ||
-            (d == UNIT_AFTER && u->type == UNIT_DEVICE)) {
-                log_unit_warning(u, "Dependency Before=%s ignored (.device units cannot be delayed)", other->id);
+        if (d == UNIT_AFTER && UNIT_VTABLE(u)->refuse_after) {
+                log_unit_warning(u, "Requested dependency After=%s ignored (%s units cannot be delayed).", other->id, unit_type_to_string(u->type));
                 return 0;
         }
+
+        if (d == UNIT_BEFORE && UNIT_VTABLE(other)->refuse_after) {
+                log_unit_warning(u, "Requested dependency Before=%s ignored (%s units cannot be delayed).", other->id, unit_type_to_string(other->type));
+                return 0;
+        }
+
+        if (d == UNIT_ON_FAILURE && !UNIT_VTABLE(u)->can_fail) {
+                log_unit_warning(u, "Requested dependency OnFailure=%s ignored (%s units cannot fail).", other->id, unit_type_to_string(u->type));
+                return 0;
+        }
+
+        if (d == UNIT_TRIGGERS && !UNIT_VTABLE(u)->can_trigger)
+                return log_unit_error_errno(u, SYNTHETIC_ERRNO(EINVAL),
+                                            "Requested dependency Triggers=%s refused (%s units cannot trigger other units).", other->id, unit_type_to_string(u->type));
+        if (d == UNIT_TRIGGERED_BY && !UNIT_VTABLE(other)->can_trigger)
+                return log_unit_error_errno(u, SYNTHETIC_ERRNO(EINVAL),
+                                            "Requested dependency TriggeredBy=%s refused (%s units cannot trigger other units).", other->id, unit_type_to_string(other->type));
 
         r = unit_add_dependency_hashmap(u->dependencies + d, other, mask, 0);
         if (r < 0)
@@ -3185,24 +3221,21 @@ int unit_load_related_unit(Unit *u, const char *type, Unit **_found) {
 }
 
 static int signal_name_owner_changed(sd_bus_message *message, void *userdata, sd_bus_error *error) {
-        const char *name, *old_owner, *new_owner;
+        const char *new_owner;
         Unit *u = userdata;
         int r;
 
         assert(message);
         assert(u);
 
-        r = sd_bus_message_read(message, "sss", &name, &old_owner, &new_owner);
+        r = sd_bus_message_read(message, "sss", NULL, NULL, &new_owner);
         if (r < 0) {
                 bus_log_parse_error(r);
                 return 0;
         }
 
-        old_owner = empty_to_null(old_owner);
-        new_owner = empty_to_null(new_owner);
-
         if (UNIT_VTABLE(u)->bus_name_owner_change)
-                UNIT_VTABLE(u)->bus_name_owner_change(u, old_owner, new_owner);
+                UNIT_VTABLE(u)->bus_name_owner_change(u, empty_to_null(new_owner));
 
         return 0;
 }
@@ -3218,42 +3251,35 @@ static int get_name_owner_handler(sd_bus_message *message, void *userdata, sd_bu
 
         u->get_name_owner_slot = sd_bus_slot_unref(u->get_name_owner_slot);
 
-        if (sd_bus_error_is_set(error)) {
-                log_error("Failed to get name owner from bus: %s", error->message);
-                return 0;
-        }
-
         e = sd_bus_message_get_error(message);
-        if (sd_bus_error_has_name(e, "org.freedesktop.DBus.Error.NameHasNoOwner"))
-                return 0;
-
         if (e) {
-                log_error("Unexpected error response from GetNameOwner: %s", e->message);
-                return 0;
-        }
+                if (!sd_bus_error_has_name(e, "org.freedesktop.DBus.Error.NameHasNoOwner"))
+                        log_unit_error(u, "Unexpected error response from GetNameOwner(): %s", e->message);
 
-        r = sd_bus_message_read(message, "s", &new_owner);
-        if (r < 0) {
-                bus_log_parse_error(r);
-                return 0;
-        }
+                new_owner = NULL;
+        } else {
+                r = sd_bus_message_read(message, "s", &new_owner);
+                if (r < 0)
+                        return bus_log_parse_error(r);
 
-        new_owner = empty_to_null(new_owner);
+                assert(!isempty(new_owner));
+        }
 
         if (UNIT_VTABLE(u)->bus_name_owner_change)
-                UNIT_VTABLE(u)->bus_name_owner_change(u, NULL, new_owner);
+                UNIT_VTABLE(u)->bus_name_owner_change(u, new_owner);
 
         return 0;
 }
 
 int unit_install_bus_match(Unit *u, sd_bus *bus, const char *name) {
         const char *match;
+        int r;
 
         assert(u);
         assert(bus);
         assert(name);
 
-        if (u->match_bus_slot)
+        if (u->match_bus_slot || u->get_name_owner_slot)
                 return -EBUSY;
 
         match = strjoina("type='signal',"
@@ -3263,19 +3289,27 @@ int unit_install_bus_match(Unit *u, sd_bus *bus, const char *name) {
                          "member='NameOwnerChanged',"
                          "arg0='", name, "'");
 
-        int r = sd_bus_add_match_async(bus, &u->match_bus_slot, match, signal_name_owner_changed, NULL, u);
+        r = sd_bus_add_match_async(bus, &u->match_bus_slot, match, signal_name_owner_changed, NULL, u);
         if (r < 0)
                 return r;
 
-        return sd_bus_call_method_async(bus,
-                                        &u->get_name_owner_slot,
-                                        "org.freedesktop.DBus",
-                                        "/org/freedesktop/DBus",
-                                        "org.freedesktop.DBus",
-                                        "GetNameOwner",
-                                        get_name_owner_handler,
-                                        u,
-                                        "s", name);
+        r = sd_bus_call_method_async(
+                        bus,
+                        &u->get_name_owner_slot,
+                        "org.freedesktop.DBus",
+                        "/org/freedesktop/DBus",
+                        "org.freedesktop.DBus",
+                        "GetNameOwner",
+                        get_name_owner_handler,
+                        u,
+                        "s", name);
+        if (r < 0) {
+                u->match_bus_slot = sd_bus_slot_unref(u->match_bus_slot);
+                return r;
+        }
+
+        log_unit_debug(u, "Watching D-Bus name '%s'.", name);
+        return 0;
 }
 
 int unit_watch_bus_name(Unit *u, const char *name) {
@@ -3298,6 +3332,7 @@ int unit_watch_bus_name(Unit *u, const char *name) {
         r = hashmap_put(u->manager->watch_bus, name, u);
         if (r < 0) {
                 u->match_bus_slot = sd_bus_slot_unref(u->match_bus_slot);
+                u->get_name_owner_slot = sd_bus_slot_unref(u->get_name_owner_slot);
                 return log_warning_errno(r, "Failed to put bus name to hashmap: %m");
         }
 
@@ -3831,8 +3866,8 @@ int unit_deserialize_skip(FILE *f) {
 }
 
 int unit_add_node_dependency(Unit *u, const char *what, UnitDependency dep, UnitDependencyMask mask) {
-        Unit *device;
         _cleanup_free_ char *e = NULL;
+        Unit *device;
         int r;
 
         assert(u);
@@ -3844,8 +3879,7 @@ int unit_add_node_dependency(Unit *u, const char *what, UnitDependency dep, Unit
         if (!is_device_path(what))
                 return 0;
 
-        /* When device units aren't supported (such as in a
-         * container), don't create dependencies on them. */
+        /* When device units aren't supported (such as in a container), don't create dependencies on them. */
         if (!unit_type_supported(UNIT_DEVICE))
                 return 0;
 
@@ -3863,6 +3897,33 @@ int unit_add_node_dependency(Unit *u, const char *what, UnitDependency dep, Unit
         return unit_add_two_dependencies(u, UNIT_AFTER,
                                          MANAGER_IS_SYSTEM(u->manager) ? dep : UNIT_WANTS,
                                          device, true, mask);
+}
+
+int unit_add_blockdev_dependency(Unit *u, const char *what, UnitDependencyMask mask) {
+        _cleanup_free_ char *escaped = NULL, *target = NULL;
+        int r;
+
+        assert(u);
+
+        if (isempty(what))
+                return 0;
+
+        if (!path_startswith(what, "/dev/"))
+                return 0;
+
+        /* If we don't support devices, then also don't bother with blockdev@.target */
+        if (!unit_type_supported(UNIT_DEVICE))
+                return 0;
+
+        r = unit_name_path_escape(what, &escaped);
+        if (r < 0)
+                return r;
+
+        r = unit_name_build("blockdev", escaped, ".target", &target);
+        if (r < 0)
+                return r;
+
+        return unit_add_dependency_by_name(u, UNIT_AFTER, target, true, mask);
 }
 
 int unit_coldplug(Unit *u) {
@@ -4272,6 +4333,9 @@ int unit_patch_contexts(Unit *u) {
                 if (ec->protect_kernel_logs)
                         ec->capability_bounding_set &= ~(UINT64_C(1) << CAP_SYSLOG);
 
+                if (ec->protect_clock)
+                        ec->capability_bounding_set &= ~((UINT64_C(1) << CAP_SYS_TIME) | (UINT64_C(1) << CAP_WAKE_ALARM));
+
                 if (ec->dynamic_user) {
                         if (!ec->user) {
                                 r = user_from_unit_name(u, &ec->user);
@@ -4322,6 +4386,17 @@ int unit_patch_contexts(Unit *u) {
                                 return r;
 
                         r = cgroup_add_device_allow(cc, "block-blkext", "rwm");
+                        if (r < 0)
+                                return r;
+
+                        /* Make sure "block-loop" can be resolved, i.e. make sure "loop" shows up in /proc/devices */
+                        r = unit_add_two_dependencies_by_name(u, UNIT_AFTER, UNIT_WANTS, "modprobe@loop.service", true, UNIT_DEPENDENCY_FILE);
+                        if (r < 0)
+                                return r;
+                }
+
+                if (ec->protect_clock) {
+                        r = cgroup_add_device_allow(cc, "char-rtc", "r");
                         if (r < 0)
                                 return r;
                 }
@@ -5046,12 +5121,19 @@ static void unit_unref_uid_internal(
         *ref_uid = UID_INVALID;
 }
 
-void unit_unref_uid(Unit *u, bool destroy_now) {
+static void unit_unref_uid(Unit *u, bool destroy_now) {
         unit_unref_uid_internal(u, &u->ref_uid, destroy_now, manager_unref_uid);
 }
 
-void unit_unref_gid(Unit *u, bool destroy_now) {
+static void unit_unref_gid(Unit *u, bool destroy_now) {
         unit_unref_uid_internal(u, (uid_t*) &u->ref_gid, destroy_now, manager_unref_gid);
+}
+
+void unit_unref_uid_gid(Unit *u, bool destroy_now) {
+        assert(u);
+
+        unit_unref_uid(u, destroy_now);
+        unit_unref_gid(u, destroy_now);
 }
 
 static int unit_ref_uid_internal(
@@ -5092,11 +5174,11 @@ static int unit_ref_uid_internal(
         return 1;
 }
 
-int unit_ref_uid(Unit *u, uid_t uid, bool clean_ipc) {
+static int unit_ref_uid(Unit *u, uid_t uid, bool clean_ipc) {
         return unit_ref_uid_internal(u, &u->ref_uid, uid, clean_ipc, manager_ref_uid);
 }
 
-int unit_ref_gid(Unit *u, gid_t gid, bool clean_ipc) {
+static int unit_ref_gid(Unit *u, gid_t gid, bool clean_ipc) {
         return unit_ref_uid_internal(u, (uid_t*) &u->ref_gid, (uid_t) gid, clean_ipc, manager_ref_gid);
 }
 
@@ -5139,13 +5221,6 @@ int unit_ref_uid_gid(Unit *u, uid_t uid, gid_t gid) {
                 return log_unit_warning_errno(u, r, "Couldn't add UID/GID reference to unit, proceeding without: %m");
 
         return r;
-}
-
-void unit_unref_uid_gid(Unit *u, bool destroy_now) {
-        assert(u);
-
-        unit_unref_uid(u, destroy_now);
-        unit_unref_gid(u, destroy_now);
 }
 
 void unit_notify_user_lookup(Unit *u, uid_t uid, gid_t gid) {
@@ -5313,7 +5388,7 @@ static void unit_update_dependency_mask(Unit *u, UnitDependency d, Unit *other, 
         if (di.origin_mask == 0 && di.destination_mask == 0) {
                 /* No bit set anymore, let's drop the whole entry */
                 assert_se(hashmap_remove(u->dependencies[d], other));
-                log_unit_debug(u, "%s lost dependency %s=%s", u->id, unit_dependency_to_string(d), other->id);
+                log_unit_debug(u, "lost dependency %s=%s", unit_dependency_to_string(d), other->id);
         } else
                 /* Mask was reduced, let's update the entry */
                 assert_se(hashmap_update(u->dependencies[d], other, di.data) == 0);
@@ -5373,8 +5448,32 @@ void unit_remove_dependencies(Unit *u, UnitDependencyMask mask) {
         }
 }
 
+static int unit_get_invocation_path(Unit *u, char **ret) {
+        char *p;
+        int r;
+
+        assert(u);
+        assert(ret);
+
+        if (MANAGER_IS_SYSTEM(u->manager))
+                p = strjoin("/run/systemd/units/invocation:", u->id);
+        else {
+                _cleanup_free_ char *user_path = NULL;
+                r = xdg_user_runtime_dir(&user_path, "/systemd/units/invocation:");
+                if (r < 0)
+                        return r;
+                p = strjoin(user_path, u->id);
+        }
+
+        if (!p)
+                return -ENOMEM;
+
+        *ret = p;
+        return 0;
+}
+
 static int unit_export_invocation_id(Unit *u) {
-        const char *p;
+        _cleanup_free_ char *p = NULL;
         int r;
 
         assert(u);
@@ -5385,7 +5484,10 @@ static int unit_export_invocation_id(Unit *u) {
         if (sd_id128_is_null(u->invocation_id))
                 return 0;
 
-        p = strjoina("/run/systemd/units/invocation:", u->id);
+        r = unit_get_invocation_path(u, &p);
+        if (r < 0)
+                return log_unit_debug_errno(u, r, "Failed to get invocation path: %m");
+
         r = symlink_atomic(u->invocation_id_string, p);
         if (r < 0)
                 return log_unit_debug_errno(u, r, "Failed to create invocation ID symlink %s: %m", p);
@@ -5538,9 +5640,6 @@ void unit_export_state_files(Unit *u) {
         if (!u->id)
                 return;
 
-        if (!MANAGER_IS_SYSTEM(u->manager))
-                return;
-
         if (MANAGER_IS_TEST_RUN(u->manager))
                 return;
 
@@ -5559,6 +5658,9 @@ void unit_export_state_files(Unit *u) {
 
         (void) unit_export_invocation_id(u);
 
+        if (!MANAGER_IS_SYSTEM(u->manager))
+                return;
+
         c = unit_get_exec_context(u);
         if (c) {
                 (void) unit_export_log_level_max(u, c);
@@ -5576,17 +5678,19 @@ void unit_unlink_state_files(Unit *u) {
         if (!u->id)
                 return;
 
-        if (!MANAGER_IS_SYSTEM(u->manager))
-                return;
-
         /* Undoes the effect of unit_export_state() */
 
         if (u->exported_invocation_id) {
-                p = strjoina("/run/systemd/units/invocation:", u->id);
-                (void) unlink(p);
-
-                u->exported_invocation_id = false;
+                _cleanup_free_ char *invocation_path = NULL;
+                int r = unit_get_invocation_path(u, &invocation_path);
+                if (r >= 0) {
+                        (void) unlink(invocation_path);
+                        u->exported_invocation_id = false;
+                }
         }
+
+        if (!MANAGER_IS_SYSTEM(u->manager))
+                return;
 
         if (u->exported_log_level_max) {
                 p = strjoina("/run/systemd/units/log-level-max:", u->id);
@@ -5699,8 +5803,10 @@ bool unit_needs_console(Unit *u) {
         return exec_context_may_touch_console(ec);
 }
 
-const char *unit_label_path(Unit *u) {
+const char *unit_label_path(const Unit *u) {
         const char *p;
+
+        assert(u);
 
         /* Returns the file system path to use for MAC access decisions, i.e. the file to read the SELinux label off
          * when validating access checks. */

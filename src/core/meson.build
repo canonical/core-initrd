@@ -22,8 +22,8 @@ libcore_sources = '''
         bpf-firewall.h
         cgroup.c
         cgroup.h
-        chown-recursive.c
-        chown-recursive.h
+        core-varlink.c
+        core-varlink.h
         dbus-automount.c
         dbus-automount.h
         dbus-cgroup.c
@@ -197,6 +197,8 @@ endforeach
 
 install_data('org.freedesktop.systemd1.conf',
              install_dir : dbuspolicydir)
+install_data('org.freedesktop.systemd1.service',
+             install_dir : dbussystemservicedir)
 
 policy = configure_file(
         input : 'org.freedesktop.systemd1.policy.in',

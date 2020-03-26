@@ -682,3 +682,18 @@ global:
         sd_bus_object_vtable_format;
         sd_event_source_disable_unref;
 } LIBSYSTEMD_241;
+
+LIBSYSTEMD_245 {
+global:
+        sd_bus_enqueue_for_read;
+        sd_bus_message_dump;
+        sd_bus_message_sensitive;
+        sd_event_add_child_pidfd;
+        sd_event_source_get_child_pidfd;
+        sd_event_source_get_child_pidfd_own;
+        sd_event_source_set_child_pidfd_own;
+        sd_event_source_get_child_process_own;
+        sd_event_source_set_child_process_own;
+        sd_event_source_send_child_signal;
+        sd_journal_open_namespace;
+} LIBSYSTEMD_243;

@@ -7,6 +7,8 @@ sources = files('''
         netdev/bridge.h
         netdev/dummy.c
         netdev/dummy.h
+        netdev/ifb.c
+        netdev/ifb.h
         netdev/ipvlan.c
         netdev/ipvlan.h
         netdev/macvlan.c
@@ -105,12 +107,24 @@ sources = files('''
         networkd-util.h
         networkd-wifi.c
         networkd-wifi.h
+        tc/codel.c
+        tc/codel.h
+        tc/fq.c
+        tc/fq.h
+        tc/fq-codel.c
+        tc/fq-codel.h
         tc/netem.c
         tc/netem.h
         tc/qdisc.c
         tc/qdisc.h
+        tc/sfq.c
+        tc/sfq.h
+        tc/tbf.c
+        tc/tbf.h
         tc/tc-util.c
         tc/tc-util.h
+        tc/teql.c
+        tc/teql.h
 '''.split())
 
 systemd_networkd_sources = files('networkd.c')
@@ -134,6 +148,15 @@ network_generator_sources = files('''
 network_include_dir = [includes, include_directories(['.', 'netdev', 'tc'])]
 
 if conf.get('ENABLE_NETWORKD') == 1
+        if get_option('link-networkd-shared')
+                networkd_link_with = [libshared]
+        else
+                networkd_link_with = [libsystemd_static,
+                                      libshared_static,
+                                      libjournal_client,
+                                      libbasic_gcrypt]
+        endif
+
         networkd_gperf_c = custom_target(
                 'networkd-gperf.c',
                 input : 'networkd-gperf.gperf',
@@ -160,7 +183,7 @@ if conf.get('ENABLE_NETWORKD') == 1
                 networkd_network_gperf_c,
                 netdev_gperf_c,
                 include_directories : network_include_dir,
-                link_with : [libshared])
+                link_with : [networkd_link_with])
 
         install_data('org.freedesktop.network1.conf',
                      install_dir : dbuspolicydir)
@@ -186,7 +209,7 @@ if conf.get('ENABLE_NETWORKD') == 1
      [libnetworkd_core,
       libudev_static,
       libsystemd_network,
-      libshared],
+      networkd_link_with],
      [threads],
      [],
      network_include_dir],
@@ -196,7 +219,7 @@ if conf.get('ENABLE_NETWORKD') == 1
      [libnetworkd_core,
       libudev_static,
       libsystemd_network,
-      libshared],
+      networkd_link_with],
      [threads],
      [],
      network_include_dir],
@@ -213,7 +236,7 @@ if conf.get('ENABLE_NETWORKD') == 1
      [libnetworkd_core,
       libudev_static,
       libsystemd_network,
-      libshared],
+      networkd_link_with],
      [threads],
      '', '', [], network_include_dir],
 
@@ -227,17 +250,16 @@ if conf.get('ENABLE_NETWORKD') == 1
       test_tables_h],
      [libnetworkd_core,
       libudev_static,
-      libudev_core,
       libsystemd_network,
-      libshared],
+      networkd_link_with],
      [threads],
      '', '', [],
-     [network_include_dir] + libudev_core_includes],
+     [network_include_dir]],
 
     [['src/network/generator/test-network-generator.c',
       'src/network/generator/network-generator.c',
       'src/network/generator/network-generator.h'],
-     [libshared],
+     [networkd_link_with],
      [], '', '', [], network_include_dir],
   ]
 endif

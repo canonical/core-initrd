@@ -21,15 +21,25 @@ TIMEOUT_SCSI_DEBUG_ADD_HOST = 5
 
 SCSI_DEBUG_DIR = '/sys/bus/pseudo/drivers/scsi_debug'
 
+
+def have_scsi_debug():
+    return os.path.isdir(SCSI_DEBUG_DIR)
+
+
+def load_scsi_debug():
+    return subprocess.call(['modprobe', 'scsi_debug', 'dev_size_mb=32'],
+                           stderr=subprocess.STDOUT) == 0
+
+
+# Some custom Ubuntu kernels do not build the scsi_debug module at all,
+# so skip the test if we can't load the module (LP: #1847816)
+# This doesn't (currently) apply to Debian, as scsi_debug should always
+# be available in Debian kernels
+@unittest.skipIf(not have_scsi_debug() and not load_scsi_debug(), 'Failed to load scsi_debug module')
 class FakeDriveTestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if os.path.isdir(SCSI_DEBUG_DIR):
-            return
-
-        # Consider missing scsi_debug module a test failure
-        subprocess.check_call(['modprobe', 'scsi_debug', 'dev_size_mb=32'])
-        assert os.path.isdir(SCSI_DEBUG_DIR)
+        assert have_scsi_debug()
 
     def setUp(self):
         existing_adapters = set(glob(os.path.join(SCSI_DEBUG_DIR, 'adapter*')))

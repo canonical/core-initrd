@@ -102,7 +102,7 @@ static int neighbor_configure_handler(sd_netlink *rtnl, sd_netlink_message *m, L
         r = sd_netlink_message_get_errno(m);
         if (r < 0 && r != -EEXIST)
                 /* Neighbor may not exist yet. So, do not enter failed state here. */
-                log_link_warning_errno(link, r, "Could not set neighbor, ignoring: %m");
+                log_link_message_warning_errno(link, m, r, "Could not set neighbor, ignoring");
 
         if (link->neighbor_messages == 0) {
                 log_link_debug(link, "Neighbors set");
@@ -126,28 +126,28 @@ int neighbor_configure(Neighbor *neighbor, Link *link, link_netlink_message_hand
         r = sd_rtnl_message_new_neigh(link->manager->rtnl, &req, RTM_NEWNEIGH,
                                           link->ifindex, neighbor->family);
         if (r < 0)
-                return log_error_errno(r, "Could not allocate RTM_NEWNEIGH message: %m");
+                return log_link_error_errno(link, r, "Could not allocate RTM_NEWNEIGH message: %m");
 
         r = sd_rtnl_message_neigh_set_state(req, NUD_PERMANENT);
         if (r < 0)
-                return log_error_errno(r, "Could not set state: %m");
+                return log_link_error_errno(link, r, "Could not set state: %m");
 
         r = sd_netlink_message_set_flags(req, NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE);
         if (r < 0)
-                return log_error_errno(r, "Could not set flags: %m");
+                return log_link_error_errno(link, r, "Could not set flags: %m");
 
         r = sd_netlink_message_append_data(req, NDA_LLADDR, &neighbor->lladdr, neighbor->lladdr_size);
         if (r < 0)
-                return log_error_errno(r, "Could not append NDA_LLADDR attribute: %m");
+                return log_link_error_errno(link, r, "Could not append NDA_LLADDR attribute: %m");
 
         r = netlink_message_append_in_addr_union(req, NDA_DST, neighbor->family, &neighbor->in_addr);
         if (r < 0)
-                return log_error_errno(r, "Could not append NDA_DST attribute: %m");
+                return log_link_error_errno(link, r, "Could not append NDA_DST attribute: %m");
 
         r = netlink_call_async(link->manager->rtnl, NULL, req, callback ?: neighbor_configure_handler,
                                link_netlink_destroy_callback, link);
         if (r < 0)
-                return log_error_errno(r, "Could not send rtnetlink message: %m");
+                return log_link_error_errno(link, r, "Could not send rtnetlink message: %m");
 
         link->neighbor_messages++;
         link_ref(link);
@@ -171,7 +171,7 @@ static int neighbor_remove_handler(sd_netlink *rtnl, sd_netlink_message *m, Link
         r = sd_netlink_message_get_errno(m);
         if (r < 0 && r != -ESRCH)
                 /* Neighbor may not exist because it already got deleted, ignore that. */
-                log_link_warning_errno(link, r, "Could not remove neighbor: %m");
+                log_link_message_warning_errno(link, m, r, "Could not remove neighbor");
 
         return 1;
 }
@@ -189,16 +189,16 @@ int neighbor_remove(Neighbor *neighbor, Link *link, link_netlink_message_handler
         r = sd_rtnl_message_new_neigh(link->manager->rtnl, &req, RTM_DELNEIGH,
                                           link->ifindex, neighbor->family);
         if (r < 0)
-                return log_error_errno(r, "Could not allocate RTM_DELNEIGH message: %m");
+                return log_link_error_errno(link, r, "Could not allocate RTM_DELNEIGH message: %m");
 
         r = netlink_message_append_in_addr_union(req, NDA_DST, neighbor->family, &neighbor->in_addr);
         if (r < 0)
-                return log_error_errno(r, "Could not append NDA_DST attribute: %m");
+                return log_link_error_errno(link, r, "Could not append NDA_DST attribute: %m");
 
         r = netlink_call_async(link->manager->rtnl, NULL, req, callback ?: neighbor_remove_handler,
                                link_netlink_destroy_callback, link);
         if (r < 0)
-                return log_error_errno(r, "Could not send rtnetlink message: %m");
+                return log_link_error_errno(link, r, "Could not send rtnetlink message: %m");
 
         link_ref(link);
 

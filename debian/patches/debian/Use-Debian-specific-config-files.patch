@@ -16,7 +16,7 @@ Read/write /etc/timezone if /etc/localtime does not exist.
  4 files changed, 174 insertions(+), 113 deletions(-)
 
 diff --git a/src/basic/time-util.c b/src/basic/time-util.c
-index bfe2c60..a8df4be 100644
+index 105584e..d7028ac 100644
 --- a/src/basic/time-util.c
 +++ b/src/basic/time-util.c
 @@ -382,7 +382,7 @@ char *format_timestamp_relative(char *buf, size_t l, usec_t t) {
@@ -110,7 +110,7 @@ index 33728b0..e2c4ae7 100644
                  char *s;
  
 diff --git a/src/locale/keymap-util.c b/src/locale/keymap-util.c
-index 519dd0d..628cdc2 100644
+index 30669a9..0518921 100644
 --- a/src/locale/keymap-util.c
 +++ b/src/locale/keymap-util.c
 @@ -92,6 +92,7 @@ void locale_simplify(char *locale[_VARIABLE_LC_MAX]) {
@@ -421,7 +421,7 @@ index 519dd0d..628cdc2 100644
          return r;
  }
 diff --git a/src/timedate/timedated.c b/src/timedate/timedated.c
-index 4ec3b50..5141a90 100644
+index 5e2fb50..0ed4511 100644
 --- a/src/timedate/timedated.c
 +++ b/src/timedate/timedated.c
 @@ -278,6 +278,8 @@ static int context_read_data(Context *c) {

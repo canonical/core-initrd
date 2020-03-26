@@ -1,0 +1,67 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Wed, 22 Jan 2020 16:12:03 +0100
+Subject: Revert "network: if /sys is rw, then udev should be around"
+
+The change broke networking in LXD containers
+
+This reverts commit 96d7083c5499b264ecebd6a30a92e0e8fda14cd5.
+
+LP: #1857123
+---
+ src/network/networkd-link.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 8715ed4..56babfb 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -37,7 +37,6 @@
+ #include "qdisc.h"
+ #include "set.h"
+ #include "socket-util.h"
+-#include "stat-util.h"
+ #include "stdio-util.h"
+ #include "string-table.h"
+ #include "strv.h"
+@@ -45,6 +44,7 @@
+ #include "tmpfile-util.h"
+ #include "udev-util.h"
+ #include "util.h"
++#include "virt.h"
+ #include "vrf.h"
+ 
+ uint32_t link_get_vrf_table(Link *link) {
+@@ -3504,8 +3504,8 @@ int link_add(Manager *m, sd_netlink_message *message, Link **ret) {
+         if (r < 0)
+                 return r;
+ 
+-        if (path_is_read_only_fs("/sys") <= 0) {
+-                /* udev should be around */
++        if (detect_container() <= 0) {
++                /* not in a container, udev will be around */
+                 sprintf(ifindex_str, "n%d", link->ifindex);
+                 r = sd_device_new_from_device_id(&device, ifindex_str);
+                 if (r < 0) {
+@@ -3515,7 +3515,7 @@ int link_add(Manager *m, sd_netlink_message *message, Link **ret) {
+ 
+                 r = sd_device_get_is_initialized(device);
+                 if (r < 0) {
+-                        log_link_warning_errno(link, r, "Could not determine whether the device is initialized: %m");
++                        log_link_warning_errno(link, r, "Could not determine whether the device is initialized or not: %m");
+                         goto failed;
+                 }
+                 if (r == 0) {
+@@ -3526,11 +3526,11 @@ int link_add(Manager *m, sd_netlink_message *message, Link **ret) {
+ 
+                 r = device_is_renaming(device);
+                 if (r < 0) {
+-                        log_link_warning_errno(link, r, "Failed to determine the device is being renamed: %m");
++                        log_link_warning_errno(link, r, "Failed to determine the device is renamed or not: %m");
+                         goto failed;
+                 }
+                 if (r > 0) {
+-                        log_link_debug(link, "Interface is being renamed, pending initialization.");
++                        log_link_debug(link, "Interface is under renaming, pending initialization.");
+                         return 0;
+                 }
+ 

@@ -475,6 +475,15 @@ static int parse_proc_cmdline_item(const char *key, const char *value, void *dat
                 if (arg_default_timeout_start_usec <= 0)
                         arg_default_timeout_start_usec = USEC_INFINITY;
 
+        } else if (proc_cmdline_key_streq(key, "systemd.cpu_affinity")) {
+
+                if (proc_cmdline_value_missing(key, value))
+                        return 0;
+
+                r = parse_cpu_set(value, &arg_cpu_affinity);
+                if (r < 0)
+                        log_warning_errno(r, "Faile to parse CPU affinity mask '%s', ignoring: %m", value);
+
         } else if (proc_cmdline_key_streq(key, "systemd.watchdog_device")) {
 
                 if (proc_cmdline_value_missing(key, value))
@@ -485,7 +494,7 @@ static int parse_proc_cmdline_item(const char *key, const char *value, void *dat
         } else if (streq(key, "quiet") && !value) {
 
                 if (arg_show_status == _SHOW_STATUS_INVALID)
-                        arg_show_status = SHOW_STATUS_AUTO;
+                        arg_show_status = SHOW_STATUS_ERROR;
 
         } else if (streq(key, "debug") && !value) {
 
@@ -702,7 +711,7 @@ static void set_manager_settings(Manager *m) {
         m->kexec_watchdog = arg_kexec_watchdog;
         m->cad_burst_action = arg_cad_burst_action;
 
-        manager_set_show_status(m, arg_show_status);
+        manager_set_show_status(m, arg_show_status, "commandline");
         m->status_unit_format = arg_status_unit_format;
 }
 
@@ -1190,7 +1199,7 @@ static int bump_rlimit_memlock(struct rlimit *saved_rlimit) {
         int r;
 
         /* BPF_MAP_TYPE_LPM_TRIE bpf maps are charged against RLIMIT_MEMLOCK, even if we have CAP_IPC_LOCK which should
-         * normally disable such checks. We need them to implement IPAccessAllow= and IPAccessDeny=, hence let's bump
+         * normally disable such checks. We need them to implement IPAddressAllow= and IPAddressDeny=, hence let's bump
          * the value high enough for our user. */
 
         /* Using MAX() on resource limits only is safe if RLIM_INFINITY is > 0. POSIX declares that rlim_t
@@ -1245,7 +1254,7 @@ static int status_welcome(void) {
         _cleanup_free_ char *pretty_name = NULL, *ansi_color = NULL;
         int r;
 
-        if (IN_SET(arg_show_status, SHOW_STATUS_NO, SHOW_STATUS_AUTO))
+        if (!show_status_on(arg_show_status))
                 return 0;
 
         r = parse_os_release(NULL,
@@ -1738,6 +1747,8 @@ static int invoke_main_loop(
                         saved_log_level = m->log_level_overridden ? log_get_max_level() : -1;
                         saved_log_target = m->log_target_overridden ? log_get_target() : _LOG_TARGET_INVALID;
 
+                        mac_selinux_reload();
+
                         (void) parse_configuration(saved_rlimit_nofile, saved_rlimit_memlock);
 
                         set_manager_defaults(m);
@@ -1919,7 +1930,7 @@ static int initialize_runtime(
                         status_welcome();
                         hostname_setup();
                         machine_id_setup(NULL, arg_machine_id, NULL);
-                        loopback_setup();
+                        (void) loopback_setup();
                         bump_unix_max_dgram_qlen();
                         bump_file_max_and_nr_open();
                         test_usr();
@@ -1986,20 +1997,36 @@ static int do_queue_default_job(
                 const char **ret_error_message) {
 
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        const char* default_unit;
         Job *default_unit_job;
         Unit *target = NULL;
         int r;
 
-        log_debug("Activating default unit: %s", arg_default_unit);
+        if (arg_default_unit)
+                default_unit = arg_default_unit;
+        else if (in_initrd())
+                default_unit = SPECIAL_INITRD_TARGET;
+        else
+                default_unit = SPECIAL_DEFAULT_TARGET;
 
-        r = manager_load_startable_unit_or_warn(m, arg_default_unit, NULL, &target);
+        log_debug("Activating default unit: %s", default_unit);
+
+        r = manager_load_startable_unit_or_warn(m, default_unit, NULL, &target);
+        if (r < 0 && in_initrd() && !arg_default_unit) {
+                /* Fall back to default.target, which we used to always use by default. Only do this if no
+                 * explicit configuration was given. */
+
+                log_info("Falling back to " SPECIAL_DEFAULT_TARGET ".");
+
+                r = manager_load_startable_unit_or_warn(m, SPECIAL_DEFAULT_TARGET, NULL, &target);
+        }
         if (r < 0) {
-                log_info("Falling back to rescue target: " SPECIAL_RESCUE_TARGET);
+                log_info("Falling back to " SPECIAL_RESCUE_TARGET ".");
 
                 r = manager_load_startable_unit_or_warn(m, SPECIAL_RESCUE_TARGET, NULL, &target);
                 if (r < 0) {
-                        *ret_error_message = r == -ERFKILL ? "Rescue target masked"
-                                                           : "Failed to load rescue target";
+                        *ret_error_message = r == -ERFKILL ? SPECIAL_RESCUE_TARGET " masked"
+                                                           : "Failed to load " SPECIAL_RESCUE_TARGET;
                         return r;
                 }
         }
@@ -2209,15 +2236,6 @@ static int load_configuration(
         if (r < 0) {
                 *ret_error_message = "Failed to parse commandline arguments";
                 return r;
-        }
-
-        /* Initialize default unit */
-        if (!arg_default_unit) {
-                arg_default_unit = strdup(SPECIAL_DEFAULT_TARGET);
-                if (!arg_default_unit) {
-                        *ret_error_message = "Failed to set default unit";
-                        return log_oom();
-                }
         }
 
         /* Initialize the show status setting if it hasn't been set explicitly yet */

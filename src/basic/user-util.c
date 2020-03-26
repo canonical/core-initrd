@@ -62,6 +62,29 @@ int parse_uid(const char *s, uid_t *ret) {
         return 0;
 }
 
+int parse_uid_range(const char *s, uid_t *ret_lower, uid_t *ret_upper) {
+        uint32_t u, l;
+        int r;
+
+        assert(s);
+        assert(ret_lower);
+        assert(ret_upper);
+
+        r = parse_range(s, &l, &u);
+        if (r < 0)
+                return r;
+
+        if (l > u)
+                return -EINVAL;
+
+        if (!uid_is_valid(l) || !uid_is_valid(u))
+                return -ENXIO;
+
+        *ret_lower = l;
+        *ret_upper = u;
+        return 0;
+}
+
 char* getlogname_malloc(void) {
         uid_t uid;
         struct stat st;
@@ -84,7 +107,7 @@ char *getusername_malloc(void) {
         return uid_to_name(getuid());
 }
 
-static bool is_nologin_shell(const char *shell) {
+bool is_nologin_shell(const char *shell) {
 
         return PATH_IN_SET(shell,
                            /* 'nologin' is the friendliest way to disable logins for a user account. It prints a nice
@@ -404,11 +427,16 @@ char* gid_to_name(gid_t gid) {
         return ret;
 }
 
+static bool gid_list_has(const gid_t *list, size_t size, gid_t val) {
+        for (size_t i = 0; i < size; i++)
+                if (list[i] == val)
+                        return true;
+        return false;
+}
+
 int in_gid(gid_t gid) {
-        _cleanup_free_ gid_t *allocated = NULL;
-        gid_t local[16], *p = local;
-        int ngroups = ELEMENTSOF(local);
-        unsigned attempt = 0;
+        _cleanup_free_ gid_t *gids = NULL;
+        int ngroups;
 
         if (getgid() == gid)
                 return 1;
@@ -418,6 +446,57 @@ int in_gid(gid_t gid) {
 
         if (!gid_is_valid(gid))
                 return -EINVAL;
+
+        ngroups = getgroups_alloc(&gids);
+        if (ngroups < 0)
+                return ngroups;
+
+        return gid_list_has(gids, ngroups, gid);
+}
+
+int in_group(const char *name) {
+        int r;
+        gid_t gid;
+
+        r = get_group_creds(&name, &gid, 0);
+        if (r < 0)
+                return r;
+
+        return in_gid(gid);
+}
+
+int merge_gid_lists(const gid_t *list1, size_t size1, const gid_t *list2, size_t size2, gid_t **ret) {
+        size_t nresult = 0;
+        assert(ret);
+
+        if (size2 > INT_MAX - size1)
+                return -ENOBUFS;
+
+        gid_t *buf = new(gid_t, size1 + size2);
+        if (!buf)
+                return -ENOMEM;
+
+        /* Duplicates need to be skipped on merging, otherwise they'll be passed on and stored in the kernel. */
+        for (size_t i = 0; i < size1; i++)
+                if (!gid_list_has(buf, nresult, list1[i]))
+                        buf[nresult++] = list1[i];
+        for (size_t i = 0; i < size2; i++)
+                if (!gid_list_has(buf, nresult, list2[i]))
+                        buf[nresult++] = list2[i];
+        *ret = buf;
+        return (int)nresult;
+}
+
+int getgroups_alloc(gid_t** gids) {
+        gid_t *allocated;
+        _cleanup_free_  gid_t *p = NULL;
+        int ngroups = 8;
+        unsigned attempt = 0;
+
+        allocated = new(gid_t, ngroups);
+        if (!allocated)
+                return -ENOMEM;
+        p = allocated;
 
         for (;;) {
                 ngroups = getgroups(ngroups, p);
@@ -440,29 +519,13 @@ int in_gid(gid_t gid) {
 
                 free(allocated);
 
-                allocated = new(gid_t, ngroups);
+                p = allocated = new(gid_t, ngroups);
                 if (!allocated)
                         return -ENOMEM;
-
-                p = allocated;
         }
 
-        for (int i = 0; i < ngroups; i++)
-                if (p[i] == gid)
-                        return true;
-
-        return false;
-}
-
-int in_group(const char *name) {
-        int r;
-        gid_t gid;
-
-        r = get_group_creds(&name, &gid, 0);
-        if (r < 0)
-                return r;
-
-        return in_gid(gid);
+        *gids = TAKE_PTR(p);
+        return ngroups;
 }
 
 int get_home_dir(char **_h) {
@@ -903,40 +966,3 @@ int fgetsgent_sane(FILE *stream, struct sgrp **sg) {
         return !!s;
 }
 #endif
-
-int make_salt(char **ret) {
-        static const char table[] =
-                "abcdefghijklmnopqrstuvwxyz"
-                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                "0123456789"
-                "./";
-
-        uint8_t raw[16];
-        char *salt, *j;
-        size_t i;
-        int r;
-
-        /* This is a bit like crypt_gensalt_ra(), but doesn't require libcrypt, and doesn't do anything but
-         * SHA512, i.e. is legacy-free and minimizes our deps. */
-
-        assert_cc(sizeof(table) == 64U + 1U);
-
-        /* Insist on the best randomness by setting RANDOM_BLOCK, this is about keeping passwords secret after all. */
-        r = genuine_random_bytes(raw, sizeof(raw), RANDOM_BLOCK);
-        if (r < 0)
-                return r;
-
-        salt = new(char, 3+sizeof(raw)+1+1);
-        if (!salt)
-                return -ENOMEM;
-
-        /* We only bother with SHA512 hashed passwords, the rest is legacy, and we don't do legacy. */
-        j = stpcpy(salt, "$6$");
-        for (i = 0; i < sizeof(raw); i++)
-                j[i] = table[raw[i] & 63];
-        j[i++] = '$';
-        j[i] = 0;
-
-        *ret = salt;
-        return 0;
-}

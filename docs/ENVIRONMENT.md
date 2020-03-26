@@ -1,5 +1,7 @@
 ---
 title: Known Environment Variables
+category: Interfaces
+layout: default
 ---
 
 # Known Environment Variables
@@ -70,6 +72,13 @@ All tools:
 * `$RUNTIME_DIRECTORY` — various tools use this variable to locate the
   appropriate path under /run. This variable is also set by the manager when
   RuntimeDirectory= is used, see systemd.exec(5).
+
+* `$SYSTEMD_CRYPT_PREFIX` — if set configures the hash method prefix to use for
+  UNIX crypt() when generating passwords. By default the system's "preferred
+  method" is used, but this can be overridden with this environment
+  variable. Takes a prefix such as `$6$` or `$y$`. (Note that this is only
+  honoured on systems built with libxcrypt and is ignored on systems using
+  glibc's original, internal crypt() implementation.)
 
 systemctl:
 

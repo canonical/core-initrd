@@ -1,0 +1,27 @@
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Thu, 19 Dec 2019 13:17:45 -0500
+Subject: network: add link->setting_genmode flag
+
+Similar to the link->setting_mtu flag, this delays continued configuration
+until after the genmode has been successfully set; this is important
+because we do not want networkd to raise the interface before the genmode
+has been set, as if we're disabling the genmode, raising the interface
+before we have successfully disabled the genmode will result in the kernel
+creating a ipv6ll address, even though we don't want that.
+---
+ src/network/networkd-link.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 177a0e3..8715ed4 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -1622,7 +1622,7 @@ static int link_address_genmode_handler(sd_netlink *rtnl, sd_netlink_message *m,
+         else
+                 log_link_debug(link, "Setting address genmode done.");
+ 
+-        if (link->state == LINK_STATE_INITIALIZED) {
++        if (link->state == LINK_STATE_PENDING) {
+                 r = link_configure_continue(link);
+                 if (r < 0)
+                         link_enter_failed(link);

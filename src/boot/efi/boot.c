@@ -32,7 +32,7 @@ enum loader_type {
 };
 
 typedef struct {
-        CHAR16 *id; /* The identifier for this entry (note that this id is not necessarily unique though!) */
+        CHAR16 *id; /* The unique identifier for this entry */
         CHAR16 *title_show;
         CHAR16 *title;
         CHAR16 *version;
@@ -404,10 +404,10 @@ static VOID print_status(Config *config, CHAR16 *loaded_image_path) {
                 Print(L"random-seed-mode:       off\n");
                 break;
         case RANDOM_SEED_WITH_SYSTEM_TOKEN:
-                Print(L"random-seed-node:       with-system-token\n");
+                Print(L"random-seed-mode:       with-system-token\n");
                 break;
         case RANDOM_SEED_ALWAYS:
-                Print(L"random-seed-node:       always\n");
+                Print(L"random-seed-mode:       always\n");
                 break;
         default:
                 ;
@@ -1310,7 +1310,6 @@ static VOID config_entry_add_from_file(
         CHAR8 *line;
         UINTN pos = 0;
         CHAR8 *key, *value;
-        UINTN len;
         EFI_STATUS err;
         EFI_FILE_HANDLE handle;
         _cleanup_freepool_ CHAR16 *initrd = NULL;
@@ -1431,10 +1430,6 @@ static VOID config_entry_add_from_file(
 
         entry->device = device;
         entry->id = StrDuplicate(file);
-        len = StrLen(entry->id);
-        /* remove ".conf" */
-        if (len > 5)
-                entry->id[len - 5] = '\0';
         StrLwr(entry->id);
 
         config_add_entry(config, entry);
@@ -1775,7 +1770,8 @@ static ConfigEntry *config_entry_add_loader(
                 CHAR16 *id,
                 CHAR16 key,
                 CHAR16 *title,
-                CHAR16 *loader) {
+                CHAR16 *loader,
+                CHAR16 *version) {
 
         ConfigEntry *entry;
 
@@ -1783,6 +1779,7 @@ static ConfigEntry *config_entry_add_loader(
         *entry = (ConfigEntry) {
                 .type = type,
                 .title = StrDuplicate(title),
+                .version = StrDuplicate(version),
                 .device = device,
                 .loader = StrDuplicate(loader),
                 .id = StrDuplicate(id),
@@ -1840,7 +1837,7 @@ static BOOLEAN config_entry_add_loader_auto(
                 return FALSE;
         uefi_call_wrapper(handle->Close, 1, handle);
 
-        entry = config_entry_add_loader(config, device, LOADER_UNDEFINED, id, key, title, loader);
+        entry = config_entry_add_loader(config, device, LOADER_UNDEFINED, id, key, title, loader, NULL);
         if (!entry)
                 return FALSE;
 
@@ -1896,8 +1893,8 @@ static VOID config_entry_add_linux(
                 UINTN bufsize = sizeof buf;
                 EFI_FILE_INFO *f;
                 CHAR8 *sections[] = {
-                        (UINT8 *)".osrel",
-                        (UINT8 *)".cmdline",
+                        (CHAR8 *)".osrel",
+                        (CHAR8 *)".cmdline",
                         NULL
                 };
                 UINTN offs[ELEMENTSOF(sections)-1] = {};
@@ -1908,10 +1905,12 @@ static VOID config_entry_add_linux(
                 CHAR8 *line;
                 UINTN pos = 0;
                 CHAR8 *key, *value;
+                CHAR16 *os_name_pretty = NULL;
                 CHAR16 *os_name = NULL;
                 CHAR16 *os_id = NULL;
                 CHAR16 *os_version = NULL;
-                CHAR16 *os_build = NULL;
+                CHAR16 *os_version_id = NULL;
+                CHAR16 *os_build_id = NULL;
 
                 err = uefi_call_wrapper(linux_dir->Read, 3, linux_dir, &bufsize, buf);
                 if (bufsize == 0 || EFI_ERROR(err))
@@ -1927,6 +1926,8 @@ static VOID config_entry_add_linux(
                         continue;
                 if (StriCmp(f->FileName + len - 4, L".efi") != 0)
                         continue;
+                if (StrnCmp(f->FileName, L"auto-", 5) == 0)
+                        continue;
 
                 /* look for .osrel and .cmdline sections in the .efi binary */
                 err = pe_file_locate_sections(linux_dir, f->FileName, sections, addrs, offs, szs);
@@ -1940,6 +1941,12 @@ static VOID config_entry_add_linux(
                 /* read properties from the embedded os-release file */
                 while ((line = line_get_key_value(content, (CHAR8 *)"=", &pos, &key, &value))) {
                         if (strcmpa((CHAR8 *)"PRETTY_NAME", key) == 0) {
+                                FreePool(os_name_pretty);
+                                os_name_pretty = stra_to_str(value);
+                                continue;
+                        }
+
+                        if (strcmpa((CHAR8 *)"NAME", key) == 0) {
                                 FreePool(os_name);
                                 os_name = stra_to_str(value);
                                 continue;
@@ -1951,26 +1958,33 @@ static VOID config_entry_add_linux(
                                 continue;
                         }
 
-                        if (strcmpa((CHAR8 *)"VERSION_ID", key) == 0) {
+                        if (strcmpa((CHAR8 *)"VERSION", key) == 0) {
                                 FreePool(os_version);
                                 os_version = stra_to_str(value);
                                 continue;
                         }
 
+                        if (strcmpa((CHAR8 *)"VERSION_ID", key) == 0) {
+                                FreePool(os_version_id);
+                                os_version_id = stra_to_str(value);
+                                continue;
+                        }
+
                         if (strcmpa((CHAR8 *)"BUILD_ID", key) == 0) {
-                                FreePool(os_build);
-                                os_build = stra_to_str(value);
+                                FreePool(os_build_id);
+                                os_build_id = stra_to_str(value);
                                 continue;
                         }
                 }
 
-                if (os_name && os_id && (os_version || os_build)) {
-                        _cleanup_freepool_ CHAR16 *conf = NULL, *path = NULL;
+                if ((os_name_pretty || os_name) && os_id && (os_version || os_version_id || os_build_id)) {
+                        _cleanup_freepool_ CHAR16 *path = NULL;
 
-                        conf = PoolPrint(L"%s-%s", os_id, os_version ? : os_build);
                         path = PoolPrint(L"\\EFI\\Linux\\%s", f->FileName);
 
-                        entry = config_entry_add_loader(config, device, LOADER_LINUX, conf, 'l', os_name, path);
+                        entry = config_entry_add_loader(config, device, LOADER_LINUX, f->FileName, 'l',
+                                                        os_name_pretty ? : (os_name ? : os_id), path,
+                                                        os_version ? : (os_version_id ? : os_build_id));
 
                         FreePool(content);
                         content = NULL;
@@ -1989,10 +2003,12 @@ static VOID config_entry_add_linux(
                         config_entry_parse_tries(entry, L"\\EFI\\Linux", f->FileName, L".efi");
                 }
 
+                FreePool(os_name_pretty);
                 FreePool(os_name);
                 FreePool(os_id);
                 FreePool(os_version);
-                FreePool(os_build);
+                FreePool(os_version_id);
+                FreePool(os_build_id);
                 FreePool(content);
         }
 
@@ -2453,6 +2469,12 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
                 UINT64 key;
 
                 err = console_key_read(&key, FALSE);
+
+                if (err == EFI_NOT_READY) {
+                        uefi_call_wrapper(BS->Stall, 1, 100 * 1000);
+                        err = console_key_read(&key, FALSE);
+                }
+
                 if (!EFI_ERROR(err)) {
                         INT16 idx;
 
