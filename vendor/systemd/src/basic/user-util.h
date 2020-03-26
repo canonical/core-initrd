@@ -19,6 +19,7 @@ static inline bool gid_is_valid(gid_t gid) {
 }
 
 int parse_uid(const char *s, uid_t* ret_uid);
+int parse_uid_range(const char *s, uid_t *ret_lower, uid_t *ret_upper);
 
 static inline int parse_gid(const char *s, gid_t *ret_gid) {
         return parse_uid(s, (uid_t*) ret_gid);
@@ -42,6 +43,9 @@ char* gid_to_name(gid_t gid);
 int in_gid(gid_t gid);
 int in_group(const char *name);
 
+int merge_gid_lists(const gid_t *list1, size_t size1, const gid_t *list2, size_t size2, gid_t **result);
+int getgroups_alloc(gid_t** gids);
+
 int get_home_dir(char **ret);
 int get_shell(char **_ret);
 
@@ -57,6 +61,14 @@ int take_etc_passwd_lock(const char *root);
 
 #define ETC_PASSWD_LOCK_PATH "/etc/.pwd.lock"
 
+static inline bool uid_is_system(uid_t uid) {
+        return uid <= SYSTEM_UID_MAX;
+}
+
+static inline bool gid_is_system(gid_t gid) {
+        return gid <= SYSTEM_GID_MAX;
+}
+
 static inline bool uid_is_dynamic(uid_t uid) {
         return DYNAMIC_UID_MIN <= uid && uid <= DYNAMIC_UID_MAX;
 }
@@ -65,12 +77,12 @@ static inline bool gid_is_dynamic(gid_t gid) {
         return uid_is_dynamic((uid_t) gid);
 }
 
-static inline bool uid_is_system(uid_t uid) {
-        return uid <= SYSTEM_UID_MAX;
+static inline bool uid_is_container(uid_t uid) {
+        return CONTAINER_UID_BASE_MIN <= uid && uid <= CONTAINER_UID_BASE_MAX;
 }
 
-static inline bool gid_is_system(gid_t gid) {
-        return gid <= SYSTEM_GID_MAX;
+static inline bool gid_is_container(gid_t gid) {
+        return uid_is_container((uid_t) gid);
 }
 
 /* The following macros add 1 when converting things, since UID 0 is a valid UID, while the pointer
@@ -126,4 +138,4 @@ int fgetsgent_sane(FILE *stream, struct sgrp **sg);
 int putsgent_sane(const struct sgrp *sg, FILE *stream);
 #endif
 
-int make_salt(char **ret);
+bool is_nologin_shell(const char *shell);

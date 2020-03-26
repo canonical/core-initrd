@@ -10,6 +10,7 @@ int repeat_unmount(const char *path, int flags);
 int umount_recursive(const char *target, int flags);
 int bind_remount_recursive(const char *prefix, unsigned long new_flags, unsigned long flags_mask, char **blacklist);
 int bind_remount_recursive_with_mountinfo(const char *prefix, unsigned long new_flags, unsigned long flags_mask, char **blacklist, FILE *proc_self_mountinfo);
+int bind_remount_one_with_mountinfo(const char *path, unsigned long new_flags, unsigned long flags_mask, FILE *proc_self_mountinfo);
 
 int mount_move_root(const char *path);
 
@@ -31,4 +32,4 @@ int mount_option_mangle(
                 unsigned long *ret_mount_flags,
                 char **ret_remaining_options);
 
-const char* mode_to_inaccessible_node(mode_t mode);
+int mode_to_inaccessible_node(const char *runtime_dir, mode_t mode, char **dest);

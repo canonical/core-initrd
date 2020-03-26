@@ -9,10 +9,10 @@ LP: #1773148
  1 file changed, 1 deletion(-)
 
 diff --git a/units/systemd-journald.service.in b/units/systemd-journald.service.in
-index 6467377..8a979eb 100644
+index 804fb7d..f6d8024 100644
 --- a/units/systemd-journald.service.in
 +++ b/units/systemd-journald.service.in
-@@ -38,7 +38,6 @@ SystemCallArchitectures=native
+@@ -40,7 +40,6 @@ SystemCallArchitectures=native
  SystemCallErrorNumber=EPERM
  SystemCallFilter=@system-service
  Type=notify

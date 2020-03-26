@@ -28,7 +28,7 @@ Bug-Ubuntu: https://launchpad.net/bugs/1578080
  2 files changed, 2 insertions(+), 3 deletions(-)
 
 diff --git a/man/systemd-system.conf.xml b/man/systemd-system.conf.xml
-index e403fa5..d743af8 100644
+index e22b335..50178f7 100644
 --- a/man/systemd-system.conf.xml
 +++ b/man/systemd-system.conf.xml
 @@ -360,8 +360,7 @@

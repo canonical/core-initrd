@@ -38,7 +38,7 @@
     <title>Description</title>
 
     <para>systemd is a system and service manager for Linux operating systems. When run as first process on
-    boot (as PID 1), it acts as init system that brings up and maintains userspace services. Seperate
+    boot (as PID 1), it acts as init system that brings up and maintains userspace services. Separate
     instances are started for logged-in users to start their services.</para>
 
     <para><command>systemd</command> is usually not invoked directly by the user, but is installed as the
@@ -280,10 +280,9 @@
     files or parameters passed on the kernel command line. For details, see
     <citerefentry><refentrytitle>systemd.generator</refentrytitle><manvolnum>7</manvolnum></citerefentry>.</para>
 
-    <para>Systems which invoke systemd in a container or initrd
-    environment should implement the
-    <ulink url="https://www.freedesktop.org/wiki/Software/systemd/ContainerInterface">Container Interface</ulink> or
-    <ulink url="https://www.freedesktop.org/wiki/Software/systemd/InitrdInterface">initrd Interface</ulink>
+    <para>Systems which invoke systemd in a container or initrd environment should implement the <ulink
+    url="https://systemd.io/CONTAINER_INTERFACE">Container Interface</ulink> or <ulink
+    url="https://www.freedesktop.org/wiki/Software/systemd/InitrdInterface">initrd Interface</ulink>
     specifications, respectively.</para>
   </refsect1>
 
@@ -799,15 +798,14 @@
       <varlistentry>
         <term><varname>systemd.show_status</varname></term>
 
-        <listitem><para>Takes a boolean argument or the constant
-        <constant>auto</constant>. Can be also specified without an argument, with
-        the same effect as a positive boolean.  If enabled, the systemd manager (PID
-        1) shows terse service status updates on the console during bootup.
-        <constant>auto</constant> behaves like <option>false</option> until a unit
-        fails or there is a significant delay in boot. Defaults to enabled, unless
-        <option>quiet</option> is passed as kernel command line option, in which case
-        it defaults to <constant>auto</constant>. If specified overrides the system
-        manager configuration file option <option>ShowStatus=</option>, see
+        <listitem><para>Takes a boolean argument or the constants <constant>error</constant> and
+        <constant>auto</constant>. Can be also specified without an argument, with the same effect as a
+        positive boolean. If enabled, the systemd manager (PID 1) shows terse service status updates on the
+        console during bootup. With <constant>error</constant>, only messages about failures are shown, but
+        boot is otherwise quiet. <constant>auto</constant> behaves like <option>false</option> until there is
+        a significant delay in boot. Defaults to enabled, unless <option>quiet</option> is passed as kernel
+        command line option, in which case it defaults to <constant>error</constant>. If specified overrides
+        the system manager configuration file option <option>ShowStatus=</option>, see
         <citerefentry><refentrytitle>systemd-system.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>.
         </para></listitem>
       </varlistentry>
@@ -874,7 +872,7 @@
 
         <listitem><para>When specified without an argument or with a true argument,
         enables the usage of
-        <ulink url="https://www.kernel.org/doc/Documentation/cgroup-v2.txt">unified cgroup hierarchy</ulink>
+        <ulink url="https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html">unified cgroup hierarchy</ulink>
         (a.k.a. cgroups-v2). When specified with a false argument, fall back to
         hybrid or full legacy cgroup hierarchy.</para>
 

@@ -10,10 +10,10 @@ Thanks: Dimitri John Ledkov for the suggestion
  3 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/man/resolved.conf.xml b/man/resolved.conf.xml
-index 8180001..67831d4 100644
+index 0f70ced..b112a0c 100644
 --- a/man/resolved.conf.xml
 +++ b/man/resolved.conf.xml
-@@ -228,11 +228,11 @@
+@@ -231,11 +231,11 @@
  
        <varlistentry>
          <term><varname>Cache=</varname></term>
@@ -41,7 +41,7 @@ index 049fe9e..5db0b2a 100644
  Resolve.ReadEtcHosts,    config_parse_bool,                   0,                   offsetof(Manager, read_etc_hosts)
 \ No newline at end of file
 diff --git a/src/resolve/resolved-manager.c b/src/resolve/resolved-manager.c
-index 2755756..6c6c7c0 100644
+index f7508b6..6e8f9a0 100644
 --- a/src/resolve/resolved-manager.c
 +++ b/src/resolve/resolved-manager.c
 @@ -585,7 +585,7 @@ int manager_new(Manager **ret) {

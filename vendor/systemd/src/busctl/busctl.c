@@ -38,6 +38,7 @@ static enum {
 } arg_json = JSON_OFF;
 static PagerFlags arg_pager_flags = 0;
 static bool arg_legend = true;
+static bool arg_full = false;
 static const char *arg_address = NULL;
 static bool arg_unique = false;
 static bool arg_acquired = false;
@@ -195,6 +196,9 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
         if (!table)
                 return log_oom();
 
+        if (arg_full)
+                table_set_width(table, 0);
+
         r = table_set_align_percent(table, table_get_cell(table, 0, COLUMN_PID), 100);
         if (r < 0)
                 return log_error_errno(r, "Failed to set alignment: %m");
@@ -203,14 +207,32 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
         if (r < 0)
                 return log_error_errno(r, "Failed to set empty string: %m");
 
-        r = table_set_sort(table, COLUMN_NAME, (size_t) -1);
+        r = table_set_sort(table, (size_t) COLUMN_NAME, (size_t) -1);
         if (r < 0)
                 return log_error_errno(r, "Failed to set sort column: %m");
 
         if (arg_show_machine)
-                r = table_set_display(table, COLUMN_NAME, COLUMN_PID, COLUMN_PROCESS, COLUMN_USER, COLUMN_CONNECTION, COLUMN_UNIT, COLUMN_SESSION, COLUMN_DESCRIPTION, COLUMN_MACHINE, (size_t) -1);
+                r = table_set_display(table, (size_t) COLUMN_NAME,
+                                             (size_t) COLUMN_PID,
+                                             (size_t) COLUMN_PROCESS,
+                                             (size_t) COLUMN_USER,
+                                             (size_t) COLUMN_CONNECTION,
+                                             (size_t) COLUMN_UNIT,
+                                             (size_t) COLUMN_SESSION,
+                                             (size_t) COLUMN_DESCRIPTION,
+                                             (size_t) COLUMN_MACHINE,
+                                             (size_t) -1);
         else
-                r = table_set_display(table, COLUMN_NAME, COLUMN_PID, COLUMN_PROCESS, COLUMN_USER, COLUMN_CONNECTION, COLUMN_UNIT, COLUMN_SESSION, COLUMN_DESCRIPTION, (size_t) -1);
+                r = table_set_display(table, (size_t) COLUMN_NAME,
+                                             (size_t) COLUMN_PID,
+                                             (size_t) COLUMN_PROCESS,
+                                             (size_t) COLUMN_USER,
+                                             (size_t) COLUMN_CONNECTION,
+                                             (size_t) COLUMN_UNIT,
+                                             (size_t) COLUMN_SESSION,
+                                             (size_t) COLUMN_DESCRIPTION,
+                                             (size_t) -1);
+
         if (r < 0)
                 return log_error_errno(r, "Failed to set columns to display: %m");
 
@@ -233,7 +255,7 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
                                         TABLE_EMPTY,
                                         TABLE_EMPTY);
                         if (r < 0)
-                                return log_error_errno(r, "Failed to fill line: %m");
+                                return table_log_add_error(r);
 
                         continue;
                 }
@@ -250,7 +272,7 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
                                    TABLE_INT, PTR_TO_INT(v),
                                    TABLE_STRING, k);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to add name %s to table: %m", k);
+                        return table_log_add_error(r);
 
                 r = sd_bus_get_name_creds(
                                 bus, k,
@@ -279,7 +301,7 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
                         } else
                                 r = table_add_many(table, TABLE_EMPTY, TABLE_EMPTY);
                         if (r < 0)
-                                return log_error_errno(r, "Failed to add fields to table: %m");
+                                return table_log_add_error(r);
 
                         r = sd_bus_creds_get_euid(creds, &uid);
                         if (r >= 0) {
@@ -293,7 +315,7 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
                         } else
                                 r = table_add_cell(table, NULL, TABLE_EMPTY, NULL);
                         if (r < 0)
-                                return log_error_errno(r, "Failed to add field to table: %m");
+                                return table_log_add_error(r);
 
                         (void) sd_bus_creds_get_unique_name(creds, &unique);
                         (void) sd_bus_creds_get_unit(creds, &unit);
@@ -308,7 +330,7 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
                                         TABLE_STRING, cn);
                 }
                 if (r < 0)
-                        return log_error_errno(r, "Failed to add fields to table: %m");
+                        return table_log_add_error(r);
 
                 if (arg_show_machine) {
                         sd_id128_t mid;
@@ -321,7 +343,7 @@ static int list_bus_names(int argc, char **argv, void *userdata) {
 
                                 r = table_add_cell(table, NULL, TABLE_STRING, sd_id128_to_string(mid, m));
                                 if (r < 0)
-                                        return log_error_errno(r, "Failed to add field to table: %m");
+                                        return table_log_add_error(r);
 
                                 continue; /* line fully filled, no need to fill the remainder below */
                         }
@@ -1154,7 +1176,7 @@ static int introspect(int argc, char **argv, void *userdata) {
 }
 
 static int message_dump(sd_bus_message *m, FILE *f) {
-        return bus_message_dump(m, f, BUS_MESSAGE_DUMP_WITH_HEADER);
+        return sd_bus_message_dump(m, f, SD_BUS_MESSAGE_DUMP_WITH_HEADER);
 }
 
 static int message_pcap(sd_bus_message *m, FILE *f) {
@@ -2048,7 +2070,7 @@ static int call(int argc, char **argv, void *userdata) {
                 } else if (arg_verbose) {
                         (void) pager_open(arg_pager_flags);
 
-                        r = bus_message_dump(reply, stdout, 0);
+                        r = sd_bus_message_dump(reply, stdout, 0);
                         if (r < 0)
                                 return r;
                 } else {
@@ -2154,7 +2176,7 @@ static int get_property(int argc, char **argv, void *userdata) {
                 } else if (arg_verbose) {
                         (void) pager_open(arg_pager_flags);
 
-                        r = bus_message_dump(reply, stdout, BUS_MESSAGE_DUMP_SUBTREE_ONLY);
+                        r = sd_bus_message_dump(reply, stdout, SD_BUS_MESSAGE_DUMP_SUBTREE_ONLY);
                         if (r < 0)
                                 return r;
                 } else {
@@ -2251,6 +2273,7 @@ static int help(void) {
                "     --version             Show package version\n"
                "     --no-pager            Do not pipe output into a pager\n"
                "     --no-legend           Do not show the headers and footers\n"
+               "  -l --full                Do not ellipsize output\n"
                "     --system              Connect to system bus\n"
                "     --user                Connect to user bus\n"
                "  -H --host=[USER@]HOST    Operate on remote host\n"
@@ -2323,6 +2346,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "version",                         no_argument,       NULL, ARG_VERSION                         },
                 { "no-pager",                        no_argument,       NULL, ARG_NO_PAGER                        },
                 { "no-legend",                       no_argument,       NULL, ARG_NO_LEGEND                       },
+                { "full",                            no_argument,       NULL, 'l'                                 },
                 { "system",                          no_argument,       NULL, ARG_SYSTEM                          },
                 { "user",                            no_argument,       NULL, ARG_USER                            },
                 { "address",                         required_argument, NULL, ARG_ADDRESS                         },
@@ -2370,6 +2394,10 @@ static int parse_argv(int argc, char *argv[]) {
 
                 case ARG_NO_LEGEND:
                         arg_legend = false;
+                        break;
+
+                case 'l':
+                        arg_full = true;
                         break;
 
                 case ARG_USER:

@@ -294,6 +294,7 @@ static void test_exec_privatetmp(Manager *m) {
 
         test(__func__, m, "exec-privatetmp-yes.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
         test(__func__, m, "exec-privatetmp-no.service", 0, CLD_EXITED);
+        test(__func__, m, "exec-privatetmp-disabled-by-prefix.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
 
         unlink("/tmp/test-exec_privatetmp");
 }
@@ -313,6 +314,7 @@ static void test_exec_privatedevices(Manager *m) {
         test(__func__, m, "exec-privatedevices-yes.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
         test(__func__, m, "exec-privatedevices-no.service", 0, CLD_EXITED);
         test(__func__, m, "exec-privatedevices-disabled-by-prefix.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
+        test(__func__, m, "exec-privatedevices-yes-with-group.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
 
         /* We use capsh to test if the capabilities are
          * properly set, so be sure that it exists */
@@ -559,6 +561,7 @@ static void test_exec_dynamicuser(Manager *m) {
 
         test(__func__, m, "exec-dynamicuser-statedir-migrate-step1.service", 0, CLD_EXITED);
         test(__func__, m, "exec-dynamicuser-statedir-migrate-step2.service", can_unshare ? 0 : EXIT_NAMESPACE, CLD_EXITED);
+        test(__func__, m, "exec-dynamicuser-statedir-migrate-step1.service", 0, CLD_EXITED);
 
         (void) rm_rf("/var/lib/test-dynamicuser-migrate", REMOVE_ROOT|REMOVE_PHYSICAL);
         (void) rm_rf("/var/lib/test-dynamicuser-migrate2", REMOVE_ROOT|REMOVE_PHYSICAL);
@@ -755,6 +758,7 @@ static void test_exec_specifier(Manager *m) {
 static void test_exec_standardinput(Manager *m) {
         test(__func__, m, "exec-standardinput-data.service", 0, CLD_EXITED);
         test(__func__, m, "exec-standardinput-file.service", 0, CLD_EXITED);
+        test(__func__, m, "exec-standardinput-file-cat.service", 0, CLD_EXITED);
 }
 
 static void test_exec_standardoutput(Manager *m) {
@@ -785,6 +789,7 @@ static int run_tests(UnitFileScope scope, const test_entry tests[], char **patte
         assert_se(tests);
 
         r = manager_new(scope, MANAGER_TEST_RUN_BASIC, &m);
+        m->default_std_output = EXEC_OUTPUT_NULL; /* don't rely on host journald */
         if (manager_errno_skip_test(r))
                 return log_tests_skipped_errno(r, "manager_new");
         assert_se(r >= 0);

@@ -8,7 +8,9 @@
 #include "hash-funcs.h"
 #include "macro.h"
 
-char *id128_to_uuid_string(sd_id128_t id, char s[37]);
+#define ID128_UUID_STRING_MAX 37
+
+char *id128_to_uuid_string(sd_id128_t id, char s[static ID128_UUID_STRING_MAX]);
 
 bool id128_is_valid(const char *s) _pure_;
 
@@ -28,3 +30,5 @@ int id128_write(const char *p, Id128Format f, sd_id128_t id, bool do_sync);
 void id128_hash_func(const sd_id128_t *p, struct siphash *state);
 int id128_compare_func(const sd_id128_t *a, const sd_id128_t *b) _pure_;
 extern const struct hash_ops id128_hash_ops;
+
+sd_id128_t id128_make_v4_uuid(sd_id128_t id);

@@ -12,7 +12,7 @@ LP: #1799251
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/core/mount-setup.c b/src/core/mount-setup.c
-index a19bb63..7f0c8ce 100644
+index d528a4c..c3cd0f9 100644
 --- a/src/core/mount-setup.c
 +++ b/src/core/mount-setup.c
 @@ -79,10 +79,10 @@ static const MountPoint mount_table[] = {

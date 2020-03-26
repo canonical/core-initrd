@@ -14,10 +14,9 @@
 /* An abstract parser for simple, line based, shallow configuration files consisting of variable assignments only. */
 
 typedef enum ConfigParseFlags {
-        CONFIG_PARSE_RELAXED       = 1 << 0,
-        CONFIG_PARSE_ALLOW_INCLUDE = 1 << 1,
-        CONFIG_PARSE_WARN          = 1 << 2,
-        CONFIG_PARSE_REFUSE_BOM    = 1 << 3,
+        CONFIG_PARSE_RELAXED       = 1 << 0, /* Do not warn about unknown non-extension fields */
+        CONFIG_PARSE_ALLOW_INCLUDE = 1 << 1, /* Allow the deprecated .include stanza */
+        CONFIG_PARSE_WARN          = 1 << 2, /* Emit non-debug messages */
 } ConfigParseFlags;
 
 /* Argument list for parsers of specific configuration settings. */
@@ -116,10 +115,11 @@ CONFIG_PARSER_PROTOTYPE(config_parse_long);
 CONFIG_PARSER_PROTOTYPE(config_parse_uint8);
 CONFIG_PARSER_PROTOTYPE(config_parse_uint16);
 CONFIG_PARSER_PROTOTYPE(config_parse_uint32);
+CONFIG_PARSER_PROTOTYPE(config_parse_int32);
 CONFIG_PARSER_PROTOTYPE(config_parse_uint64);
 CONFIG_PARSER_PROTOTYPE(config_parse_double);
 CONFIG_PARSER_PROTOTYPE(config_parse_iec_size);
-CONFIG_PARSER_PROTOTYPE(config_parse_si_size);
+CONFIG_PARSER_PROTOTYPE(config_parse_si_uint64);
 CONFIG_PARSER_PROTOTYPE(config_parse_iec_uint64);
 CONFIG_PARSER_PROTOTYPE(config_parse_bool);
 CONFIG_PARSER_PROTOTYPE(config_parse_tristate);
@@ -138,6 +138,7 @@ CONFIG_PARSER_PROTOTYPE(config_parse_signal);
 CONFIG_PARSER_PROTOTYPE(config_parse_personality);
 CONFIG_PARSER_PROTOTYPE(config_parse_permille);
 CONFIG_PARSER_PROTOTYPE(config_parse_ifname);
+CONFIG_PARSER_PROTOTYPE(config_parse_ifnames);
 CONFIG_PARSER_PROTOTYPE(config_parse_ip_port);
 CONFIG_PARSER_PROTOTYPE(config_parse_mtu);
 CONFIG_PARSER_PROTOTYPE(config_parse_rlimit);

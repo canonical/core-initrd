@@ -2,15 +2,13 @@
  * Copyright © 2019 VMware, Inc. */
 #pragma once
 
-#include "sd-netlink.h"
-
 #include "conf-parser.h"
-#include "networkd-link.h"
+#include "qdisc.h"
 #include "time-util.h"
 
-typedef struct QDiscs QDiscs;
-
 typedef struct NetworkEmulator {
+        QDisc meta;
+
         usec_t delay;
         usec_t jitter;
 
@@ -19,9 +17,9 @@ typedef struct NetworkEmulator {
         uint32_t duplicate;
 } NetworkEmulator;
 
-int network_emulator_new(NetworkEmulator **ret);
-int network_emulator_fill_message(Link *link, QDiscs *qdisc, sd_netlink_message *req);
+DEFINE_QDISC_CAST(NETEM, NetworkEmulator);
+extern const QDiscVTable netem_vtable;
 
-CONFIG_PARSER_PROTOTYPE(config_parse_tc_network_emulator_delay);
-CONFIG_PARSER_PROTOTYPE(config_parse_tc_network_emulator_rate);
-CONFIG_PARSER_PROTOTYPE(config_parse_tc_network_emulator_packet_limit);
+CONFIG_PARSER_PROTOTYPE(config_parse_network_emulator_delay);
+CONFIG_PARSER_PROTOTYPE(config_parse_network_emulator_rate);
+CONFIG_PARSER_PROTOTYPE(config_parse_network_emulator_packet_limit);

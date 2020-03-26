@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 TEST_DESCRIPTION="systemd-nspawn smoke test"
 TEST_NO_NSPAWN=1
@@ -33,7 +33,7 @@ Type=oneshot
 EOF
 
         cat >$initdir/test-nspawn.sh <<'EOF'
-#!/bin/bash
+#!/usr/bin/env bash
 set -x
 set -e
 set -u
@@ -150,7 +150,8 @@ function run {
        return 1
     fi
 
-    if SYSTEMD_NSPAWN_UNIFIED_HIERARCHY="$1" SYSTEMD_NSPAWN_USE_CGNS="$2" SYSTEMD_NSPAWN_API_VFS_WRITABLE="$3" systemd-nspawn --register=no -D "$_root" "$_netns_opt" --private-network -b; then
+    # allow combination of --network-namespace-path and --private-network
+    if ! SYSTEMD_NSPAWN_UNIFIED_HIERARCHY="$1" SYSTEMD_NSPAWN_USE_CGNS="$2" SYSTEMD_NSPAWN_API_VFS_WRITABLE="$3" systemd-nspawn --register=no -D "$_root" "$_netns_opt" --private-network -b; then
        return 1
     fi
 

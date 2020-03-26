@@ -27,9 +27,10 @@
   <refsect1>
     <title>Description</title>
 
-    <para>Network setup is performed by
+    <para>A plain ini-style text file that encodes configuration about a virtual network device, used by
     <citerefentry><refentrytitle>systemd-networkd</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
-    </para>
+    See <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+    for a general description of the syntax.</para>
 
     <para>The main Virtual Network Device file must have the extension <filename>.netdev</filename>;
     other extensions are ignored. Virtual network devices are created as soon as networkd is
@@ -181,6 +182,9 @@
 
           <row><entry><varname>xfrm</varname></entry>
           <entry>A virtual tunnel interface like vti/vti6 but with several advantages.</entry></row>
+
+          <row><entry><varname>ifb</varname></entry>
+          <entry> The Intermediate Functional Block (ifb) pseudo network interface acts as a QoS concentrator for multiple different sources of traffic.</entry></row>
 
         </tbody>
       </tgroup>
@@ -415,8 +419,8 @@
       <varlistentry>
         <term><varname>MulticastIGMPVersion=</varname></term>
         <listitem>
-          <para>Allows to change bridge's multicast Internet Group Management Protocol (IGMP) version.
-          Takes an interger 2 or 3. When unset, the kernel's default will be used.
+          <para>Allows changing bridge's multicast Internet Group Management Protocol (IGMP) version.
+          Takes an integer 2 or 3. When unset, the kernel's default will be used.
           </para>
         </listitem>
       </varlistentry>
@@ -717,7 +721,7 @@
       <varlistentry>
         <term><varname>IPDoNotFragment=</varname></term>
         <listitem>
-          <para>Allows to set the IPv4 Do not Fragment (DF) bit in outgoing packets, or to inherit its
+          <para>Allows setting the IPv4 Do not Fragment (DF) bit in outgoing packets, or to inherit its
           value from the IPv4 inner header. Takes a boolean value, or <literal>inherit</literal>. Set
           to <literal>inherit</literal> if the encapsulated protocol is IPv6. When unset, the kernel's
           default will be used.</para>
@@ -853,7 +857,7 @@
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term><varname>DestinationPort=</varname></term>
+        <term><varname>UDPDestinationPort=</varname></term>
         <listitem>
           <para>Specifies destination port. When UDP encapsulation is selected it's mandotory. Ignored when ip
           encapsulation is selected.</para>
@@ -2109,7 +2113,7 @@ Endpoint=wireguard.example.com:51820</programlisting>
 
     <example>
       <title>/etc/systemd/network/27-xfrm.netdev</title>
-      <programlisting>[Xfrm]
+      <programlisting>[NetDev]
 Name=xfrm0
 Kind=xfrm
 

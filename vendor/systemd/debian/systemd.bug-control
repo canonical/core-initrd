@@ -1,1 +1,1 @@
-package-status: udev dracut initramfs-tools
+package-status: udev dracut initramfs-tools libpam-systemd libnss-systemd

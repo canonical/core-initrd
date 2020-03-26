@@ -5,7 +5,7 @@ set -eux
 # default to Debian testing
 DISTRO=${DISTRO:-debian}
 RELEASE=${RELEASE:-buster}
-BRANCH=${BRANCH:-master}
+BRANCH=${BRANCH:-debian/master}
 ARCH=${ARCH:-amd64}
 CONTAINER=${RELEASE}-${ARCH}
 CACHE_DIR=${SEMAPHORE_CACHE_DIR:=/tmp}
@@ -35,6 +35,8 @@ while [ -z "\$(ip route list 0/0)" ]; do sleep 1; done
 apt-get -q --allow-releaseinfo-change update
 apt-get -y dist-upgrade
 apt-get install -y eatmydata
+# The following four are needed as long as these deps are not covered by Debian's own packaging
+apt-get install -y libfdisk-dev libp11-kit-dev libssl-dev libpwquality-dev
 apt-get purge --auto-remove -y unattended-upgrades
 systemctl unmask systemd-networkd
 systemctl enable systemd-networkd

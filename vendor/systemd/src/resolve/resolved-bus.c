@@ -2,6 +2,7 @@
 
 #include "alloc-util.h"
 #include "bus-common-errors.h"
+#include "bus-polkit.h"
 #include "bus-util.h"
 #include "dns-domain.h"
 #include "memory-util.h"
@@ -12,6 +13,7 @@
 #include "resolved-dnssd-bus.h"
 #include "resolved-dnssd.h"
 #include "resolved-link-bus.h"
+#include "socket-netlink.h"
 #include "stdio-util.h"
 #include "strv.h"
 #include "user-util.h"

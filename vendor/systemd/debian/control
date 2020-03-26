@@ -8,7 +8,7 @@ Uploaders: Michael Biebl <biebl@debian.org>,
            Sjoerd Simons <sjoerd@debian.org>,
            Martin Pitt <mpitt@debian.org>,
            Felipe Sateler <fsateler@debian.org>
-Standards-Version: 4.4.1
+Standards-Version: 4.5.0
 Rules-Requires-Root: no
 Vcs-Git: https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd
 Vcs-Browser:  https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd
@@ -29,7 +29,7 @@ Build-Depends: debhelper (>= 10.4~),
                libidn2-dev <!stage1>,
                libiptc-dev <!stage1>,
                libaudit-dev <!stage1>,
-               libdbus-1-dev (>= 1.3.2) <!nocheck>,
+               libdbus-1-dev (>= 1.3.2) <!nocheck> <!noinsttest>,
                libcryptsetup-dev (>= 2:1.6.0) <!stage1>,
                libselinux1-dev (>= 2.1.9),
                libacl1-dev,
@@ -46,7 +46,7 @@ Build-Depends: debhelper (>= 10.4~),
                libkmod-dev (>= 15),
                libblkid-dev (>= 2.24),
                libmount-dev (>= 2.30),
-               libseccomp-dev (>= 2.3.1) [amd64 arm64 armel armhf i386 mips mipsel mips64 mips64el x32 powerpc ppc64 ppc64el s390x],
+               libseccomp-dev (>= 2.3.1) [amd64 arm64 armel armhf i386 mips mipsel mips64 mips64el x32 powerpc ppc64 ppc64el riscv64 s390x],
                libdw-dev (>= 0.158) <!stage1>,
                libpolkit-gobject-1-dev <!stage1>,
                linux-base <!nocheck>,
@@ -93,7 +93,7 @@ Description: system and service manager
  drop-in replacement for sysvinit.
  .
  Installing the systemd package will not switch your init system unless you
- boot with init=/bin/systemd or install systemd-sysv in addition.
+ boot with init=/lib/systemd/systemd or install systemd-sysv in addition.
 
 Package: systemd-sysv
 Architecture: linux-any
@@ -136,8 +136,7 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd,
          dbus
-Recommends: btrfs-progs,
-            libnss-mymachines,
+Recommends: libnss-mymachines,
 Description: systemd container/nspawn tools
  This package provides systemd's tools for nspawn and container/VM management:
   * systemd-nspawn
@@ -189,6 +188,7 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd (= ${binary:Version}),
          python3,
+Build-Profiles: <!noinsttest>
 Description: tests for systemd
  This package contains the test binaries. Those binaries are primarily used
  for autopkgtest and not meant to be installed on regular user systems.

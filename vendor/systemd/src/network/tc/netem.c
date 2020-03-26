@@ -2,65 +2,47 @@
  * Copyright © 2019 VMware, Inc. */
 
 #include <linux/pkt_sched.h>
-#include <math.h>
 
 #include "alloc-util.h"
 #include "conf-parser.h"
-#include "hashmap.h"
-#include "in-addr-util.h"
 #include "netem.h"
 #include "netlink-util.h"
 #include "networkd-manager.h"
 #include "parse-util.h"
 #include "qdisc.h"
-#include "string-util.h"
+#include "strv.h"
 #include "tc-util.h"
-#include "util.h"
 
-int network_emulator_new(NetworkEmulator **ret) {
-        NetworkEmulator *ne = NULL;
-
-        ne = new(NetworkEmulator, 1);
-        if (!ne)
-                return -ENOMEM;
-
-        *ne = (NetworkEmulator) {
-                .delay = USEC_INFINITY,
-                .jitter = USEC_INFINITY,
-        };
-
-        *ret = TAKE_PTR(ne);
-
-        return 0;
-}
-
-int network_emulator_fill_message(Link *link, QDiscs *qdisc, sd_netlink_message *req) {
+static int network_emulator_fill_message(Link *link, QDisc *qdisc, sd_netlink_message *req) {
         struct tc_netem_qopt opt = {
                .limit = 1000,
         };
+        NetworkEmulator *ne;
         int r;
 
         assert(link);
         assert(qdisc);
         assert(req);
 
-        if (qdisc->ne.limit > 0)
-                opt.limit = qdisc->ne.limit;
+        ne = NETEM(qdisc);
 
-        if (qdisc->ne.loss > 0)
-                opt.loss = qdisc->ne.loss;
+        if (ne->limit > 0)
+                opt.limit = ne->limit;
 
-        if (qdisc->ne.duplicate > 0)
-                opt.duplicate = qdisc->ne.duplicate;
+        if (ne->loss > 0)
+                opt.loss = ne->loss;
 
-        if (qdisc->ne.delay != USEC_INFINITY) {
-                r = tc_time_to_tick(qdisc->ne.delay, &opt.latency);
+        if (ne->duplicate > 0)
+                opt.duplicate = ne->duplicate;
+
+        if (ne->delay != USEC_INFINITY) {
+                r = tc_time_to_tick(ne->delay, &opt.latency);
                 if (r < 0)
                         return log_link_error_errno(link, r, "Failed to calculate latency in TCA_OPTION: %m");
         }
 
-        if (qdisc->ne.jitter != USEC_INFINITY) {
-                r = tc_time_to_tick(qdisc->ne.jitter, &opt.jitter);
+        if (ne->jitter != USEC_INFINITY) {
+                r = tc_time_to_tick(ne->jitter, &opt.jitter);
                 if (r < 0)
                         return log_link_error_errno(link, r, "Failed to calculate jitter in TCA_OPTION: %m");
         }
@@ -72,7 +54,7 @@ int network_emulator_fill_message(Link *link, QDiscs *qdisc, sd_netlink_message 
         return 0;
 }
 
-int config_parse_tc_network_emulator_delay(
+int config_parse_network_emulator_delay(
                 const char *unit,
                 const char *filename,
                 unsigned line,
@@ -84,8 +66,9 @@ int config_parse_tc_network_emulator_delay(
                 void *data,
                 void *userdata) {
 
-        _cleanup_(qdisc_free_or_set_invalidp) QDiscs *qdisc = NULL;
+        _cleanup_(qdisc_free_or_set_invalidp) QDisc *qdisc = NULL;
         Network *network = data;
+        NetworkEmulator *ne;
         usec_t u;
         int r;
 
@@ -94,15 +77,20 @@ int config_parse_tc_network_emulator_delay(
         assert(rvalue);
         assert(data);
 
-        r = qdisc_new_static(network, filename, section_line, &qdisc);
+        r = qdisc_new_static(QDISC_KIND_NETEM, network, filename, section_line, &qdisc);
+        if (r == -ENOMEM)
+                return log_oom();
         if (r < 0)
-                return r;
+                return log_syntax(unit, LOG_ERR, filename, line, r,
+                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+
+        ne = NETEM(qdisc);
 
         if (isempty(rvalue)) {
-                if (streq(lvalue, "NetworkEmulatorDelaySec"))
-                        qdisc->ne.delay = USEC_INFINITY;
-                else if (streq(lvalue, "NetworkEmulatorDelayJitterSec"))
-                        qdisc->ne.jitter = USEC_INFINITY;
+                if (STR_IN_SET(lvalue, "DelaySec", "NetworkEmulatorDelaySec"))
+                        ne->delay = USEC_INFINITY;
+                else if (STR_IN_SET(lvalue, "DelayJitterSec", "NetworkEmulatorDelayJitterSec"))
+                        ne->jitter = USEC_INFINITY;
 
                 qdisc = NULL;
                 return 0;
@@ -116,18 +104,17 @@ int config_parse_tc_network_emulator_delay(
                 return 0;
         }
 
-        if (streq(lvalue, "NetworkEmulatorDelaySec"))
-                qdisc->ne.delay = u;
-        else if (streq(lvalue, "NetworkEmulatorDelayJitterSec"))
-                qdisc->ne.jitter = u;
+        if (STR_IN_SET(lvalue, "DelaySec", "NetworkEmulatorDelaySec"))
+                ne->delay = u;
+        else if (STR_IN_SET(lvalue, "DelayJitterSec", "NetworkEmulatorDelayJitterSec"))
+                ne->jitter = u;
 
-        qdisc->has_network_emulator = true;
         qdisc = NULL;
 
         return 0;
 }
 
-int config_parse_tc_network_emulator_rate(
+int config_parse_network_emulator_rate(
                 const char *unit,
                 const char *filename,
                 unsigned line,
@@ -139,8 +126,9 @@ int config_parse_tc_network_emulator_rate(
                 void *data,
                 void *userdata) {
 
-        _cleanup_(qdisc_free_or_set_invalidp) QDiscs *qdisc = NULL;
+        _cleanup_(qdisc_free_or_set_invalidp) QDisc *qdisc = NULL;
         Network *network = data;
+        NetworkEmulator *ne;
         uint32_t rate;
         int r;
 
@@ -149,12 +137,20 @@ int config_parse_tc_network_emulator_rate(
         assert(rvalue);
         assert(data);
 
-        r = qdisc_new_static(network, filename, section_line, &qdisc);
+        r = qdisc_new_static(QDISC_KIND_NETEM, network, filename, section_line, &qdisc);
+        if (r == -ENOMEM)
+                return log_oom();
         if (r < 0)
-                return r;
+                return log_syntax(unit, LOG_ERR, filename, line, r,
+                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+
+        ne = NETEM(qdisc);
 
         if (isempty(rvalue)) {
-                qdisc->ne.loss = 0;
+                if (STR_IN_SET(lvalue, "LossRate", "NetworkEmulatorLossRate"))
+                        ne->loss = 0;
+                else if (STR_IN_SET(lvalue, "DuplicateRate", "NetworkEmulatorDuplicateRate"))
+                        ne->duplicate = 0;
 
                 qdisc = NULL;
                 return 0;
@@ -168,16 +164,16 @@ int config_parse_tc_network_emulator_rate(
                 return 0;
         }
 
-        if (streq(lvalue, "NetworkEmulatorLossRate"))
-                qdisc->ne.loss = rate;
-        else if (streq(lvalue, "NetworkEmulatorDuplicateRate"))
-                qdisc->ne.duplicate = rate;
+        if (STR_IN_SET(lvalue, "LossRate", "NetworkEmulatorLossRate"))
+                ne->loss = rate;
+        else if (STR_IN_SET(lvalue, "DuplicateRate", "NetworkEmulatorDuplicateRate"))
+                ne->duplicate = rate;
 
         qdisc = NULL;
         return 0;
 }
 
-int config_parse_tc_network_emulator_packet_limit(
+int config_parse_network_emulator_packet_limit(
                 const char *unit,
                 const char *filename,
                 unsigned line,
@@ -189,8 +185,9 @@ int config_parse_tc_network_emulator_packet_limit(
                 void *data,
                 void *userdata) {
 
-        _cleanup_(qdisc_free_or_set_invalidp) QDiscs *qdisc = NULL;
+        _cleanup_(qdisc_free_or_set_invalidp) QDisc *qdisc = NULL;
         Network *network = data;
+        NetworkEmulator *ne;
         int r;
 
         assert(filename);
@@ -198,25 +195,36 @@ int config_parse_tc_network_emulator_packet_limit(
         assert(rvalue);
         assert(data);
 
-        r = qdisc_new_static(network, filename, section_line, &qdisc);
+        r = qdisc_new_static(QDISC_KIND_NETEM, network, filename, section_line, &qdisc);
+        if (r == -ENOMEM)
+                return log_oom();
         if (r < 0)
-                return r;
+                return log_syntax(unit, LOG_ERR, filename, line, r,
+                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+
+        ne = NETEM(qdisc);
 
         if (isempty(rvalue)) {
-                qdisc->ne.limit = 0;
+                ne->limit = 0;
                 qdisc = NULL;
 
                 return 0;
         }
 
-        r = safe_atou(rvalue, &qdisc->ne.limit);
+        r = safe_atou(rvalue, &ne->limit);
         if (r < 0) {
                 log_syntax(unit, LOG_ERR, filename, line, r,
-                           "Failed to parse 'NetworkEmulatorPacketLimit=', ignoring assignment: %s",
-                           rvalue);
+                           "Failed to parse '%s=', ignoring assignment: %s",
+                           lvalue, rvalue);
                 return 0;
         }
 
         qdisc = NULL;
         return 0;
 }
+
+const QDiscVTable netem_vtable = {
+        .object_size = sizeof(NetworkEmulator),
+        .tca_kind = "netem",
+        .fill_message = network_emulator_fill_message,
+};

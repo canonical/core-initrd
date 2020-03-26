@@ -38,11 +38,11 @@ static void test_config_parse_iec_size_one(const char *rvalue, size_t expected) 
         assert_se(expected == iec_size);
 }
 
-static void test_config_parse_si_size_one(const char *rvalue, size_t expected) {
-        size_t si_size = 0;
+static void test_config_parse_si_uint64_one(const char *rvalue, uint64_t expected) {
+        uint64_t si_uint64 = 0;
 
-        assert_se(config_parse_si_size("unit", "filename", 1, "section", 1, "lvalue", 0, rvalue, &si_size, NULL) >= 0);
-        assert_se(expected == si_size);
+        assert_se(config_parse_si_uint64("unit", "filename", 1, "section", 1, "lvalue", 0, rvalue, &si_uint64, NULL) >= 0);
+        assert_se(expected == si_uint64);
 }
 
 static void test_config_parse_int_one(const char *rvalue, int expected) {
@@ -125,17 +125,17 @@ static void test_config_parse_iec_size(void) {
         test_config_parse_iec_size_one("garbage", 0);
 }
 
-static void test_config_parse_si_size(void) {
-        test_config_parse_si_size_one("1024", 1024);
-        test_config_parse_si_size_one("2K", 2000);
-        test_config_parse_si_size_one("10M", 10 * 1000 * 1000);
-        test_config_parse_si_size_one("1G", 1 * 1000 * 1000 * 1000);
-        test_config_parse_si_size_one("0G", 0);
-        test_config_parse_si_size_one("0", 0);
+static void test_config_parse_si_uint64(void) {
+        test_config_parse_si_uint64_one("1024", 1024);
+        test_config_parse_si_uint64_one("2K", 2000);
+        test_config_parse_si_uint64_one("10M", 10 * 1000 * 1000);
+        test_config_parse_si_uint64_one("1G", 1 * 1000 * 1000 * 1000);
+        test_config_parse_si_uint64_one("0G", 0);
+        test_config_parse_si_uint64_one("0", 0);
 
-        test_config_parse_si_size_one("-982", 0);
-        test_config_parse_si_size_one("49874444198739873000000G", 0);
-        test_config_parse_si_size_one("garbage", 0);
+        test_config_parse_si_uint64_one("-982", 0);
+        test_config_parse_si_uint64_one("49874444198739873000000G", 0);
+        test_config_parse_si_uint64_one("garbage", 0);
 }
 
 static void test_config_parse_int(void) {
@@ -299,6 +299,15 @@ static const char* const config_file[] = {
         "[Section]\n"
         "setting1="          /* many continuation lines, together above the limit */
         x1000(x1000("x") x10("abcde") "\\\n") "xxx",
+
+        "[Section]\n"
+        "setting1=2\n"
+        "[NoWarnSection]\n"
+        "setting1=3\n"
+        "[WarnSection]\n"
+        "setting1=3\n"
+        "[X-Section]\n"
+        "setting1=3\n",
 };
 
 static void test_config_parse(unsigned i, const char *s) {
@@ -325,14 +334,12 @@ static void test_config_parse(unsigned i, const char *s) {
                          const char *sections,
                          ConfigItemLookup lookup,
                          const void *table,
-                         bool relaxed,
-                         bool allow_include,
-                         bool warn,
+                         ConfigParseFlags flags,
                          void *userdata)
         */
 
         r = config_parse(NULL, name, f,
-                         "Section\0",
+                         "Section\0-NoWarnSection\0",
                          config_item_table_lookup, items,
                          CONFIG_PARSE_WARN, NULL);
 
@@ -366,6 +373,11 @@ static void test_config_parse(unsigned i, const char *s) {
                 assert_se(r == -ENOBUFS);
                 assert_se(setting1 == NULL);
                 break;
+
+        case 17:
+                assert_se(r == 0);
+                assert_se(streq(setting1, "2"));
+                break;
         }
 }
 
@@ -379,7 +391,7 @@ int main(int argc, char **argv) {
         test_config_parse_log_level();
         test_config_parse_log_facility();
         test_config_parse_iec_size();
-        test_config_parse_si_size();
+        test_config_parse_si_uint64();
         test_config_parse_int();
         test_config_parse_unsigned();
         test_config_parse_strv();

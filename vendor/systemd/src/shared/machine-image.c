@@ -2,13 +2,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/fs.h>
+#include <linux/loop.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <linux/fs.h>
 
 #include "alloc-util.h"
 #include "btrfs-util.h"
@@ -1166,11 +1167,11 @@ int image_read_metadata(Image *i) {
                 _cleanup_(loop_device_unrefp) LoopDevice *d = NULL;
                 _cleanup_(dissected_image_unrefp) DissectedImage *m = NULL;
 
-                r = loop_device_make_by_path(i->path, O_RDONLY, &d);
+                r = loop_device_make_by_path(i->path, O_RDONLY, LO_FLAGS_PARTSCAN, &d);
                 if (r < 0)
                         return r;
 
-                r = dissect_image(d->fd, NULL, 0, DISSECT_IMAGE_REQUIRE_ROOT, &m);
+                r = dissect_image(d->fd, NULL, 0, DISSECT_IMAGE_REQUIRE_ROOT|DISSECT_IMAGE_RELAX_VAR_CHECK, &m);
                 if (r < 0)
                         return r;
 

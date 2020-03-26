@@ -48,10 +48,12 @@ typedef struct Link {
         int ifindex;
         int master_ifindex;
         char *ifname;
+        char **alternative_names;
         char *kind;
         unsigned short iftype;
         char *state_file;
         struct ether_addr mac;
+        struct ether_addr permanent_mac;
         struct in6_addr ipv6ll_address;
         uint32_t mtu;
         sd_device *sd_device;
@@ -116,6 +118,7 @@ typedef struct Link {
         bool routing_policy_rules_configured:1;
         bool qdiscs_configured:1;
         bool setting_mtu:1;
+        bool setting_genmode:1;
         bool ipv6_mtu_set:1;
 
         LIST_HEAD(Address, pool_addresses);
@@ -213,6 +216,13 @@ int link_request_set_routes(Link *link);
 int link_request_set_nexthop(Link *link);
 
 int link_reconfigure(Link *link, bool force);
+
+int log_link_message_full_errno(Link *link, sd_netlink_message *m, int level, int err, const char *msg);
+#define log_link_message_error_errno(link, m, err, msg)   log_link_message_full_errno(link, m, LOG_ERR, err, msg)
+#define log_link_message_warning_errno(link, m, err, msg) log_link_message_full_errno(link, m, LOG_WARNING, err, msg)
+#define log_link_message_notice_errno(link, m, err, msg)  log_link_message_full_errno(link, m, LOG_NOTICE, err, msg)
+#define log_link_message_info_errno(link, m, err, msg)    log_link_message_full_errno(link, m, LOG_INFO, err, msg)
+#define log_link_message_debug_errno(link, m, err, msg)   log_link_message_full_errno(link, m, LOG_DEBUG, err, msg)
 
 #define ADDRESS_FMT_VAL(address)                   \
         be32toh((address).s_addr) >> 24,           \

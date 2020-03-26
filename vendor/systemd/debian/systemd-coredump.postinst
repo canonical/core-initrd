@@ -1,9 +1,10 @@
 #!/bin/sh
+
 set -e
 
 if [ "$1" = configure ]; then
     adduser --quiet --system --group --no-create-home --home /run/systemd \
-        --gecos "systemd core dump processing" systemd-coredump
+        --gecos "systemd Core Dumper" systemd-coredump
 
     # enable systemd-coredump right after package installation
     if [ -d /run/systemd/system ]; then
