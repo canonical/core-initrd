@@ -111,10 +111,9 @@ override_dh_auto_configure:
       -Dglib=false \
       -Ddbus=false \
       -Dgnu-efi=true \
+      -Duserdb=false \
       -Dbashcompletiondir=no \
       -Dzshcompletiondir=no \
-      -Dtests=true \
-      -Dslow-tests=true \
       -Dinstall-tests=false
 
 override_dh_auto_test:
@@ -167,6 +166,8 @@ override_dh_auto_install:
 		usr/bin/systemd-cgtop \
 		usr/bin/systemd-cgls \
 		usr/bin/systemd-escape \
+		usr/bin/kernel-install \
+		usr/bin/systemd-nspawn \
 		"; \
 	for p in $$clean_paths; do \
 		rm -rf debian/tmp/$$p ;\
