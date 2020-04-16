@@ -8,6 +8,3 @@ fi
 mount -o bind /run/image.fstab /sysroot/etc/fstab
 umount -lf /sysroot/run
 cp /run/systemd/transient/*.mount /etc/systemd/system
-# write modeenv
-/usr/lib/snapd/snap-bootstrap initramfs-mounts
-

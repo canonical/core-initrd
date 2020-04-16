@@ -4,7 +4,10 @@ OnFailureJobMode=replace-irreversibly
 DefaultDependencies=no
 After=systemd-tmpfiles-setup.service
 
+Requires=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
+After=systemd-fsck@dev-disk-by\x2dlabel-ubuntu\x2dseed.service
+
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/lib/the-tool %i
+ExecStart=/usr/lib/the-tool

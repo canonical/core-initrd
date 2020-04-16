@@ -3,10 +3,18 @@ set -e
 
 # Run snap-bootstrap
 cmd="systemd-mount --no-pager --no-ask-password "
-/usr/lib/snapd/snap-bootstrap initramfs-mounts | sed "s/^/$cmd/" > /root/bootstrap.cmds.$1
-set +e
-. /root/bootstrap.cmds.$1
-set -e
+pass=0
+while true; do
+    needed="$(/usr/lib/snapd/snap-bootstrap initramfs-mounts)"
+    if [ -z "$needed" ]; then
+       break
+    fi
+    echo "$needed" | sed "s/^/$cmd/" > "/root/bootstrap.cmds.$pass"
+    set +e
+    . /root/bootstrap.cmds.$pass
+    set -e
+    pass=$((pass + 1))
+done
 
 mkdir -p /run/systemd/system/initrd-fs.target.d
 cat >/run/systemd/system/initrd-fs.target.d/core.conf <<EOF
