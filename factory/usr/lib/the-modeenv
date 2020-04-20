@@ -2,8 +2,12 @@
 umount /sysroot/run/fstab
 cp /sysroot/run/image.fstab /run/
 if grep -q snapd_recovery_mode=run /proc/cmdline; then
-    echo 'LABEL=ubuntu-boot /run/mnt/ubuntu-boot auto defaults 0 0' >> /run/image.fstab
-    echo '/run/mnt/ubuntu-boot/EFI/ubuntu /boot/grub none bind 0 0' >> /run/image.fstab
+    # TODO:UC20: support other bootloaders too
+    if [ -f /run/mnt/ubuntu-boot/EFI/ubuntu/grub.cfg ]; then
+        echo '/run/mnt/ubuntu-boot/EFI/ubuntu /boot/grub none bind 0 0' >> /run/image.fstab
+    elif [ -f /run/mnt/ubuntu-boot/boot/uboot/uboot.env ]; then
+        echo '/run/mnt/ubuntu-boot/boot/uboot /boot/uboot none bind 0 0' >> /run/image.fstab
+    fi
 fi
 mount -o bind /run/image.fstab /sysroot/etc/fstab
 umount -lf /sysroot/run
