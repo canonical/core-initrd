@@ -1,1 +1,2 @@
-usr/lib/systemd/systemd
+#!/bin/sh
+exec /usr/lib/systemd/systemd --unit=basic.target
