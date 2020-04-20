@@ -158,6 +158,7 @@ override_dh_auto_install:
 		usr/lib/systemd/catalog \
 		usr/lib/systemd/user-preset \
 		usr/lib/systemd/network \
+		usr/lib/systemd/system-generators/systemd-gpt-auto-generator \
 		usr/lib/sysusers.d \
 		usr/lib/*/pkgconfig \
 		usr/include \
