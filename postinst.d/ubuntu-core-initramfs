@@ -12,6 +12,11 @@ if [ -n "$DEB_MAINT_PARAMS" ]; then
 	fi
 fi
 
+# do not clobber pre-signed .efi
+if [ -e /boot/kernel.efi-$version ]; then
+    exit 0
+fi
+
 ubuntu-core-initramfs create-initrd --kernelver $version
 
 case `dpkg --print-architecture` in
