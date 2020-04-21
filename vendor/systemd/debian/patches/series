@@ -44,3 +44,4 @@ Revert-network-do-not-drop-foreign-config-if-interface-is.patch
 lp1845909/0002-network-add-link-setting_genmode-flag.patch
 Revert-network-if-sys-is-rw-then-udev-should-be-around.patch
 network-Set-link-state-to-LINK_STATE_PENDING-instead-of-t.patch
+ubuntu-core-initramfs-fix-default.target
