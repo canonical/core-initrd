@@ -6,8 +6,8 @@ if grep -q snapd_recovery_mode=run /proc/cmdline; then
     # TODO:UC20: support other bootloaders too
     if [ -f /run/mnt/ubuntu-boot/EFI/ubuntu/grub.cfg ]; then
         echo '/run/mnt/ubuntu-boot/EFI/ubuntu /boot/grub none bind 0 0' >> /run/image.fstab
-    elif [ -f /run/mnt/ubuntu-boot/boot/uboot/uboot.env ]; then
-        echo '/run/mnt/ubuntu-boot/boot/uboot /boot/uboot none bind 0 0' >> /run/image.fstab
+    elif [ -f /run/mnt/ubuntu-boot/uboot/ubuntu/boot.sel ]; then
+        echo '/run/mnt/ubuntu-boot/uboot/ubuntu /boot/uboot none bind 0 0' >> /run/image.fstab
     fi
 fi
 mount -o bind /run/image.fstab /sysroot/etc/fstab
