@@ -22,4 +22,4 @@ ExecStart=/usr/bin/mount --type tmpfs tmpfs /sysroot/run
 ExecStart=/usr/bin/touch /sysroot/run/fstab
 ExecStart=/usr/bin/chroot /sysroot /usr/lib/core/handle-writable-paths / /etc/system-image/writable-paths /run/fstab
 ExecStart=/usr/lib/the-modeenv
-ExecStartPost=/usr/bin/systemctl --no-block isolate initrd.target
+ExecStartPost=/usr/bin/systemctl --no-block start initrd.target
