@@ -1,6 +1,9 @@
 #!/bin/sh
 umount /sysroot/run/fstab
 cp /sysroot/run/image.fstab /run/
+# Always bind-mount all the host filesystems
+mkdir -p /run/mnt/host
+echo '/run/mnt/host /host none rbind 0 0' >> /run/image.fstab
 if grep -q snapd_recovery_mode=run /proc/cmdline; then
     echo 'LABEL=ubuntu-boot /run/mnt/ubuntu-boot auto defaults 0 0' >> /run/image.fstab
     # TODO:UC20: support other bootloaders too
