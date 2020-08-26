@@ -2,20 +2,10 @@
 set -e
 
 # Run snap-bootstrap
-cmd="systemd-mount --no-pager --no-ask-password "
-pass=0
-while true; do
-    needed="$(/usr/lib/snapd/snap-bootstrap initramfs-mounts)"
-    if [ -z "$needed" ]; then
-       break
-    fi
-    echo "$needed" | sed "s/^/$cmd/" > "/root/bootstrap.cmds.$pass"
-    set +e
-    . /root/bootstrap.cmds.$pass
-    set -e
-    pass=$((pass + 1))
-done
+/usr/lib/snapd/snap-bootstrap initramfs-mounts
 
+# TODO:UC20: move this code into snap-bootstrap proper so this script _just_ 
+# calls snap-bootstrap
 mkdir -p /run/systemd/system/initrd-fs.target.d
 cat >/run/systemd/system/initrd-fs.target.d/core.conf <<EOF
 [Unit]
