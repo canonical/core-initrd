@@ -3,3 +3,7 @@ install-tmp
 ubuntu-core-initramfs.img
 factory/usr/lib/snapd/snap-bootstrap
 debian/files
+
+*.snap
+*.img
+.spread-reuse*.yaml
