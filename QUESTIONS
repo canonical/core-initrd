@@ -1,6 +1,0 @@
-* Why do we mount /writable ?
-* why do we mount so much from the initrd, rather than the running system?
-
-* we need uboot on amd64?! (arch specific, no?)
-
-* how much of /etc should be writable...
