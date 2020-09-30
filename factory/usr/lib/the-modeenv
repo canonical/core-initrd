@@ -12,6 +12,8 @@ if grep -q snapd_recovery_mode=run /proc/cmdline; then
     # TODO:UC20: support other bootloaders too
     if [ -f /run/mnt/ubuntu-boot/EFI/ubuntu/grub.cfg ]; then
         echo '/run/mnt/ubuntu-boot/EFI/ubuntu /boot/grub none bind 0 0' >> /run/image.fstab
+        # ensure ESP efi dir is available for fwupdate (LP: 1892392)
+        echo '/run/mnt/ubuntu-seed/ /boot/efi none bind 0 0' >> /run/image.fstab        
     elif [ -f /run/mnt/ubuntu-boot/uboot/ubuntu/boot.sel ]; then
         echo '/run/mnt/ubuntu-boot/uboot/ubuntu /boot/uboot none bind 0 0' >> /run/image.fstab
     fi
