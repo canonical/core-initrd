@@ -12,3 +12,5 @@ Wants=systemd-udev-settle.service
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/usr/lib/the-tool
+StandardOutput=journal+console
+StandardError=journal+console
