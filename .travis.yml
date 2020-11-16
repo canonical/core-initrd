@@ -9,5 +9,4 @@ install:
   - popd
 
 script:
-  - env
   - "/tmp/spread google-nested:"
