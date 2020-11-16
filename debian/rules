@@ -163,7 +163,6 @@ override_dh_auto_install:
 		usr/lib/*/pkgconfig \
 		usr/include \
 		usr/bin/busctl \
-		usr/bin/systemd-run \
 		usr/bin/systemd-cgtop \
 		usr/bin/systemd-cgls \
 		usr/bin/systemd-escape \
