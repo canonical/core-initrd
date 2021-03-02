@@ -18,7 +18,16 @@ def create_initrd(parser, args):
         args.output = "-".join([args.output, args.kernelver])
     with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
         main = os.path.join(d, "main")
-        kvdir = os.path.join(args.kerneldir, args.kernelver)
+
+        kernel_root = os.path.join(d, "kernel")
+        modules = os.path.join(kernel_root, "usr", "lib", "modules")
+        os.makedirs(modules, exist_ok=True)
+        modules = os.path.join(modules, args.kernelver)
+        subprocess.check_call(["cp", "-ar", args.kerneldir, modules])
+
+        firmware = os.path.join(kernel_root, "usr", "lib", "firmware")
+        subprocess.check_call(["cp", "-ar", args.firmwaredir, firmware])
+
         subprocess.check_call(["cp", "-ar", "%s/main" % args.skeleton, d])
         # Should itirate all the .conf drop ins
         with open(
@@ -34,10 +43,11 @@ def create_initrd(parser, args):
                             "/usr/lib/dracut/dracut-install",
                             "-D",
                             main,
+                            "-r", kernel_root,
                             "--kerneldir",
-                            kvdir,
+                            modules,
                             "--firmwaredirs",
-                            args.firmwaredir,
+                            firmware,
                             "--module",
                             "--optional",
                             module,
@@ -50,7 +60,8 @@ def create_initrd(parser, args):
                     "/usr/lib/dracut/dracut-install",
                     "-D",
                     main,
-                    os.path.join(kvdir, modulesf),
+                    "-r", kernel_root,
+                    os.path.join(modules, modulesf),
                     os.path.join("usr/lib/modules", args.kernelver, modulesf),
                 ]
             )
@@ -159,7 +170,7 @@ def main():
         "--skeleton", help="path to skeleton", default="/usr/lib/ubuntu-core-initramfs"
     )
     initrd_parser.add_argument(
-        "--kerneldir", help="path to kernel modules", default="/lib/modules"
+        "--kerneldir", help="path to kernel modules dir", default="/lib/modules/%s" % kernelver
     )
     initrd_parser.add_argument("--kernelver", help="kernel version", default=kernelver)
     initrd_parser.add_argument(
