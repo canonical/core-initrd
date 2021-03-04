@@ -1,0 +1,53 @@
+From 5170afbc55d492f270c8948579324910c8c0b838 Mon Sep 17 00:00:00 2001
+From: Daniel Mack <daniel@zonque.org>
+Date: Fri, 28 Aug 2020 16:14:12 +0200
+Subject: [PATCH] clock-util: read timestamp from /usr/lib/clock-epoch
+
+On systems without an RTC, systemd currently sets the clock to a
+compile-time epoch value, derived from the NEWS file in the
+repository. This is not ideal as the initial clock hence depends
+on the last time systemd was built, not when the image was compiled.
+
+Let's provide a different way here and look at `/usr/lib/clock-epoch`.
+If that file exists, it's timestamp for the last modification will be
+used instead of the compile-time default.
+---
+ src/shared/clock-util.c | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/src/shared/clock-util.c b/src/shared/clock-util.c
+index 32cce1e109..0f0dd8281c 100644
+--- a/src/shared/clock-util.c
++++ b/src/shared/clock-util.c
+@@ -142,15 +142,25 @@ int clock_reset_timewarp(void) {
+         return 0;
+ }
+ 
+-#define TIME_EPOCH_USEC ((usec_t) TIME_EPOCH * USEC_PER_SEC)
++#define EPOCH_FILE "/usr/lib/clock-epoch"
+ 
+ int clock_apply_epoch(void) {
++        struct stat st;
+         struct timespec ts;
++        usec_t epoch_usec;
+ 
+-        if (now(CLOCK_REALTIME) >= TIME_EPOCH_USEC)
++        if (stat(EPOCH_FILE, &st) < 0) {
++                if (errno != ENOENT)
++                        log_warning_errno(errno, "Cannot stat %s: %m\n", EPOCH_FILE);
++
++                epoch_usec = ((usec_t) TIME_EPOCH * USEC_PER_SEC);
++        } else
++                epoch_usec = timespec_load(&st.st_mtim);
++
++        if (now(CLOCK_REALTIME) >= epoch_usec)
+                 return 0;
+ 
+-        if (clock_settime(CLOCK_REALTIME, timespec_store(&ts, TIME_EPOCH_USEC)) < 0)
++        if (clock_settime(CLOCK_REALTIME, timespec_store(&ts, epoch_usec)) < 0)
+                 return -errno;
+ 
+         return 1;
+-- 
+2.27.0
+

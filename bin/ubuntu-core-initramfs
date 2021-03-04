@@ -3,6 +3,7 @@ import argparse
 import os
 import subprocess
 import tempfile
+import pathlib
 import platform
 import glob
 import shutil
@@ -29,6 +30,8 @@ def create_initrd(parser, args):
         subprocess.check_call(["cp", "-ar", args.firmwaredir, firmware])
 
         subprocess.check_call(["cp", "-ar", "%s/main" % args.skeleton, d])
+        # Update epoch
+        pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
         # Should itirate all the .conf drop ins
         with open(
             os.path.join(main, "usr/lib/modules-load.d/ubuntu-core-initramfs.conf")

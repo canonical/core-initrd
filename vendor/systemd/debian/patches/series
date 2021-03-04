@@ -1,4 +1,5 @@
 ubuntu-core-initramfs-fix-default.target
+ubuntu-core-initramfs-clock-util-read-timestamp-from-usr-lib-clock-epoch.patch
 pid1-by-default-make-user-units-inherit-their-umask-from-.patch
 userdbctl-drop-redundant-user-name-validity-check.patch
 user-util-rework-how-we-validate-user-names.patch
