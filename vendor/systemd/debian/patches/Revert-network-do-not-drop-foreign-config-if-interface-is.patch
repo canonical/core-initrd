@@ -9,7 +9,7 @@ This reverts commit e8b53300c4160f55447c2f6b02fcde05b47faedc.
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
-index 510d55e..177a0e3 100644
+index 4492407..553dd28 100644
 --- a/src/network/networkd-link.c
 +++ b/src/network/networkd-link.c
 @@ -3078,7 +3078,7 @@ static int link_reconfigure_internal(Link *link, sd_netlink_message *m, bool for
@@ -21,7 +21,7 @@ index 510d55e..177a0e3 100644
                  log_link_debug(link, "State is %s, dropping config", link_state_to_string(link->state));
                  r = link_drop_foreign_config(link);
                  if (r < 0)
-@@ -3633,7 +3633,7 @@ static int link_carrier_lost(Link *link) {
+@@ -3641,7 +3641,7 @@ static int link_carrier_lost(Link *link) {
          if (r < 0)
                  return r;
  

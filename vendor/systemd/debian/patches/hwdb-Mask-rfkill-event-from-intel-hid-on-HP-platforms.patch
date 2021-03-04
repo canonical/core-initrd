@@ -1,0 +1,27 @@
+From: Kai-Heng Feng <kai.heng.feng@canonical.com>
+Date: Thu, 11 Jun 2020 21:32:12 +0800
+Subject: hwdb: Mask rfkill event from intel-hid on HP platforms
+
+HP spec mandates the hp-wireless driver as canonical source of rfkill
+event, so mask the rfkill event from intel-hid to avoid double rfkill
+events fired from a single hotkey press.
+
+(cherry picked from commit d8a9dd0dc17df77229d079afe29c05ae4a9e2ae9)
+---
+ hwdb.d/60-keyboard.hwdb | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hwdb.d/60-keyboard.hwdb b/hwdb.d/60-keyboard.hwdb
+index fae0ecc..3d9a5d7 100644
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -481,6 +481,9 @@ evdev:input:b0003v0458p0708*
+ # Hewlett Packard
+ ###########################################################
+ 
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pn*:pvr*
++ KEYBOARD_KEY_8=unknown					# Use hp-wireless instead
++
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*:pvr*
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pn*:pvr*
+  KEYBOARD_KEY_81=fn_esc

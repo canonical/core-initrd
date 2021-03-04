@@ -1,0 +1,97 @@
+From b453122789ec4c6f39e6ceb9900e0e80a6abeb99 Mon Sep 17 00:00:00 2001
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Mon, 16 Mar 2020 18:55:10 +0900
+Subject: [PATCH 1/2] network: add a flag to ignore gateway provided by DHCP
+ server
+Origin: upstream, https://github.com/systemd/systemd/pull/15136
+Bug: https://github.com/systemd/systemd/issues/15117
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1867375
+
+Closes #15117.
+---
+ man/systemd.network.xml                          | 8 +++++++-
+ src/network/networkd-dhcp4.c                     | 5 ++++-
+ src/network/networkd-network-gperf.gperf         | 1 +
+ src/network/networkd-network.c                   | 1 +
+ src/network/networkd-network.h                   | 1 +
+ test/fuzz/fuzz-network-parser/directives.network | 1 +
+ 6 files changed, 15 insertions(+), 2 deletions(-)
+
+--- a/man/systemd.network.xml
++++ b/man/systemd.network.xml
+@@ -1474,7 +1474,13 @@
+               "link" scope will be used. For anything else, scope defaults to "global".</para>
+           </listitem>
+         </varlistentry>
+-
++        <varlistentry>
++          <term><varname>UseGateway=</varname></term>
++          <listitem>
++            <para>When true (the default), the gateway will be requested from the DHCP server and added to the
++            routing table with a metric of 1024, and a scope of "link".</para>
++          </listitem>
++        </varlistentry>
+         <varlistentry>
+           <term><varname>UseTimezone=</varname></term>
+ 
+--- a/src/network/networkd-dhcp4.c
++++ b/src/network/networkd-dhcp4.c
+@@ -323,6 +323,9 @@ static int link_set_dhcp_routes(Link *li
+                 }
+         }
+ 
++        if (!link->network->dhcp_use_gateway)
++                return 0;
++
+         r = sd_dhcp_lease_get_router(link->dhcp_lease, &router);
+         if (IN_SET(r, 0, -ENODATA))
+                 log_link_info(link, "DHCP: No gateway received from DHCP server.");
+@@ -451,7 +454,7 @@ static int dhcp_remove_router(Link *link
+         assert(link);
+         assert(address);
+ 
+-        if (!link->network->dhcp_use_routes)
++        if (!link->network->dhcp_use_gateway)
+                 return 0;
+ 
+         r = sd_dhcp_lease_get_router(lease, &router);
+--- a/src/network/networkd-network-gperf.gperf
++++ b/src/network/networkd-network-gperf.gperf
+@@ -162,6 +162,7 @@ DHCPv4.UseMTU,
+ DHCPv4.UseHostname,                          config_parse_bool,                                        0,                             offsetof(Network, dhcp_use_hostname)
+ DHCPv4.UseDomains,                           config_parse_dhcp_use_domains,                            0,                             offsetof(Network, dhcp_use_domains)
+ DHCPv4.UseRoutes,                            config_parse_bool,                                        0,                             offsetof(Network, dhcp_use_routes)
++DHCPv4.UseGateway,                           config_parse_bool,                                        0,                             offsetof(Network, dhcp_use_gateway)
+ DHCPv4.RequestOptions,                       config_parse_dhcp_request_options,                        0,                             0
+ DHCPv4.Anonymize,                            config_parse_bool,                                        0,                             offsetof(Network, dhcp_anonymize)
+ DHCPv4.SendHostname,                         config_parse_bool,                                        0,                             offsetof(Network, dhcp_send_hostname)
+--- a/src/network/networkd-network.c
++++ b/src/network/networkd-network.c
+@@ -383,6 +383,7 @@ int network_load_one(Manager *manager, O
+                 .dhcp_use_dns = true,
+                 .dhcp_use_hostname = true,
+                 .dhcp_use_routes = true,
++                .dhcp_use_gateway = true,
+                 /* NOTE: this var might be overwritten by network_apply_anonymize_if_set */
+                 .dhcp_send_hostname = true,
+                 .dhcp_send_release = true,
+--- a/src/network/networkd-network.h
++++ b/src/network/networkd-network.h
+@@ -110,6 +110,7 @@ struct Network {
+         bool dhcp_use_sip;
+         bool dhcp_use_mtu;
+         bool dhcp_use_routes;
++        bool dhcp_use_gateway;
+         bool dhcp_use_timezone;
+         bool rapid_commit;
+         bool dhcp_use_hostname;
+--- a/test/fuzz/fuzz-network-parser/directives.network
++++ b/test/fuzz/fuzz-network-parser/directives.network
+@@ -73,6 +73,7 @@ UseDNS=
+ RoutesToDNS=
+ UseDomains=
+ UseRoutes=
++UseGateway=
+ IAID=
+ UserClass=
+ UseNTP=

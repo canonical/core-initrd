@@ -1,0 +1,56 @@
+From 0d7bd445d26590aad7b05040c9d8423fcd6e5d4f Mon Sep 17 00:00:00 2001
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Mon, 16 Mar 2020 19:08:36 +0900
+Subject: [PATCH 2/2] test-network: add a test case for DHCPv4.UseGateway=no
+Origin: upstream, https://github.com/systemd/systemd/pull/15136
+Bug: https://github.com/systemd/systemd/issues/15117
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1867375
+
+---
+ .../conf/dhcp-client-ipv4-use-gateway-no.network   |  9 +++++++++
+ test/test-network/systemd-networkd-tests.py        | 14 ++++++++++++++
+ 2 files changed, 23 insertions(+)
+ create mode 100644 test/test-network/conf/dhcp-client-ipv4-use-gateway-no.network
+
+--- /dev/null
++++ b/test/test-network/conf/dhcp-client-ipv4-use-gateway-no.network
+@@ -0,0 +1,9 @@
++[Match]
++Name=veth99
++
++[Network]
++DHCP=ipv4
++IPv6AcceptRA=false
++
++[DHCPv4]
++UseGateway=no
+--- a/test/test-network/systemd-networkd-tests.py
++++ b/test/test-network/systemd-networkd-tests.py
+@@ -2826,6 +2826,7 @@ class NetworkdDHCPClientTests(unittest.T
+         'dhcp-client-ipv4-dhcp-settings.network',
+         'dhcp-client-ipv4-only-ipv6-disabled.network',
+         'dhcp-client-ipv4-only.network',
++        'dhcp-client-ipv4-use-gateway-no.network',
+         'dhcp-client-ipv4-use-routes-no.network',
+         'dhcp-client-ipv6-only.network',
+         'dhcp-client-ipv6-rapid-commit.network',
+@@ -2945,6 +2946,19 @@ class NetworkdDHCPClientTests(unittest.T
+         self.assertRegex(output, r'default via 192.168.5.1 proto dhcp src 192.168.5.181 metric 1024')
+         self.assertRegex(output, r'192.168.5.1 proto dhcp scope link src 192.168.5.181 metric 1024')
+ 
++    def test_dhcp_client_ipv4_use_gateway_no(self):
++        copy_unit_to_networkd_unit_path('25-veth.netdev', 'dhcp-server-veth-peer.network', 'dhcp-client-ipv4-use-gateway-no.network')
++
++        start_networkd()
++        self.wait_online(['veth-peer:carrier'])
++        start_dnsmasq(additional_options='--dhcp-option=option:dns-server,192.168.5.6,192.168.5.7', lease_time='2m')
++        self.wait_online(['veth99:routable', 'veth-peer:routable'])
++
++        output = check_output('ip route show dev veth99')
++        print(output)
++        self.assertRegex(output, r'192.168.5.0/24 via 192.168.5.5 proto dhcp src 192.168.5.181 metric 1024')
++        self.assertNotRegex(output, r'default via 192.168.5.1')
++
+     def test_dhcp_client_ipv4_ipv6(self):
+         copy_unit_to_networkd_unit_path('25-veth.netdev', 'dhcp-server-veth-peer.network', 'dhcp-client-ipv6-only.network',
+                                         'dhcp-client-ipv4-only.network')

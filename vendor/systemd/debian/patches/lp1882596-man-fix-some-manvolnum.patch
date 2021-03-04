@@ -1,0 +1,267 @@
+From 675fa6ea284b715d8fc909e6523f520a0125b7eb Mon Sep 17 00:00:00 2001
+From: Anita Zhang <the.anitazha@gmail.com>
+Date: Fri, 10 Jul 2020 15:05:23 -0700
+Subject: [PATCH] man: fix some manvolnum
+Origin: upstream, https://github.com/systemd/systemd/commit/675fa6ea284b715d8fc909e6523f520a0125b7eb
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1882596
+
+---
+ man/homectl.xml                                | 2 +-
+ man/journal-remote.conf.xml                    | 2 +-
+ man/journal-upload.conf.xml                    | 2 +-
+ man/journalctl.xml                             | 2 +-
+ man/journald.conf.xml                          | 2 +-
+ man/logind.conf.xml                            | 2 +-
+ man/systemd-bless-boot.service.xml             | 2 +-
+ man/systemd-boot-check-no-failures.service.xml | 2 +-
+ man/systemd-environment-d-generator.xml        | 2 +-
+ man/systemd-sleep.conf.xml                     | 2 +-
+ man/systemd-system.conf.xml                    | 2 +-
+ man/systemd-sysv-generator.xml                 | 2 +-
+ man/systemd-xdg-autostart-generator.xml        | 2 +-
+ man/systemd.link.xml                           | 2 +-
+ man/systemd.netdev.xml                         | 2 +-
+ man/systemd.network.xml                        | 2 +-
+ man/systemd.slice.xml                          | 6 +++---
+ man/systemd.unit.xml                           | 2 +-
+ man/systemd.xml                                | 2 +-
+ man/timesyncd.conf.xml                         | 2 +-
+ man/user@.service.xml                          | 4 ++--
+ 21 files changed, 24 insertions(+), 24 deletions(-)
+
+--- a/man/homectl.xml
++++ b/man/homectl.xml
+@@ -395,7 +395,7 @@
+ 
+         <listitem><para>Each of these options takes a time span specification as argument (in the syntax
+         documented in
+-        <citerefentry><refentrytitle>systemd.time</refentrytitle><manvolnum>5</manvolnum></citerefentry>) and
++        <citerefentry><refentrytitle>systemd.time</refentrytitle><manvolnum>7</manvolnum></citerefentry>) and
+         configure various aspects of the user's password expiration policy. Specifically,
+         <option>--password-change-min=</option> configures how much time has to pass after changing the
+         password of the user until the password may be changed again. If the user tries to change their
+--- a/man/journal-remote.conf.xml
++++ b/man/journal-remote.conf.xml
+@@ -39,7 +39,7 @@
+     <para>These files configure various parameters of
+     <citerefentry><refentrytitle>systemd-journal-remote.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+     See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+   </refsect1>
+ 
+--- a/man/journal-upload.conf.xml
++++ b/man/journal-upload.conf.xml
+@@ -34,7 +34,7 @@
+     <para>These files configure various parameters of
+     <citerefentry><refentrytitle>systemd-journal-upload.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+     See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+   </refsect1>
+ 
+--- a/man/journalctl.xml
++++ b/man/journalctl.xml
+@@ -1015,7 +1015,7 @@ journalctl _SYSTEMD_CGROUP=/user.slice/u
+   + OBJECT_SYSTEMD_UNIT=<replaceable>name</replaceable>.service _UID=0
+   + COREDUMP_UNIT=<replaceable>name</replaceable>.service _UID=0 MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1
+     </programlisting>
+-    (see <citerefentry><refentrytitle>systemd.journal-fields</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    (see <citerefentry><refentrytitle>systemd.journal-fields</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for an explanation of those patterns).
+     </para>
+ 
+--- a/man/journald.conf.xml
++++ b/man/journald.conf.xml
+@@ -36,7 +36,7 @@
+     <para>These files configure various parameters of the systemd journal service,
+     <citerefentry><refentrytitle>systemd-journald.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+     See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+ 
+     <para>The <command>systemd-journald</command> instance managing the default namespace is configured by
+--- a/man/logind.conf.xml
++++ b/man/logind.conf.xml
+@@ -36,7 +36,7 @@
+ 
+     <para>These files configure various parameters of the systemd login manager,
+     <citerefentry><refentrytitle>systemd-logind.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>. See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+   </refsect1>
+ 
+--- a/man/systemd-bless-boot.service.xml
++++ b/man/systemd-bless-boot.service.xml
+@@ -106,7 +106,7 @@
+     <para>
+       <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
+       <citerefentry><refentrytitle>systemd-boot</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+-      <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>1</manvolnum></citerefentry>
++      <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     </para>
+   </refsect1>
+ 
+--- a/man/systemd-boot-check-no-failures.service.xml
++++ b/man/systemd-boot-check-no-failures.service.xml
+@@ -45,7 +45,7 @@
+     <title>See Also</title>
+     <para>
+       <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
+-      <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>1</manvolnum></citerefentry>
++      <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     </para>
+   </refsect1>
+ 
+--- a/man/systemd-environment-d-generator.xml
++++ b/man/systemd-environment-d-generator.xml
+@@ -46,7 +46,7 @@
+       <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
+       <citerefentry><refentrytitle>systemctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
+       <citerefentry><refentrytitle>systemd.environment-generator</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+-      <citerefentry><refentrytitle>systemd.generator</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++      <citerefentry><refentrytitle>systemd.generator</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     </para>
+   </refsect1>
+ 
+--- a/man/systemd-sleep.conf.xml
++++ b/man/systemd-sleep.conf.xml
+@@ -95,7 +95,7 @@
+     <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+     attempts to suspend or hibernate the machine.
+     See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+   </refsect1>
+ 
+--- a/man/systemd-system.conf.xml
++++ b/man/systemd-system.conf.xml
+@@ -48,7 +48,7 @@
+     <filename>user.conf.d</filename> directories. These configuration
+     files contain a few settings controlling basic manager
+     operations. See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+   </refsect1>
+ 
+--- a/man/systemd-sysv-generator.xml
++++ b/man/systemd-sysv-generator.xml
+@@ -43,7 +43,7 @@
+     <literal>$named</literal>, <literal>$portmap</literal>,
+     <literal>$time</literal> are supported and will be turned into
+     dependencies on specific native systemd targets.  See
+-    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for more details.</para>
+ 
+     <para>SysV runlevels have corresponding systemd targets
+--- a/man/systemd.link.xml
++++ b/man/systemd.link.xml
+@@ -29,7 +29,7 @@
+     <para>A plain ini-style text file that encodes configuration for matching network devices, used by
+     <citerefentry><refentrytitle>systemd-udev</refentrytitle><manvolnum>8</manvolnum></citerefentry> and in
+     particular its <command>net_setup_link</command> builtin. See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry> for a
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry> for a
+     general description of the syntax.</para>
+ 
+     <para>The link files are read from the files located in the system
+--- a/man/systemd.netdev.xml
++++ b/man/systemd.netdev.xml
+@@ -29,7 +29,7 @@
+ 
+     <para>A plain ini-style text file that encodes configuration about a virtual network device, used by
+     <citerefentry><refentrytitle>systemd-networkd</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+-    See <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    See <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+ 
+     <para>The main Virtual Network Device file must have the extension <filename>.netdev</filename>;
+--- a/man/systemd.network.xml
++++ b/man/systemd.network.xml
+@@ -31,7 +31,7 @@
+     <para>A plain ini-style text file that encodes network configuration for matching network interfaces,
+     used by
+     <citerefentry><refentrytitle>systemd-networkd</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+-    See <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    See <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+ 
+     <para>The main network file must have the extension <filename>.network</filename>; other
+--- a/man/systemd.slice.xml
++++ b/man/systemd.slice.xml
+@@ -43,12 +43,12 @@
+     <para>By default, service and scope units are placed in
+     <filename>system.slice</filename>, virtual machines and containers
+     registered with
+-    <citerefentry><refentrytitle>systemd-machined</refentrytitle><manvolnum>1</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd-machined</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+     are found in <filename>machine.slice</filename>, and user sessions
+     handled by
+-    <citerefentry><refentrytitle>systemd-logind</refentrytitle><manvolnum>1</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd-logind</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+     in <filename>user.slice</filename>. See
+-    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for more information.</para>
+ 
+     <para>See
+--- a/man/systemd.unit.xml
++++ b/man/systemd.unit.xml
+@@ -80,7 +80,7 @@
+     target, a watched file system path, a timer controlled and supervised by
+     <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>, a
+     resource management slice or a group of externally created processes. See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+ 
+     <para>This man page lists the common configuration options of all
+--- a/man/systemd.xml
++++ b/man/systemd.xml
+@@ -1228,7 +1228,7 @@
+       <citerefentry><refentrytitle>daemon</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+       <citerefentry><refentrytitle>sd-daemon</refentrytitle><manvolnum>3</manvolnum></citerefentry>,
+       <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
+-      <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
++      <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+       <citerefentry project='die-net'><refentrytitle>pkg-config</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
+       <citerefentry><refentrytitle>kernel-command-line</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+       <citerefentry project='man-pages'><refentrytitle>bootup</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+--- a/man/timesyncd.conf.xml
++++ b/man/timesyncd.conf.xml
+@@ -32,7 +32,7 @@
+     <title>Description</title>
+ 
+     <para>These configuration files control NTP network time synchronization. See
+-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a general description of the syntax.</para>
+   </refsect1>
+ 
+--- a/man/user@.service.xml
++++ b/man/user@.service.xml
+@@ -37,7 +37,7 @@
+     hierarchy of its own units. See
+     <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry> for
+     a discussion of systemd units and
+-    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>1</manvolnum></citerefentry>
++    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+     for a list of units that form the basis of the unit hierarchies of system and user units.</para>
+ 
+     <para><filename>user@<replaceable>UID</replaceable>.service</filename> is accompanied by the
+@@ -57,7 +57,7 @@
+ 
+     <para>Individual <filename>user-<replaceable>UID</replaceable>.slice</filename> slices are
+     collected under <filename>user.slice</filename>, see
+-    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
++    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
+     </para>
+   </refsect1>
+ 

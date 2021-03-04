@@ -1,0 +1,35 @@
+From b226c15cfb993dc6e00ae6180bb287fc4dd93acd Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Wed, 9 Dec 2020 15:24:09 -0500
+Subject: [PATCH 7/7] test-network: increase wait_online timeout to handle
+ longer dhcpv4 transient timeout
+Origin: upstream, https://github.com/systemd/systemd/commit/3a23834d6b0da391c1ba9cb79a7d7deea7125f4b
+Bug: https://github.com/systemd/systemd/issues/17909
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1907306
+
+Previous commits changed the dhcpv4 retransmission algorithm to be
+slightly slower, changing the amount of time it takes to notify
+systemd-networkd that the dhcpv4 configuration has (transiently)
+failed from around 14 second up to 28 seconds.
+
+Since the test_dhcp_client_with_ipv4ll_without_dhcp_server test
+configures an interface to use dhcpv4 without any operating dhcpv4
+server running, it must increase the amount of time it waits for
+the test interface to reach degraded state.
+---
+ test/test-network/systemd-networkd-tests.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+--- a/test/test-network/systemd-networkd-tests.py
++++ b/test/test-network/systemd-networkd-tests.py
+@@ -3443,7 +3443,9 @@ class NetworkdDHCPClientTests(unittest.T
+         copy_unit_to_networkd_unit_path('25-veth.netdev', 'dhcp-server-veth-peer.network',
+                                         'dhcp-client-with-ipv4ll-fallback-without-dhcp-server.network')
+         start_networkd()
+-        self.wait_online(['veth99:degraded', 'veth-peer:routable'])
++        # we need to increase timeout above default, as this will need to wait for
++        # systemd-networkd to get the dhcpv4 transient failure event
++        self.wait_online(['veth99:degraded', 'veth-peer:routable'], timeout='60s')
+ 
+         output = check_output('ip address show dev veth99')
+         print(output)

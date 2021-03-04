@@ -28,11 +28,10 @@ if [ "$1" = "triggered" ]; then
     exit 0
 fi
 
-# Enable getty, remote-fs.target and timesyncd by default on new installs
+# Enable getty and remote-fs.target by default on new installs
 if [ -z "$2" ]; then
     systemctl enable getty@tty1.service || true
     systemctl enable remote-fs.target || true
-    systemctl enable systemd-timesyncd.service || true
 fi
 
 # Enable resolved by default on new installs installs and upgrades
@@ -64,6 +63,11 @@ fi
 # Enable ondemand by default on new installs
 if [ -e /lib/systemd/system/ondemand.service ] && [ -z "$2" ]; then
     systemctl enable ondemand.service || true
+fi
+
+# Enable systemd-pstore by default on new installs and upgrades, see #952767
+if dpkg --compare-versions "$2" lt "245.4-4~"; then
+    systemctl enable systemd-pstore.service || true
 fi
 
 # Do a one-time migration of the local time setting
@@ -118,6 +122,11 @@ systemd-machine-id-setup
 # Setup system users and groups
 addgroup --quiet --system systemd-journal
 
+adduser --quiet --system --group --no-create-home --home /run/systemd \
+    --gecos "systemd Network Management" systemd-network
+adduser --quiet --system --group --no-create-home --home /run/systemd \
+    --gecos "systemd Resolver" systemd-resolve
+
 # Enable persistent journal, in auto-mode, by default on new installs installs and upgrades
 if dpkg --compare-versions "$2" lt "235-3ubuntu3~"; then
     mkdir -p /var/log/journal
@@ -144,7 +153,6 @@ if [ -n "$2" ] && [ "$(systemctl is-system-running)" != "stopping" ]; then
     # https://github.com/systemd/systemd/issues/1163
     _systemctl try-restart systemd-networkd.service || true
     _systemctl try-restart systemd-resolved.service || true
-    _systemctl try-restart systemd-timesyncd.service || true
     _systemctl try-restart systemd-journald.service || true
 fi
 
@@ -172,5 +180,11 @@ fi
 #
 # Ignore if this fails, because e.g. %b will fail on WSL
 systemd-tmpfiles --create || :
+
+if dpkg --compare-versions "$2" lt-nl "245.4-4~"; then
+    # systemd-pstore.service is now enabled via sysinit.target
+    rm -f /etc/systemd/system/systemd-remount-fs.service.wants/systemd-pstore.service
+    rmdir --ignore-fail-on-non-empty /etc/systemd/system/systemd-remount-fs.service.wants 2> /dev/null || true
+fi
 
 #DEBHELPER#

@@ -1,0 +1,36 @@
+From a742f9828ea73d9c2c9bafe701c10fe60f058012 Mon Sep 17 00:00:00 2001
+From: YmrDtnJu <YmrDtnJu@users.noreply.github.com>
+Date: Fri, 5 Jun 2020 15:36:58 +0200
+Subject: [PATCH] resolve: enable RES_TRUSTAD towards the 127.0.0.53 stub
+ resolver
+Origin: upstream, https://github.com/systemd/systemd/commit/a742f9828ea73d9c2c9bafe701c10fe60f058012
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1897744
+
+glibc 2.31 strips the AD flag, unless either the application specifies
+RES_TRUSTAD or the options in resolv.conf contain trust-ad.
+
+See https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=NEWS;hb=HEAD
+---
+ src/resolve/resolv.conf            | 2 +-
+ src/resolve/resolved-resolv-conf.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+--- a/src/resolve/resolv.conf
++++ b/src/resolve/resolv.conf
+@@ -15,4 +15,4 @@
+ # operation for /etc/resolv.conf.
+ 
+ nameserver 127.0.0.53
+-options edns0
++options edns0 trust-ad
+--- a/src/resolve/resolved-resolv-conf.c
++++ b/src/resolve/resolved-resolv-conf.c
+@@ -325,7 +325,7 @@
+                        "# operation for /etc/resolv.conf.\n"
+                        "\n"
+                        "nameserver 127.0.0.53\n"
+-                       "options edns0\n", f);
++                       "options edns0 trust-ad\n", f);
+ 
+         if (!ordered_set_isempty(domains))
+                 write_resolv_conf_search(domains, f);

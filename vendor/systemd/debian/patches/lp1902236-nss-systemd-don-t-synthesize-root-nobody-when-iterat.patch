@@ -1,0 +1,39 @@
+From 9494da41c271bb9519d3484b6016526a72cc6be5 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 23 Apr 2020 09:55:06 +0200
+Subject: [PATCH] nss-systemd: don't synthesize root/nobody when iterating
+Bug: https://github.com/systemd/systemd/issues/15160
+Bug-Ubuntu: https://bugs.launchpad.net/systemd/+bug/1902236
+Origin: upstream, https://github.com/systemd/systemd/commit/286cd9808d0efda0edd3fb4412b7af39529f9343
+
+Fixes: #15160
+---
+ src/nss-systemd/nss-systemd.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+--- a/src/nss-systemd/nss-systemd.c
++++ b/src/nss-systemd/nss-systemd.c
+@@ -307,7 +307,12 @@ enum nss_status _nss_systemd_setpwent(in
+         getpwent_data.iterator = userdb_iterator_free(getpwent_data.iterator);
+         getpwent_data.by_membership = false;
+ 
+-        ret = userdb_all(nss_glue_userdb_flags(), &getpwent_data.iterator) < 0 ?
++        /* Don't synthesize root/nobody when iterating. Let nss-files take care of that. If the two records
++         * are missing there, then that's fine, after all getpwent() is known to be possibly incomplete
++         * (think: LDAP/NIS type situations), and our synthesizing of root/nobody is a robustness fallback
++         * only, which matters for getpwnam()/getpwuid() primarily, which are the main NSS entrypoints to the
++         * user database. */
++        ret = userdb_all(nss_glue_userdb_flags() | USERDB_DONT_SYNTHESIZE, &getpwent_data.iterator) < 0 ?
+                 NSS_STATUS_UNAVAIL : NSS_STATUS_SUCCESS;
+ 
+         assert_se(pthread_mutex_unlock(&getpwent_data.mutex) == 0);
+@@ -328,7 +333,8 @@ enum nss_status _nss_systemd_setgrent(in
+         getgrent_data.iterator = userdb_iterator_free(getgrent_data.iterator);
+         getpwent_data.by_membership = false;
+ 
+-        ret = groupdb_all(nss_glue_userdb_flags(), &getgrent_data.iterator) < 0 ?
++        /* See _nss_systemd_setpwent() for an explanation why we use USERDB_DONT_SYNTHESIZE here */
++        ret = groupdb_all(nss_glue_userdb_flags() | USERDB_DONT_SYNTHESIZE, &getgrent_data.iterator) < 0 ?
+                 NSS_STATUS_UNAVAIL : NSS_STATUS_SUCCESS;
+ 
+         assert_se(pthread_mutex_unlock(&getgrent_data.mutex) == 0);

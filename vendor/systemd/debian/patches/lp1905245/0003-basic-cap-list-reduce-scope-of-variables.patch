@@ -1,0 +1,68 @@
+From 5700780389ddea40df6abd4f54d32214aaf4a640 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Zbigniew=20J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Thu, 9 Jul 2020 23:23:07 +0200
+Subject: [PATCH 3/3] basic/cap-list: reduce scope of variables
+Origin: upstream, https://github.com/systemd/systemd/pull/16424
+Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=964926
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1905245
+
+---
+ src/basic/cap-list.c     | 4 +---
+ src/test/test-cap-list.c | 6 ++----
+ 2 files changed, 3 insertions(+), 7 deletions(-)
+
+diff --git a/src/basic/cap-list.c b/src/basic/cap-list.c
+index 2b7834ad98..b483833947 100644
+--- a/src/basic/cap-list.c
++++ b/src/basic/cap-list.c
+@@ -18,7 +18,6 @@ static const struct capability_name* lookup_capability(register const char *str,
+ #include "cap-to-name.h"
+ 
+ const char *capability_to_name(int id) {
+-
+         if (id < 0)
+                 return NULL;
+ 
+@@ -94,11 +93,10 @@ int capability_set_to_string_alloc(uint64_t set, char **s) {
+ 
+ int capability_set_from_string(const char *s, uint64_t *set) {
+         uint64_t val = 0;
+-        const char *p;
+ 
+         assert(set);
+ 
+-        for (p = s;;) {
++        for (const char *p = s;;) {
+                 _cleanup_free_ char *word = NULL;
+                 int r;
+ 
+diff --git a/src/test/test-cap-list.c b/src/test/test-cap-list.c
+index 33dd2461c3..81d5c456d7 100644
+--- a/src/test/test-cap-list.c
++++ b/src/test/test-cap-list.c
+@@ -12,12 +12,10 @@
+ 
+ /* verify the capability parser */
+ static void test_cap_list(void) {
+-        int i;
+-
+         assert_se(!capability_to_name(-1));
+         assert_se(!capability_to_name(capability_list_length()));
+ 
+-        for (i = 0; i < capability_list_length(); i++) {
++        for (int i = 0; i < capability_list_length(); i++) {
+                 const char *n;
+ 
+                 assert_se(n = capability_to_name(i));
+@@ -35,7 +33,7 @@ static void test_cap_list(void) {
+         assert_se(capability_from_name("64") == -EINVAL);
+         assert_se(capability_from_name("-1") == -EINVAL);
+ 
+-        for (i = 0; i < capability_list_length(); i++) {
++        for (int i = 0; i < capability_list_length(); i++) {
+                 _cleanup_cap_free_charp_ char *a = NULL;
+                 const char *b;
+                 unsigned u;
+-- 
+2.25.1
+

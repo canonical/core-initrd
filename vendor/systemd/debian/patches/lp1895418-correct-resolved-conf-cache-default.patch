@@ -1,0 +1,18 @@
+From: Dan Streetman <ddstreet@canonical.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/focal/+source/systemd/+bug/1895418
+
+The Ubuntu default for Cache= was changed to no-negative by:
+https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b42658843a9496d6b6bb68ac159f2a9f0a8ba9db&h=ubuntu-focal
+
+The /etc/systemd/resolved.conf file should be updated to match that default.
+
+--- systemd-245.4.orig/src/resolve/resolved.conf.in
++++ systemd-245.4/src/resolve/resolved.conf.in
+@@ -19,6 +19,6 @@
+ #MulticastDNS=no
+ #DNSSEC=@DEFAULT_DNSSEC_MODE@
+ #DNSOverTLS=@DEFAULT_DNS_OVER_TLS_MODE@
+-#Cache=yes
++#Cache=no-negative
+ #DNSStubListener=yes
+ #ReadEtcHosts=yes

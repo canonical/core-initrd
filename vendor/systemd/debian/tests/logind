@@ -42,7 +42,7 @@ test_suspend_on_lid() {
         echo " * Skipping suspend test in container"
         return
     fi
-    if ! grep -q mem /sys/power/state; then
+    if ! grep -s -q mem /sys/power/state; then
         echo " * suspend not supported on this testbed, skipping"
         return
     fi

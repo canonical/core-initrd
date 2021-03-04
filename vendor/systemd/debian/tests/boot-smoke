@@ -1,9 +1,12 @@
 #!/bin/sh
-# test 20 successful reboots in a row
+# test $TEST_REBOOTS successful reboots in a row
 # Author: Martin Pitt <martin.pitt@ubuntu.com>
 # For bisecting/testing you can replace individual binaries in /lib/systemd
 # with --copy /host/path/systemd-foo:/tmp/systemd-replace/systemd-foo
 set -e
+
+IS_SYSTEM_RUNNING_TIMEOUT=300
+TEST_REBOOTS=5
 
 . `dirname $0`/assert.sh
 
@@ -40,9 +43,9 @@ EOF
     fi
 else
     echo "waiting to boot..."
-    TIMEOUT=35
+    TIMEOUT=${IS_SYSTEM_RUNNING_TIMEOUT}
     while [ $TIMEOUT -ge 0 ]; do
-        state="$(systemctl --wait is-system-running || true)"
+        state="$(systemctl is-system-running || true)"
         case $state in
             running|degraded)
                 break
@@ -59,7 +62,7 @@ else
         systemctl --no-pager --no-legend --failed list-units > "$AUTOPKGTEST_ARTIFACTS/boot-smoke-failed-units.txt" || true
         echo "systemctl is-system-running: degraded (non-fatal)"
     elif [ "$state" != "running" ]; then
-        fail "system not running after timeout $RUNNING_TIMEOUT, state: $state"
+        fail "system not running after timeout $IS_SYSTEM_RUNNING_TIMEOUT, state: $state"
     fi
 
     echo "checking for failed unmounts for user systemd"
@@ -74,34 +77,11 @@ else
         fail "found connection timeout in journal for this boot"
     fi
 
-    echo "checking that polkitd runs"
-    if ! pidof polkitd; then
-        fail "polkitd is NOT running"
-    fi
-
-    echo "checking failed jobs (non fatal)"
-    if [ "$state" != "running" ]; then
-        echo "systemctl is-system-running returns: $state"
-        systemctl --no-pager --no-legend list-jobs > $AUTOPKGTEST_ARTIFACTS/running-jobs.txt || true
-    fi
-
-    echo "checking that there are no running jobs"
-    TIMEOUT=$JOBS_TIMEOUT
-    while [ $TIMEOUT -ge 0 ]; do
-        running="$(systemctl --no-pager --no-legend list-jobs || true)"
-        [ -n "$running" ] || break
-        sleep 1
-        TIMEOUT=$((TIMEOUT - 1))
-    done
-    if [ -n "$running" ]; then
-        fail "running jobs after remaining timeout $TIMEOUT: $running"
-    fi
-
     echo "checking that NetworkManager runs"
     pidof NetworkManager || fail "NetworkManager was not running"
 fi
 
-if [ "$AUTOPKGTEST_REBOOT_MARK" -ge 5 ]; then
+if [ "$AUTOPKGTEST_REBOOT_MARK" -ge "$TEST_REBOOTS" ]; then
     exit 0
 fi
 

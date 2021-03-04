@@ -1,0 +1,88 @@
+From f814c871e65df8552a055dd887bc94b074037833 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Mon, 23 Nov 2020 15:38:00 +0100
+Subject: [PATCH] sd-event: ref event loop while in sd_event_prepare() ot
+ sd_event_run()
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1906331
+Origin: upstream, https://github.com/systemd/systemd/commit/f814c871e65df8552a055dd887bc94b074037833
+
+sd_event_prepare() invokes callbacks that might drop the last user ref
+on our event loop. Let's make sure we keep an explicit ref around it, so
+that we won't end up with an invalid pointer. Similar in sd_event_run().
+
+Basically, any function that is publically callable that might end up
+invoking callbacks should ref the relevant objects to be protected
+against callbacks destroying these objects while we still want to access
+them. We did this correctly in sd_event_dispatch() and sd_event_loop(),
+but these are not the only ones which are callable from the outside.
+---
+ src/libsystemd/sd-event/sd-event.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+--- a/src/libsystemd/sd-event/sd-event.c
++++ b/src/libsystemd/sd-event/sd-event.c
+@@ -3313,7 +3313,6 @@ static int event_prepare(sd_event *e) {
+ 
+ static int dispatch_exit(sd_event *e) {
+         sd_event_source *p;
+-        _cleanup_(sd_event_unrefp) sd_event *ref = NULL;
+         int r;
+ 
+         assert(e);
+@@ -3324,7 +3323,7 @@ static int dispatch_exit(sd_event *e) {
+                 return 0;
+         }
+ 
+-        ref = sd_event_ref(e);
++        _unused_ _cleanup_(sd_event_unrefp) sd_event *ref = sd_event_ref(e);
+         e->iteration++;
+         e->state = SD_EVENT_EXITING;
+         r = source_dispatch(p);
+@@ -3422,6 +3421,9 @@ _public_ int sd_event_prepare(sd_event *
+          * syscalls */
+         assert_return(!e->default_event_ptr || e->tid == gettid(), -EREMOTEIO);
+ 
++        /* Make sure that none of the preparation callbacks ends up freeing the event source under our feet */
++        _unused_ _cleanup_(sd_event_unrefp) sd_event *ref = sd_event_ref(e);
++
+         if (e->exit_requested)
+                 goto pending;
+ 
+@@ -3627,9 +3629,8 @@ _public_ int sd_event_dispatch(sd_event
+ 
+         p = event_next_pending(e);
+         if (p) {
+-                _cleanup_(sd_event_unrefp) sd_event *ref = NULL;
++                _unused_ _cleanup_(sd_event_unrefp) sd_event *ref = sd_event_ref(e);
+ 
+-                ref = sd_event_ref(e);
+                 e->state = SD_EVENT_RUNNING;
+                 r = source_dispatch(p);
+                 e->state = SD_EVENT_INITIAL;
+@@ -3679,6 +3680,9 @@ _public_ int sd_event_run(sd_event *e, u
+                 }
+         }
+ 
++        /* Make sure that none of the preparation callbacks ends up freeing the event source under our feet */
++        _unused_ _cleanup_(sd_event_unrefp) sd_event *ref = sd_event_ref(e);
++
+         r = sd_event_prepare(e);
+         if (r == 0)
+                 /* There was nothing? Then wait... */
+@@ -3700,7 +3704,6 @@ _public_ int sd_event_run(sd_event *e, u
+ }
+ 
+ _public_ int sd_event_loop(sd_event *e) {
+-        _cleanup_(sd_event_unrefp) sd_event *ref = NULL;
+         int r;
+ 
+         assert_return(e, -EINVAL);
+@@ -3708,7 +3711,7 @@ _public_ int sd_event_loop(sd_event *e)
+         assert_return(!event_pid_changed(e), -ECHILD);
+         assert_return(e->state == SD_EVENT_INITIAL, -EBUSY);
+ 
+-        ref = sd_event_ref(e);
++        _unused_ _cleanup_(sd_event_unrefp) sd_event *ref = NULL;
+ 
+         while (e->state != SD_EVENT_FINISHED) {
+                 r = sd_event_run(e, (uint64_t) -1);

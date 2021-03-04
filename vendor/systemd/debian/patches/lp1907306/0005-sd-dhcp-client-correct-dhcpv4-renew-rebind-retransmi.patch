@@ -1,0 +1,75 @@
+From c24288d21ee94856f5c60473191d41c77b71da91 Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Tue, 8 Dec 2020 15:40:10 -0500
+Subject: [PATCH 5/7] sd-dhcp-client: correct dhcpv4 renew/rebind retransmit
+ timeouts
+Origin: upstream, https://github.com/systemd/systemd/commit/3a23834d6b0da391c1ba9cb79a7d7deea7125f4b
+Bug: https://github.com/systemd/systemd/issues/17909
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1907306
+
+Use the request timeout algorithm specified in RFC2131 section 4.4.5 for
+handling timed out RENEW and REBIND requests.
+
+This changes behavior, as previously only 2 RENEW and 2 REBIND requests
+were sent, no matter how long the lease lifetime. Now, requests are
+send according to the RFC, which results in starting with a timeout
+of 1/2 the t1 or t2 period, and halving the timeout for each retry
+down to a minimum of 60 seconds.
+
+Fixes: #17909
+---
+ src/libsystemd-network/sd-dhcp-client.c | 16 +++-------------
+ 1 file changed, 3 insertions(+), 13 deletions(-)
+
+--- a/src/libsystemd-network/sd-dhcp-client.c
++++ b/src/libsystemd-network/sd-dhcp-client.c
+@@ -1093,7 +1093,6 @@ static int client_timeout_resend(
+         DHCP_CLIENT_DONT_DESTROY(client);
+         usec_t next_timeout = 0;
+         uint64_t time_now;
+-        uint32_t time_left;
+         int r;
+ 
+         assert(s);
+@@ -1107,22 +1106,11 @@ static int client_timeout_resend(
+         switch (client->state) {
+ 
+         case DHCP_STATE_RENEWING:
+-
+-                time_left = (client->lease->t2 - client->lease->t1) / 2;
+-                if (time_left < 60)
+-                        time_left = 60;
+-
+-                next_timeout = time_now + time_left * USEC_PER_SEC;
+-
++                next_timeout = client_compute_reacquisition_timeout(time_now, client->t2_time);
+                 break;
+ 
+         case DHCP_STATE_REBINDING:
+-
+-                time_left = (client->lease->lifetime - client->lease->t2) / 2;
+-                if (time_left < 60)
+-                        time_left = 60;
+-
+-                next_timeout = time_now + time_left * USEC_PER_SEC;
++                next_timeout = client_compute_reacquisition_timeout(time_now, client->expire_time);
+                 break;
+ 
+         case DHCP_STATE_REBOOTING:
+@@ -1151,6 +1139,7 @@ static int client_timeout_resend(
+                         goto error;
+ 
+                 next_timeout = time_now + ((UINT64_C(1) << MIN(client->attempt, (uint64_t) 6)) - 1) * USEC_PER_SEC;
++                next_timeout += (random_u32() & 0x1fffff);
+ 
+                 break;
+ 
+@@ -1159,8 +1148,6 @@ static int client_timeout_resend(
+                 goto error;
+         }
+ 
+-        next_timeout += (random_u32() & 0x1fffff);
+-
+         r = event_reset_time(client->event, &client->timeout_resend,
+                              clock_boottime_or_monotonic(),
+                              next_timeout, 10 * USEC_PER_MSEC,

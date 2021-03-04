@@ -9,6 +9,7 @@ case "$1" in
         rm -f /etc/systemd/system/multi-user.target.wants/remote-fs.target
         rm -f /etc/systemd/system/sysinit.target.wants/systemd-timesyncd.service
         rm -f /etc/systemd/system/dbus-org.freedesktop.timesync1.service
+        rm -f /etc/systemd/system/sysinit.target.wants/systemd-pstore.service
         rmdir --ignore-fail-on-non-empty /etc/systemd/system/getty.target.wants 2> /dev/null || true
         rmdir --ignore-fail-on-non-empty /etc/systemd/system/multi-user.target.wants 2> /dev/null || true
         rmdir --ignore-fail-on-non-empty /etc/systemd/system/sysinit.target.wants 2> /dev/null || true

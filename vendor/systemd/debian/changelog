@@ -1,3 +1,487 @@
+systemd (245.4-4ubuntu3.5) focal; urgency=medium
+
+  [ Ioanna Alifieraki ]
+  * d/p/lp1911187-systemctl-do-not-shutdown-immediately-on-scheduled-shutdo.patch:
+    Do not shutdown immediately when scheduled shutdown fails (LP: #1911187)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=3899c9d5c171e84fc503c6ab46aea7cc9def7235
+
+  [ Dimitri John Ledkov ]
+  * d/p/lp1878969-meson-initialize-time-epoch-to-reproducible-builds-compat.patch:
+    meson: initialize time-epoch to reproducible builds compatible value
+    (LP: #1878969)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=84212797d21ed08031e1d71fe5e118bdd9873c0f
+
+  [ Dan Streetman ]
+  * d/p/lp1913189-test-accept-that-char-device-0-0-can-now-be-created-.patch:
+    - Fix failing test case under 5.8 kernel (LP: #1913189)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=782a382017ce188dbf9a40adabd265943d7db119
+  * d/p/lp1906331-sd-event-ref-event-loop-while-in-sd_event_prepare-ot.patch:
+    Take event reference while processing (LP: #1906331)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b2bf4045ade41aa7bcf8e98f6a95fdaaab6197d3
+  * d/p/lp1913423-hashmap-make-sure-to-initialize-shared-hash-key-atom.patch:
+    Thread-safe init of hashmap shared key (LP: #1913423)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=fc8dde7c4b1944d1583866f61c2314174b4dd06a
+  * d/p/lp1902236-nss-systemd-don-t-synthesize-root-nobody-when-iterat.patch:
+    Don't synthesize root/nobody when iterating (LP: #1902236)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=4d20e415ecd5b0fd032b4cf45bd9fd344cc434ac
+  * d/p/debian/patches/lp1880258-log-nxdomain-as-debug.patch:
+    Change NXDOMAIN 'errors' to log level debug (LP: #1880258)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=80163a2097aa876fe73b6071495ae4ad8749d04e
+  * d/p/lp1913763-udev-rules-add-rule-to-create-dev-ptp_hyperv.patch:
+    Create symlink for hyperv-provided ptp device (LP: #1913763)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b02053da2ff3fee6221bd8310488af0f52b140f1
+
+ -- Ioanna Alifieraki <ioanna-maria.alifieraki@canonical.com>  Tue, 23 Feb 2021 00:18:57 +0000
+
+systemd (245.4-4ubuntu3.4) focal; urgency=medium
+
+  * d/p/lp1905245/0001-basic-cap-list-parse-print-numerical-capabilities.patch,
+    d/p/lp1905245/0002-basic-capability-util-let-cap_last_cap-return-unsign.patch,
+    d/p/lp1905245/0003-basic-cap-list-reduce-scope-of-variables.patch:
+    - print number of unknown capabilities instead of failing
+      (LP: #1905245)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=5cd98102e16a6e4acc1444b10db3308d87930933
+  * d/p/lp1890448-hwdb-Add-EliteBook-to-use-micmute-hotkey.patch:
+    Add EliteBook to use micmute hotkey (LP: #1890448)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=238c8c1a7b9d75f69bdeafb1d55f1faf00acb063
+  * d/extra/dhclient-enter-resolved-hook:
+    suppress output of cmp command in dhclient hook (LP: #1878955)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=83df4fc182f8ffe87256f5d7c4b49cee5192529a
+  * d/p/lp1905044-test-use-cap_last_cap-for-max-supported-cap-number-n.patch:
+    test: use cap_last_cap() instead of capability_list_length()
+    (LP: #1905044)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=ff21f41e624d9e603f3be463846ce981a433842a
+  * d/p/lp1903300/0001-network-VXLan-fix-adding-Group-address.patch,
+    d/p/lp1903300/0002-network-VXLan-Add-support-for-remote-address.patch,
+    d/p/lp1903300/0003-networkctl-Add-support-to-display-VXLan-remote-addre.patch:
+    set vxlan multicast group when specified (LP: #1903300)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=9deff4b7c5495dbe738561ca47daf3756df9fcde
+  * d/p/lp1907306/0001-sd-dhcp-client-don-t-log-timeouts-if-already-expired.patch,
+    d/p/lp1907306/0002-sd-dhcp-client-track-dhcp4-t1-t2-expire-times.patch,
+    d/p/lp1907306/0003-sd-dhcp-client-add-RFC2131-retransmission-details.patch,
+    d/p/lp1907306/0004-sd-dhcp-client-simplify-dhcp4-t1-t2-parsing.patch,
+    d/p/lp1907306/0005-sd-dhcp-client-correct-dhcpv4-renew-rebind-retransmi.patch,
+    d/p/lp1907306/0006-sd-dhcp-client-correct-retransmission-timeout-to-mat.patch,
+    d/p/lp1907306/0007-test-network-increase-wait_online-timeout-to-handle-.patch,
+    d/p/lp1907306/0008-sd-dhcp-client-fix-renew-rebind-timeout-calculation-.patch:
+    Send correct number of dhcpv4 renew and rebind requests
+    (LP: #1907306)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=a73c51d0df284dcc38e6924d40eed810554bab2e
+  * d/p/lp1902960-udev-re-assign-ID_NET_DRIVER-ID_NET_LINK_FILE-ID_NET.patch:
+    Run net_setup_link on 'change' uevents (LP: #1902960)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=ec7ba2358aa68d8d6276ed56ef91caafc287cecf
+  * d/t/root-unittests:
+    Remove any corrupt journal files (LP: #1881947)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=5481fececdb3cb35ca7118598cad537681b5ff14
+
+ -- Dan Streetman <ddstreet@canonical.com>  Wed, 06 Jan 2021 15:47:39 -0500
+
+systemd (245.4-4ubuntu3.3) focal; urgency=medium
+
+  [ Rafael David Tinoco ]
+  * d/p/lp1861941-dont-generate-disk-byuuid-for-bcache-uuid.patch:
+    Reworded and reintroduced patch to fully explain delta is NOT a fix to
+    LP: #1861941 if the bcache-tools patch exists, but should be kept anyway
+    as the change makes sense for a better experience to end user.
+    (LP: #1861941)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=f8f64b3b58a04a83b1c426818b9affc41e0bff6c
+
+  [ Dan Streetman ]
+  * d/p/lp1882596-man-fix-some-manvolnum.patch:
+    - fix some man section references (LP: #1882596)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=3959ec95eff78d38ec4409807f151572afe83fe9
+  * d/p/lp1895418-correct-resolved-conf-cache-default.patch:
+    - fix resolved.conf default Cache= value (LP: #1895418)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=ebe274a2b01658ee39b372d7033c35209510b028
+  * d/p/lp1897744-resolve-enable-RES_TRUSTAD-towards-the-127.0.0.53-st.patch:
+    - add resolv.conf 'trust-ad' option (LP: #1897744)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=f6acc8c620b80adab7b048352d85e722b5ba8214
+  * d/t/*:
+    - Update tests to fix false negatives (LP: #1892358)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=cee6c31a6caec7888270c9fa8757105ab950ed0c
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=a1c1a2bb0ff27faf84fe94583631dfd0f1f4ed8f
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=9417ce996766c133c2a33d4102ce1494f3166774
+
+ -- Dan Streetman <ddstreet@canonical.com>  Thu, 08 Oct 2020 16:14:56 -0400
+
+systemd (245.4-4ubuntu3.2) focal; urgency=medium
+
+   [ Dan Streetman ]
+   * Hotadd only offline memory and CPUs (LP: #1876018)
+     File: debian/extra/rules-ubuntu/40-vm-hotadd.rules
+     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=72d815471596056b7727be5b10f87513ff1d5757
+   * Lock swap blockdevice while calling mkswap (LP: #1838329)
+     Files:
+     - d/p/lp1838329/0001-blockdev-propagate-one-more-unexpected-error.patch
+     - d/p/lp1838329/0002-makefs-log-about-OOM-condition.patch
+     - d/p/lp1838329/0003-dissect-use-log_debug_errno-where-appropriate.patch
+     - d/p/lp1838329/0004-blockdev-add-helper-for-locking-whole-block-device.patch
+     - d/p/lp1838329/0005-makefs-lock-device-while-we-operate.patch
+     - d/p/lp1838329/0006-makefs-normalize-logging-a-bit.patch
+     - d/p/lp1838329/0007-cryptsetup-generator-use-systemd-makefs-for-implemen.patch
+     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=c81b75c4297cbb04554488b070b6f79996b8cceb
+
+   [ Balint Reczey ]
+   * debian/udev.postinst: Allow kvm to be an already present non-system group
+     (LP: #1880541)
+     File: debian/udev.postinst
+     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=8b5c31828d4323ddb719326b1316c179b7cdbdef
+   * d/p/hwdb-Mask-rfkill-event-from-intel-hid-on-HP-platforms.patch:
+     hwdb: Mask rfkill event from intel-hid on HP platforms
+     (LP: #1883846)
+     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=164c016b466210c7d6d05963fd753eccf4679844
+   * journald: stream pid change newline fix (LP: #1875708)
+     Files:
+     - debian/patches/lp1875708/journald-Increase-stdout-buffer-size-sooner-when-almost-f.patch
+     - debian/patches/lp1875708/journald-rework-end-of-line-marker-handling-to-use-a-fiel.patch
+     - debian/patches/lp1875708/journald-rework-pid-change-handling.patch
+     - debian/patches/lp1875708/journald-use-log_warning_errno-where-appropriate.patch
+     - debian/patches/lp1875708/journald-use-the-fact-that-client_context_release-returns.patch
+     - debian/patches/lp1875708/man-document-the-new-_LINE_BREAK-type.patch
+     - debian/patches/lp1875708/socket-util-introduce-type-safe-dereferencing-wrapper-CMS.patch
+     - debian/patches/lp1875708/test-Add-a-test-case-for-15654.patch
+     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=2dc19f7ae4aad7277e9d89849182453ff1d046dc
+
+ -- Dan Streetman <ddstreet@canonical.com>  Mon, 06 Jul 2020 17:38:31 -0400
+
+systemd (245.4-4ubuntu3.1) focal; urgency=medium
+
+  * d/p/lp1867375/0001-network-add-a-flag-to-ignore-gateway-provided-by-DHC.patch,
+    d/p/lp1867375/0002-test-network-add-a-test-case-for-DHCPv4.UseGateway-n.patch,
+    d/p/lp1867375/0003-network-change-UseGateway-default-to-UseRoutes-setti.patch,
+    d/p/lp1867375/0004-test-modify-add-tests-for-UseRoutes-and-UseGateway-c.patch,
+    d/p/lp1867375/0005-network-honor-SetDNSRoutes-even-if-UseGateway-False.patch,
+    d/p/lp1867375/0006-test-verify-RoutesToDNS-is-independent-of-UseGateway.patch:
+    - Add UseGateway= parameter and default to value of UseRoutes, to restore
+      backwards compatibility with old UseRoutes= behavior (LP: #1867375)
+  * d/p/lp1860926-network-Change-IgnoreCarrierLoss-default-to-value-of.patch:
+    - default ignore_carrier_loss to value of configure_without_carrier,
+      so carrier drop during configuration doesn't break networking
+      (LP: #1860926)
+   * d/e/initramfs-tools/hooks/udev:
+     - Follow symlinks when finding link files to copy into initramfs
+       (LP: #1868892)
+   * d/p/lp1873607/0001-core-some-minor-clean-ups-modernizations.patch,
+     d/p/lp1873607/0002-core-make-sure-to-restore-the-control-command-id-too.patch:
+     - Avoid segfault during serialization (LP: #1873607)
+
+ -- Dan Streetman <ddstreet@canonical.com>  Thu, 07 May 2020 09:21:22 -0400
+
+systemd (245.4-4ubuntu3) focal; urgency=medium
+
+  * dhcp: Allow setting request options again
+    link_configure() may be called multiple times on a link causing request options
+    set multiple times. (LP: #1870410)
+    File: debian/patches/dhcp-Allow-setting-request-options-again.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=4c48893eb04b01a2ec62d2d2823a79a9f5cb2b80
+  * Don't try calling NULL callback in bus_wait_for_units_clear.
+    This fixes a crash most frequently occurring in the Unity session
+    (LP: #1870930)
+    File: debian/patches/shared-Don-t-try-calling-NULL-callback-in-bus_wait_for_un.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b2ec1a3367cef401f8de745fecc9c385f020be78
+
+ -- Balint Reczey <rbalint@ubuntu.com>  Wed, 22 Apr 2020 11:04:26 +0200
+
+systemd (245.4-4ubuntu1) focal; urgency=medium
+
+  * Merge to Ubuntu from Debian unstable
+  - Dropped changes:
+    * d/rules: in dh_auto_test, include meson param --print-errorlogs.
+
+ -- Balint Reczey <rbalint@ubuntu.com>  Tue, 14 Apr 2020 00:05:30 +0200
+
+systemd (245.4-4) unstable; urgency=medium
+
+  * Drop Conflicts: virtualbox-guest-utils from systemd-timesyncd.
+    Otherwise this could lead to virtualbox-guest-utils being uninstalled on
+    upgrades which is not intended. (Closes: #956436)
+  * pid1: automatically generate systemd-remount-fs.service deps, plus enable
+    systemd-pstore from sysinit.target
+  * Fix systemd-pstore.service enablement symlink on upgrades.
+    It is now started via sysinit.target. Also clean up the symlink on
+    purge.
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 13 Apr 2020 11:34:31 +0200
+
+systemd (245.4-3) unstable; urgency=medium
+
+  [ Dan Streetman ]
+  * d/rules: in dh_auto_test, include meson param --print-errorlogs.
+    Also, don't cat testlog.txt; it's noisy and not very helpful.
+    Upstream request:
+    https://github.com/systemd/systemd/pull/14338#issuecomment-603432989
+
+  [ Michael Biebl ]
+  * pid1: by default make user units inherit their umask from the user manager
+    (Closes: #945000)
+  * user-util: rework how we validate user names.
+    This reworks the user validation infrastructure. There are now two
+    modes. In regular mode we are strict and test against a strict set of
+    valid chars. And in "relaxed" mode we just filter out some really
+    obvious, dangerous stuff. i.e. strict is whitelisting what is OK, but
+    "relaxed" is blacklisting what is really not OK.
+    The idea is that we use strict mode whenever we allocate a new user,
+    while "relaxed" mode is used when we process users registered elsewhere.
+    (Closes: #955541)
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 10 Apr 2020 11:55:15 +0200
+
+systemd (245.4-2ubuntu1) focal; urgency=medium
+
+  [ Balint Reczey ]
+  * Merge to Ubuntu from Debian unstable
+  * Refresh patches
+    - Dropped changes:
+      * units: Don't mount tracefs in LXC.
+    - Remaining changes:
+      * Specify Ubuntu's Vcs-Git
+        File: debian/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=fd832930ef280c9a4a9dda2440d5a46a6fdb6232
+      * Enable EFI/bootctl on armhf.
+        File: debian/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=043122f7d8a1487bfd357e815a6ece1ceea6e7d1
+      * Recommend networkd-dispatcher
+        File: debian/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=d1e3b2c7e4757119da0d550b0b3c0a6626a176dc
+      * Add conflicts with upstart and systemd-shim
+        File: debian/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=83ed7496afc7c27be026014d109855f7d0ad1176
+      * debian/control: strengthen dependencies.
+        File: debian/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=d1ecf0c372f5212129c85ae60fddf26b2271a1fe
+      * debian/rules: Set -Duser-path instead of patching the source for the same result
+        File: debian/rules
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=67d2ac5d806b55b0d178fca7e0af08cd9d12580c
+      * config: tpm-pcrindex=12, on Ubuntu only.
+        File: debian/rules
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=2f8c22d44a619ce8fa17eb0cd7c7e2c601cdbbeb
+      * Ubuntu/extra: ship dhclient-enter hook.
+        Files:
+        - debian/extra/dhclient-enter-resolved-hook
+        - debian/rules
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=f3398a213f80b02bf3db0c1ce9e22d69f6d56764
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=258893bae8cbb12670e4807636fe8f7e9fb5407a
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=0725c1169ddde4f41cacba7af3e546704e2206be
+      * udev-udeb: ship modprobe.d snippet to force scsi_mod.scan=sync in d-i.
+        Files:
+        - debian/extra/modprobe.d-udeb/scsi-mod-scan-sync.conf
+        - debian/udev-udeb.install
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=eb6d8a2b9504917abb7aa2c4035fdbb7b98227f7
+      * debian/extra/start-udev: Set scsi_mod scan=sync even if it's builtin to the kernel (we previously only set it in modprobe.d)
+        Files:
+        - debian/extra/start-udev
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=6b72628f8de991e2c67ac4289fc74daf3abe7d14
+      * debian/extra/units/systemd-resolved.service.d/resolvconf.conf:
+        drop resolvconf.conf drop-in, resolved integration moved to resolvconf package.
+      * debian/extra/wrap_cl.py: add changelog formatter
+        Files:
+        - debian/extra/wrap_cl.py
+        - debian/gbp.conf
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=26e69bceab9cec8df64cdca18cd71e7c0874f8b3
+      * debian/gbp.conf: Set tag format to ubuntu/*
+      * debian/gbp.conf: Change debian-branch to ubuntu-focal
+      * libnss-resolve: do not disable and stop systemd-resolved
+        File: debian/libnss-resolve.postrm
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=95577d14e84e19b614b83b2e24985d89e8c2dac0
+      * core: Revert strict mount namespacing/sandboxing, until LXD allows the needed mounts.
+        File: debian/patches/Revert-namespace-be-more-careful-when-handling-namespacin.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=030919ba5e4931d6ee576d0259fae67fe4ed9770
+      * Revert upstream adding LINK_STATE_INITIALIZED because it breaks netplan.io's
+        ethernets autopkgtest.
+        Files:
+        - debian/patches/Revert-network-do-not-drop-foreign-config-if-interface-is.patch
+        - debian/patches/Revert-network-fix-assertion-when-link-get-carrier.patch
+        - debian/patches/Revert-network-prevent-interfaces-to-be-initialized-multi.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=22a9fa3bb03ba2a629926af39ea7df81fe33c9b8
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=70e93c2a05f0f7435614f8d52944d726601e319c
+      * Revert upstream commit breaking IPv4 DHCP in LXC containers in 244.1
+        (LP: #1857123)
+        File: debian/patches/Revert-network-if-sys-is-rw-then-udev-should-be-around.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=39c12f8e736afd1b7bdeb13ff6bccaea85020873
+      * Skip falling back to device name when net_get_name(device) fails.
+        File: debian/patches/Skip-falling-back-to-device-name-when-net_get_name-device.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=c79fe0e2dc29834e0cd236ade6e4e44a6ffb74fa
+      * Add "AssumedApparmorLabel=unconfined" to timedate1 dbus service file
+        File: debian/patches/debian/UBUNTU-Add-AssumedApparmorLabel-unconfined-to-timedate1-dbus.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=5ad0879e10bbe3d641f940260b93c7eb2cf4624c
+      * Re-add support for /etc/writable for core18
+        File: debian/patches/debian/UBUNTU-Support-system-image-read-only-etc.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=a5b5fca66c1127068e4ce0cc9ab497814211f4f7
+      * core: set /run size to 10%, like initramfs-tools does.
+        File: debian/patches/debian/UBUNTU-core-set-run-size-to-10-like-initramfs-tools-does.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=1fac2568fe716dc1a41bada78293dc6327a6df0d
+      * Ship systemd sysctl settings.
+        Files:
+        - debian/patches/debian/UBUNTU-drop-kernel.-settings-from-sysctl-defaults-shipped.patch
+        - debian/rules
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=7cd041a6d0ef459e4b2a82d8ea5fa1ce05184dfb
+      * journald.service: set Nice=-1 to dodge watchdog on soft lockups.
+        File: debian/patches/debian/UBUNTU-journald.service-set-Nice-1-to-dodge-watchdog-on-soft-loc.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=e0a9aeffac556492bf517ce2d23313ff7a277926
+      * networkd: if RA was implicit, do not await ndisc_configured.
+        File: debian/patches/debian/UBUNTU-networkd-if-RA-was-implicit-do-not-await-ndisc_con.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=2f749ff528d1b788aa4ca778e954c16b213ee629
+      * networkd: [Route] PreferredSource not working in *.network files.
+        Files:
+        - debian/patches/debian/UBUNTU-networkd-if-RA-was-implicit-do-not-await-ndisc_con.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b4e2ee0b2ac1be2ae78952890a56a2d5398df518
+      * systemd-resolved: Default to Cache=no-negative
+        File: debian/patches/debian/UBUNTU-resolved-default-no-negative-caching.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b42658843a9496d6b6bb68ac159f2a9f0a8ba9db
+      * Disable LLMNR and MulticastDNS by default
+        Files:
+        - debian/patches/debian/UBUNTU-resolved-disable-global-LLMNR-and-MulticastDNS.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b4ec428e83696a5cd0405b677a35e97681867629
+      * test-sleep: skip test_fiemap upon inapproriate ioctl for device.
+        File: debian/patches/debian/UBUNTU-test-sleep-skip-test_fiemap-upon-inapproriate-ioctl-.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=6ebb5b9f6b77760a5470e8a780d69875b1db76f7
+      * test/test-functions: launch qemu-system with -vga none.
+        File: debian/patches/debian/UBUNTU-test-test-functions-launch-qemu-with-vga-none.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=90af1fa893cce5ed49999d16da0b793da6523394
+      * units: conditionalize more units to not start in containers.
+        Files:
+        - debian/patches/debian/UBUNTU-units-block-CAP_SYS_MODULE-units-in-containers-too.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=3689afa1a782de8c19a757459b6360de1195ad55
+      * units: Disable journald Watchdog
+        File: debian/patches/debian/UBUNTU-units-disable-journald-watchdog.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=64d2b4f1d0d057073fba585f19823332e2a6eed5
+      * wait-online: do not wait, if no links are managed (neither configured, or failed).
+        File: debian/patches/debian/UBUNTU-wait-online-exit-if-no-links-are-managed.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=31f04c3fc769dacb3cf2a78240a1710a99a865b8
+      * Set UseDomains to true, by default, on Ubuntu.
+        File: debian/patches/debian/Ubuntu-UseDomains-by-default.patch
+      * Ignore failures to set Nice priority on services in containers.
+        File: debian/patches/debian/Ubuntu-core-in-execute-soft-fail-setting-Nice-priority-when.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=5b8e457f8d883fc6f55d33d46b3474926a495d29
+      * units: set ConditionVirtualization=!private-users on journald audit socket.
+        File: debian/patches/debian/Ubuntu-units-set-ConditionVirtualization-private-users-on-j.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=03ed18a9940731bbf794ad320fabf337488835c6
+      * Workaround captive portals not responding to EDNS0 queries (DVE-2018-0001).
+        File: debian/patches/resolved-Mitigate-DVE-2018-0001-by-retrying-NXDOMAIN-with.patch
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=87d3fe81b7281687ecf3c0b9a8356e90cc714d0b
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=2974114ed9b89ea922a23893e8eff70d5cac77fe
+      * Disable dh_installinit generation of tmpfiles for the systemd package.
+        Files:
+        - debian/rules
+        - debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=1fd144cbe31cc7a9383cc76f21f4b84c22a9dd1b
+      * Enable systemd-resolved by default
+        File: debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=05adfa0902115f51c1196ad623165a75bb8b4313
+      * Create /etc/resolv.conf at postinst, pointing at the stub resolver.
+        File: debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=ef4adf46bbbe2d22508b70b889d23da53b85039d
+      * Always setup /etc/resolv.conf on new installations.
+        File: debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=20bc8a37fa3c9620bed21a56a4eabd71db71d861
+      * Disable systemd-networkd-wait-online by default.
+        File: debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=694473d812b50d2fefd6494d494ca02b91bc8785
+      * postinst: drop empty/stock /etc/rc.local
+        File: debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=e7d071a26a79558771303b0b87f007e650eaebbe
+      * systemd.postinst: enable persistent journal
+        File: debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=f94f18d9dbc085b6a9ff33c141a6e542142f85b5
+      * debian/systemd.postinst: Skip daemon-reexec and try-restarts during shutdown
+        File: debian/systemd.postinst
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=51daab96ae79483b5e5fb62e1e0477c87ee11fd1
+      * Drop systemd.prerm safety check.
+        File: debian/systemd.prerm
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=0244c4d56556317f14eecc2f51871969ef02ba7b
+      * boot-and-services: stderr is ok, for status command on the c1 container.
+        File: debian/tests/boot-and-services
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=da14d34e7cc33c44ad67e64c9fd092f8cc1675f9
+      * adt: boot-and-services: assert any kernel syslog messages.
+        File: debian/tests/boot-and-services
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=29dc34f7a6e5dc505f6212c17c42e4420b47ed16
+      * Wait for systemctl is-system-running state.
+        File: debian/tests/boot-smoke
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=776998f1f55c445b6e385cab69a4219c42d00838
+      * debian/tests: Enforce udev upgrade.
+        Files:
+        - debian/tests/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=f350b43ccc1aa31c745b4ccebbb4084d5cea41ff
+      * Only test that gdm3 comes up on amd64. Stalls on other arches.
+        File: debian/tests/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=97cb13685dfb353045c449ec5d6d1df60f661079
+      * debian/tests/systemd-fsckd: update assertions expectations for v237
+        File: debian/tests/systemd-fsckd
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=d5becd9a416b55dcdb7b9a7aba60c4e3d304e6a6
+      * Skip systemd-fsckd on arm64, because of broken/lack of clean shutdown.
+        File: debian/tests/systemd-fsckd
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=bf5b501ac934497dbef5f64908ff37643dc7288e
+      * debian/tests: blacklist upstream test-24-unit-tests on ppc64le.
+        File: debian/tests/upstream
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=8062b9a2712c390010d2948eaf764a1b52e68715
+      * debian/test/boot-and-services: Skip AppArmor tests in arm containers.
+        File: debian/tests/boot-and-services
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=9d3b35df77aa939365563a4edaee54ebb7f559a3
+      * d/t/control: run udev tests only with isolation-machine.
+        File: debian/tests/control
+        https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b4b4c9bf44f4b8d7f75a4204aff697f549c8aad7
+      * Add riscv64 seccomp support.
+  * network: do not re-attach sd-event object (LP: #1870410)
+    File: debian/patches/network-do-not-re-attach-sd-event-object.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b10aee06d30b98395d20344195d3e671e25498ab
+  * Enable seccomp support on riscv64 again.
+    File: debian/control
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=a1ffd64333784a10dd0eeb87f5198462b85c6f9a
+
+  [ Dan Streetman ]
+  * network: attach sd-event in link_load() when creating link dhcp_client or ipv4ll
+    (LP: #1870410)
+    Author: Dan Streetman
+    Files:
+    - debian/patches/network-attach-sd-event-in-link_load-when-creating-link-d.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=3408963020c6c0cf180130eabfd96e758d1a9c1f
+  * d/rules: in dh_auto_test, include meson param --print-errorlogs.
+    Also, don't cat testlog.txt; it's noisy and not very helpful.
+    File: debian/rules
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=ca8ed6fb7fa0f2a63557f705b1fdc97ab7ba5ace
+
+ -- Balint Reczey <rbalint@ubuntu.com>  Wed, 08 Apr 2020 10:21:18 +0200
+
+systemd (245.4-2) unstable; urgency=medium
+
+  [ Balint Reczey ]
+  * Ship systemd-timesyncd in a separate package.
+    The new systemd-timesyncd package conflicting with other NTP-related
+    packages resolves the problems arising when running systemd-timesyncd
+    and other NTP servers on the same system.
+    (LP: #1849156, Closes: #805927, #947936)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 04 Apr 2020 08:59:50 +0200
+
+systemd (245.4-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * New upstream version 245.4
+    - Allow names starting with a digit (Closes: #954174)
+    - Recognize davfs as network file system (Closes: #954755)
+  * Enable systemd-pstore.service by default on new installs and upgrades
+    (Closes: #952767)
+  * Revert "Enable seccomp support on riscv64"
+    This requires further changes to the source code and a newer, not yet
+    officially released, libseccomp. Since this complicates backports revert
+    this change for the time being.
+
+  [ Dan Streetman ]
+  * d/t/logind: use grep -s when checking /sys/power/state.
+    Some kernels in Ubuntu (e.g. linux-kvm) do not enable CONFIG_PM, which
+    results in stderr output when the logind test tries to grep the power
+    state file, causing the test to fail.  The test already handles skipping
+    the test if suspend isn't supported, so just use -s to suppress grep
+    from printing to stderr if the file doesn't exist.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 02 Apr 2020 11:58:18 +0200
+
+systemd (245.2-1ubuntu3) focal; urgency=medium
+
+  * Add riscv64 seccomp support.
+
+ -- William Grant <wgrant@ubuntu.com>  Sun, 05 Apr 2020 17:33:43 +1000
+
 systemd (245.2-1ubuntu2) focal; urgency=medium
 
   * units: Don't mount tracefs in LXC.

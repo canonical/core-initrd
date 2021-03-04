@@ -1,0 +1,33 @@
+From 58dfbfbdd6138de49c6f59a763c4cfc7acb8c9a9 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Mon, 18 May 2020 18:30:49 +0200
+Subject: [PATCH 3/7] dissect: use log_debug_errno() where appropriate
+Bug: https://github.com/systemd/systemd/issues/10179
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1838329
+Origin: upstream, https://github.com/systemd/systemd/pull/15836
+
+---
+ src/shared/dissect-image.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/src/shared/dissect-image.c b/src/shared/dissect-image.c
+index 23ad6b06cf..8decac94b2 100644
+--- a/src/shared/dissect-image.c
++++ b/src/shared/dissect-image.c
+@@ -75,10 +75,9 @@ int probe_filesystem(const char *node, char **ret_fstype) {
+                 log_debug("No type detected on partition %s", node);
+                 goto not_found;
+         }
+-        if (r == -2) {
+-                log_debug("Results ambiguous for partition %s", node);
+-                return -EUCLEAN;
+-        }
++        if (r == -2)
++                return log_debug_errno(SYNTHETIC_ERRNO(EUCLEAN),
++                                       "Results ambiguous for partition %s", node);
+         if (r != 0)
+                 return errno_or_else(EIO);
+ 
+-- 
+2.25.1
+
