@@ -15,7 +15,7 @@ supported until 2028.
  1 file changed, 7 insertions(+)
 
 diff --git a/src/core/execute.c b/src/core/execute.c
-index c124f97..d1f3931 100644
+index 5f88877..a77334d 100644
 --- a/src/core/execute.c
 +++ b/src/core/execute.c
 @@ -2664,6 +2664,13 @@ static int apply_mount_namespace(

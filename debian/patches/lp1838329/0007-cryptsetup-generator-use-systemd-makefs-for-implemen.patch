@@ -1,0 +1,45 @@
+From db2c56b0dd28f271dd3fe53691b21484f72586e4 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Mon, 18 May 2020 18:37:02 +0200
+Subject: [PATCH 7/7] cryptsetup-generator: use systemd-makefs for
+ implementation of "swap" and "tmp" options
+Bug: https://github.com/systemd/systemd/issues/10179
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1838329
+Origin: upstream, https://github.com/systemd/systemd/pull/15836
+
+This way we can take benefit of the correct block device locking we just
+added.
+
+I was thinking whether to instead pull in a regular
+systemd-makefs@.service instance, but I couldn't come up with a reason
+to, and thus opted for just doing the minimal patch and just replacing
+the simply mkfs calls.
+
+Fixes: #10179
+Replaces: #13162
+---
+ src/cryptsetup/cryptsetup-generator.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/cryptsetup/cryptsetup-generator.c b/src/cryptsetup/cryptsetup-generator.c
+index 20c752d88d..5724f88d0a 100644
+--- a/src/cryptsetup/cryptsetup-generator.c
++++ b/src/cryptsetup/cryptsetup-generator.c
+@@ -367,12 +367,12 @@ static int create_disk(
+ 
+         if (tmp)
+                 fprintf(f,
+-                        "ExecStartPost=/sbin/mke2fs '/dev/mapper/%s'\n",
++                        "ExecStartPost=" ROOTLIBEXECDIR "/systemd-makefs ext2 '/dev/mapper/%s'\n",
+                         name_escaped);
+ 
+         if (swap)
+                 fprintf(f,
+-                        "ExecStartPost=/sbin/mkswap '/dev/mapper/%s'\n",
++                        "ExecStartPost=" ROOTLIBEXECDIR "/systemd-makefs swap '/dev/mapper/%s'\n",
+                         name_escaped);
+ 
+         if (keydev)
+-- 
+2.25.1
+

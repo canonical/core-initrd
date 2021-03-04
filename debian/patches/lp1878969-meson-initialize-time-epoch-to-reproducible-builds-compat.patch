@@ -1,0 +1,61 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Fri, 15 May 2020 19:16:05 +0100
+Subject: meson: initialize time-epoch to reproducible builds compatible value
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1878969
+Origin: upstream, https://github.com/systemd/systemd/commit/6dbf352cfbbaf9c9b277af54da50da38296ae5c6
+
+Debian Policy encourages to preserve timestamps whenever possible in the
+tarballs, thus stable release updates of systemd usually do not bump NEWS file
+timestamp. And thus time-epoch remains the same for the lifetime of a release.
+
+It would be better, if each new stable release rebuild of systemd would bump
+the time epoch a bit. But at the same time remain
+reproducible. SOURCE_DATE_EPOCH is an environmnet variable defined for this
+purpose. Thus if available, prefer that, instead of the NEWS file modification
+time.
+
+For example, on Debian/Ubuntu under the reproducible builds the
+SOURCE_DATE_EPOCH is set to the timestamp from the packaging metadata, thus it
+is incremented on every new stable release update, whilst preserving
+reproducible builds capability.
+
+Reference: https://reproducible-builds.org/docs/timestamps/
+---
+ TODO        | 3 ---
+ meson.build | 9 +++++++--
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/TODO b/TODO
+index e944245..51b23cf 100644
+--- a/TODO
++++ b/TODO
+@@ -446,9 +446,6 @@ Features:
+ 
+ * support projid-based quota in machinectl for containers
+ 
+-* maybe use SOURCE_DATE_EPOCH (i.e. the env var the reproducible builds folks
+-  introduced) as the RTC epoch, instead of the mtime of NEWS.
+-
+ * add a way to lock down cgroup migration: a boolean, which when set for a unit
+   makes sure the processes in it can never migrate out of it
+ 
+diff --git a/meson.build b/meson.build
+index 60f8284..4ced8d7 100644
+--- a/meson.build
++++ b/meson.build
+@@ -671,8 +671,13 @@ conf.set_quoted('DEFAULT_NET_NAMING_SCHEME', default_net_naming_scheme)
+ 
+ time_epoch = get_option('time-epoch')
+ if time_epoch == -1
+-        NEWS = files('NEWS')
+-        time_epoch = run_command(stat, '-c', '%Y', NEWS).stdout().to_int()
++        source_date_epoch = run_command('sh', ['-c', 'echo "$SOURCE_DATE_EPOCH"']).stdout().strip()
++        if source_date_epoch != ''
++                time_epoch = source_date_epoch.to_int()
++        else
++                NEWS = files('NEWS')
++                time_epoch = run_command(stat, '-c', '%Y', NEWS).stdout().to_int()
++        endif
+ endif
+ conf.set('TIME_EPOCH', time_epoch)
+ 

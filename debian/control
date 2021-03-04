@@ -73,6 +73,7 @@ Pre-Depends: ${shlibs:Pre-Depends},
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          libsystemd0 (= ${binary:Version}),
+         systemd-timesyncd | time-daemon,
          util-linux (>= 2.27.1),
          mount (>= 2.26),
          adduser,
@@ -179,6 +180,24 @@ Description: tools for storing and retrieving coredumps
  This package provides systemd tools for storing and retrieving coredumps:
   * systemd-coredump
   * coredumpctl
+
+Package: systemd-timesyncd
+Architecture: linux-any
+Multi-Arch: foreign
+Section: admin
+Priority: optional
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         adduser,
+         systemd
+Breaks: systemd (<< 245.4-2~),
+Conflicts: time-daemon
+Replaces: time-daemon,
+          systemd (<< 245.4-2~),
+Provides: time-daemon
+Description: minimalistic service to synchronize local time with NTP servers
+ The package contains the systemd-timesyncd system service that may be used to
+ synchronize the local system clock with a remote Network Time Protocol server.
 
 Package: systemd-tests
 Architecture: linux-any

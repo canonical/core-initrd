@@ -63,7 +63,9 @@ case "$1" in
     addgroup --quiet --system input
 
     # Make /dev/kvm accessible to kvm group
-    addgroup --quiet --system kvm
+    # The || getenv ... part can be dropped in 21.04 to give users a cycle
+    # to act on error message.
+    addgroup --quiet --system kvm || getent group kvm > /dev/null
 
     # Make /dev/dri/renderD* accessible to render group
     addgroup --quiet --system render

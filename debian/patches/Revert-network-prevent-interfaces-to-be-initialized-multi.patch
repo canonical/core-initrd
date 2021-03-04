@@ -12,7 +12,7 @@ This reverts commit bd08ce56156751d58584a44e766ef61340cdae2d.
  2 files changed, 12 insertions(+), 16 deletions(-)
 
 diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
-index 85f68c9..510d55e 100644
+index 8d22a1b..4492407 100644
 --- a/src/network/networkd-link.c
 +++ b/src/network/networkd-link.c
 @@ -1337,7 +1337,7 @@ static int set_mtu_handler(sd_netlink *rtnl, sd_netlink_message *m, Link *link)
@@ -81,7 +81,7 @@ index 85f68c9..510d55e 100644
  
          link->sd_device = sd_device_ref(device);
  
-@@ -4300,7 +4298,6 @@ void link_clean(Link *link) {
+@@ -4308,7 +4306,6 @@ void link_clean(Link *link) {
  
  static const char* const link_state_table[_LINK_STATE_MAX] = {
          [LINK_STATE_PENDING] = "pending",

@@ -56,7 +56,7 @@ EOF
 
               newstate="$(mktemp)"
               md5sum $statedir/isc-dhcp-v4-$interface.conf $statedir/isc-dhcp-v6-$interface.conf > $newstate 2> /dev/null
-              if ! cmp $oldstate $newstate; then
+              if ! cmp --quiet $oldstate $newstate; then
                   systemctl try-reload-or-restart systemd-resolved.service
               fi
 

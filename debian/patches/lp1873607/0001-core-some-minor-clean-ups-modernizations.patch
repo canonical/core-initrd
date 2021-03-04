@@ -1,0 +1,56 @@
+From 5b99bd5fd4274c5fac86c82a38ca3334e55df543 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 22 Apr 2020 20:33:57 +0200
+Subject: [PATCH 1/2] core: some minor clean-ups/modernizations
+Origin: upstream, https://github.com/systemd/systemd/pull/15546
+Bug: https://github.com/systemd/systemd/issues/15356
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1873607
+
+---
+ src/core/service.c | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/service.c b/src/core/service.c
+index 53dbd5509c..861d82041a 100644
+--- a/src/core/service.c
++++ b/src/core/service.c
+@@ -2569,6 +2569,8 @@ static unsigned service_exec_command_index(Unit *u, ServiceExecCommand id, ExecC
+         ExecCommand *first, *c;
+ 
+         assert(s);
++        assert(id >= 0);
++        assert(id < _SERVICE_EXEC_COMMAND_MAX);
+ 
+         first = s->exec_command[id];
+ 
+@@ -2632,10 +2634,12 @@ static int service_serialize_exec_command(Unit *u, FILE *f, ExecCommand *command
+ 
+         p = cescape(command->path);
+         if (!p)
+-                return -ENOMEM;
++                return log_oom();
+ 
+         key = strjoina(type, "-command");
+-        return serialize_item_format(f, key, "%s %u %s %s", service_exec_command_to_string(id), idx, p, args);
++        (void) serialize_item_format(f, key, "%s %u %s %s", service_exec_command_to_string(id), idx, p, args);
++
++        return 0;
+ }
+ 
+ static int service_serialize(Unit *u, FILE *f, FDSet *fds) {
+@@ -2737,7 +2741,11 @@ static int service_serialize(Unit *u, FILE *f, FDSet *fds) {
+         return 0;
+ }
+ 
+-static int service_deserialize_exec_command(Unit *u, const char *key, const char *value) {
++static int service_deserialize_exec_command(
++                Unit *u,
++                const char *key,
++                const char *value) {
++
+         Service *s = SERVICE(u);
+         int r;
+         unsigned idx = 0, i;
+-- 
+2.25.1
+

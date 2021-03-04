@@ -1,0 +1,48 @@
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Mon, 23 Mar 2020 17:34:17 -0400
+Subject: network: attach sd-event in link_load() when creating link
+ dhcp_client or ipv4ll
+
+Commit 08c588d18b1e337f856e6541f3f711be48718279 moved attachment of the
+sd-event into creation of the dhcp_client or ipv4ll in dhcp4_configure()
+or ipv4ll_configure(), but these can also be created in link_load(),
+so that creation needs to also perform sd-event attachment.
+
+Without this, dhcp_client or ipv4ll created in link_load() will not have
+an ->event and will fail assertion, causing networkd to fail, e.g.:
+
+Assertion 'client->event' failed at src/libsystemd-network/sd-dhcp-client.c:1283, function client_start_delayed(). Ignoring.
+ens2: Could not acquire DHCPv4 lease: Invalid argument
+ens2: Failed
+
+(cherry picked from commit 1b43e24602010403e8684df7539977264a478688)
+---
+ src/network/networkd-link.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 99d4b29..b281e05 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -3446,6 +3446,10 @@ network_file_fail:
+                 if (r < 0)
+                         return log_link_error_errno(link, r, "Failed to create DHCPv4 client: %m");
+ 
++                r = sd_dhcp_client_attach_event(link->dhcp_client, NULL, 0);
++                if (r < 0)
++                        return log_link_error_errno(link, r, "Failed to attach DHCPv4 event: %m");
++
+                 r = sd_dhcp_client_set_request_address(link->dhcp_client, &address.in);
+                 if (r < 0)
+                         return log_link_error_errno(link, r, "Failed to set initial DHCPv4 address %s: %m", dhcp4_address);
+@@ -3464,6 +3468,10 @@ dhcp4_address_fail:
+                 if (r < 0)
+                         return log_link_error_errno(link, r, "Failed to create IPv4LL client: %m");
+ 
++                r = sd_ipv4ll_attach_event(link->ipv4ll, NULL, 0);
++                if (r < 0)
++                        return log_link_error_errno(link, r, "Failed to attach IPv4LL event: %m");
++
+                 r = sd_ipv4ll_set_address(link->ipv4ll, &address.in);
+                 if (r < 0)
+                         return log_link_error_errno(link, r, "Failed to set initial IPv4LL address %s: %m", ipv4ll_address);

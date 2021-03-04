@@ -1,0 +1,48 @@
+From f3808b872f78b3224ecd0517f96f18a353bfba79 Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Wed, 9 Dec 2020 14:32:06 -0500
+Subject: [PATCH 6/7] sd-dhcp-client: correct retransmission timeout to match
+ RFC
+Origin: upstream, https://github.com/systemd/systemd/commit/3a23834d6b0da391c1ba9cb79a7d7deea7125f4b
+Bug: https://github.com/systemd/systemd/issues/17909
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1907306
+
+This changes the retransmission timeout algorithm for requests
+other than RENEW and REBIND. Previously, the retransmission timeout
+started at 2 seconds, then doubling each retransmission up to a max
+of 64 seconds. This is changed to match what RFC2131 section 4.1 describes,
+which skips the initial 2 second timeout and starts with a 4 second timeout
+instead. Note that -1 to +1 seconds of random 'fuzz' is added to each
+timeout, in previous and current behavior.
+
+This change is therefore slightly slower than the previous behavior in
+attempting retransmissions when no server response is received, since the
+first transmission times out in 4 seconds instead of 2.
+
+Since TRANSIENT_FAILURE_ATTEMPTS is set to 3, the previous length of time
+before a transient failure was reported back to systemd-networkd was
+2 + 4 + 8 = 14 seconds, plus, on average, 3 seconds of random 'fuzz' for
+a transient failure timeout between 11 and 17 seconds. Now, since the
+first timeout starts at 4, the transient failure will be reported at
+4 + 8 + 16 = 28 seconds, again plus 3 random seconds for a transient
+failure timeout between 25 and 31 seconds.
+
+Additionally, if MaxAttempts= is set, it will take slightly longer to
+reach than with previous behavior.
+---
+ src/libsystemd-network/sd-dhcp-client.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+--- a/src/libsystemd-network/sd-dhcp-client.c
++++ b/src/libsystemd-network/sd-dhcp-client.c
+@@ -1138,9 +1138,7 @@ static int client_timeout_resend(
+                 else
+                         goto error;
+ 
+-                next_timeout = time_now + ((UINT64_C(1) << MIN(client->attempt, (uint64_t) 6)) - 1) * USEC_PER_SEC;
+-                next_timeout += (random_u32() & 0x1fffff);
+-
++                next_timeout = client_compute_request_timeout(time_now, client->attempt);
+                 break;
+ 
+         case DHCP_STATE_STOPPED:

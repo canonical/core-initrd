@@ -285,6 +285,12 @@ override_dh_installinit:
 	dh_installinit --no-scripts -psystemd
 	dh_installinit --no-start -Nsystemd
 
+override_dh_systemd_enable:
+	dh_systemd_enable -psystemd-timesyncd
+
+override_dh_systemd_start:
+	dh_systemd_start -psystemd-timesyncd
+
 PROJECT_VERSION ?= $(shell awk '/(PROJECT|PACKAGE)_VERSION/ {print $$3}' build-deb/config.h | tr -d \")
 
 # The SysV compat tools (which are symlinks to systemctl) are
@@ -306,10 +312,8 @@ override_dh_auto_test:
 ifeq (, $(filter nocheck, $(DEB_BUILD_OPTIONS)))
 	echo "01234567890123456789012345678901" > build-deb/machine-id
 	# some tests hang under fakeroot, so disable fakeroot
-	env -u LD_PRELOAD SYSTEMD_MACHINE_ID_PATH=$(CURDIR)/build-deb/machine-id meson test -C build-deb $(TEST_TIMEOUT_MULTIPLIER) || ( \
-		cat build-deb/meson-logs/testlog.txt; \
-		exit 1)
+	env -u LD_PRELOAD SYSTEMD_MACHINE_ID_PATH=$(CURDIR)/build-deb/machine-id meson test -C build-deb --print-errorlogs $(TEST_TIMEOUT_MULTIPLIER)
 endif
 
 %:
-	dh $@ --without autoreconf,systemd --buildsystem=meson
+	dh $@ --without autoreconf --buildsystem=meson

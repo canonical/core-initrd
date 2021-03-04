@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -e
+
+_systemctl() {
+    if [ -d /run/systemd/system ]; then
+        systemctl "$@"
+    fi
+}
+
+#DEBHELPER#
+
+# Clean up after package split. If the new systemd-timesyncd package is
+# installed, it will enable and start the service again.
+if [ "$1" = "upgrade" ] && dpkg --compare-versions "$2" lt-nl "245.4-2~"; then
+    if _systemctl -q is-active systemd-timesyncd.service; then
+        _systemctl stop systemd-timesyncd.service || true
+    fi
+    rm -f /etc/systemd/system/sysinit.target.wants/systemd-timesyncd.service
+    # Don't bother with cleaning up the systemd-timesync group
+fi

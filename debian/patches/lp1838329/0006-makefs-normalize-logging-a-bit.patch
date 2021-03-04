@@ -1,0 +1,39 @@
+From a5a8fe2e8dbb9bc1981064d273b626d4aa187152 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Mon, 18 May 2020 18:32:17 +0200
+Subject: [PATCH 6/7] makefs: normalize logging a bit
+Bug: https://github.com/systemd/systemd/issues/10179
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1838329
+Origin: upstream, https://github.com/systemd/systemd/pull/15836
+
+---
+ src/partition/makefs.c | 11 ++++-------
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/src/partition/makefs.c b/src/partition/makefs.c
+index 128aa41044..97f50c9033 100644
+--- a/src/partition/makefs.c
++++ b/src/partition/makefs.c
+@@ -76,15 +76,12 @@ static int run(int argc, char *argv[]) {
+                 log_info("%s is not a block device.", device);
+ 
+         r = probe_filesystem(device, &detected);
++        if (r == -EUCLEAN)
++                return log_error_errno(r, "Ambiguous results of probing for file system on \"%s\", refusing to proceed.", device);
+         if (r < 0)
+-                return log_warning_errno(r,
+-                                         r == -EUCLEAN ?
+-                                         "Cannot reliably determine probe \"%s\", refusing to proceed." :
+-                                         "Failed to probe \"%s\": %m",
+-                                         device);
+-
++                return log_error_errno(r, "Failed to probe \"%s\": %m", device);
+         if (detected) {
+-                log_info("%s is not empty (type %s), exiting", device, detected);
++                log_info("'%s' is not empty (contains file system of type %s), exiting.", device, detected);
+                 return 0;
+         }
+ 
+-- 
+2.25.1
+

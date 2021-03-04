@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+for j in /var/log/journal/*/*; do
+    echo "Verifying local journal file $j"
+    if ! journalctl --verify --file "$j"; then
+        echo "Verification failed, removing corrupt file $j"
+        rm -vf "$j"
+    fi
+done
+
 EXFAIL=""
 
 res=0

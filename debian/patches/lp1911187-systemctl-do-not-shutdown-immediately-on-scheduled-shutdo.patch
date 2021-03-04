@@ -1,0 +1,43 @@
+Description: systemctl: do not shutdown immediately on scheduled shutdown
+When, for whatever reason, a scheduled shutdown fails to be set, systemd 
+will proceed with immediate shutdown without allowing the user to react.
+This is counterintuitive because when a scheduled shutdown is issued,
+it means the user wants to shutdown at a specified time in the future,
+not immediately. This pathc prevents the immediate shutdown and informs
+the user that no action will be taken.
+fixes: #17575
+Author: Ioanna Alifieraki <ioanna-maria.alifieraki@canonical.com>
+Origin: Upstream,  https://salsa.debian.org/systemd-team/systemd/-/commit/ce31df6711a8e112cff929ed3bbdcd194f876270, https://salsa.debian.org/systemd-team/systemd/-/commit/ec1130fece7ca66273773119775e51045a74122c
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1911187
+Last-Update: 2021-02-23
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/src/systemctl/systemctl.c
++++ b/src/systemctl/systemctl.c
+@@ -9267,8 +9267,9 @@ static int logind_schedule_shutdown(void
+                         "st",
+                         action,
+                         arg_when);
++        /* logind fails, cannot schedule reboot, do nothing */
+         if (r < 0)
+-                return log_warning_errno(r, "Failed to call ScheduleShutdown in logind, proceeding with immediate shutdown: %s", bus_error_message(&error, r));
++                return log_warning_errno(r, "Failed to call ScheduleShutdown in logind, no action will be taken: %s", bus_error_message(&error, r));
+ 
+         if (!arg_quiet)
+                 log_info("Shutdown scheduled for %s, use 'shutdown -c' to cancel.", format_timestamp(date, sizeof(date), arg_when));
+@@ -9286,11 +9287,11 @@ static int halt_main(void) {
+         if (r < 0)
+                 return r;
+ 
+-        /* Delayed shutdown requested, and was successful */
+-        if (arg_when > 0 && logind_schedule_shutdown() == 0)
+-                return 0;
+-        /* no delay, or logind failed or is not at all available */
++        /* Delayed shutdown requested */
++        if (arg_when > 0)
++                return logind_schedule_shutdown();
+ 
++        /* no delay */
+         if (geteuid() != 0) {
+                 if (arg_dry_run || arg_force > 0) {
+                         (void) must_be_root();
