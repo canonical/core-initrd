@@ -18,7 +18,7 @@ def create_initrd(parser, args):
     if args.kernelver:
         args.output = "-".join([args.output, args.kernelver])
     with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
-        main = os.path.join(d, "main")
+
 
         kernel_root = os.path.join(d, "kernel")
         modules = os.path.join(kernel_root, "usr", "lib", "modules")
@@ -29,33 +29,35 @@ def create_initrd(parser, args):
         firmware = os.path.join(kernel_root, "usr", "lib", "firmware")
         subprocess.check_call(["cp", "-ar", args.firmwaredir, firmware])
 
-        subprocess.check_call(["cp", "-ar", "%s/main" % args.skeleton, d])
+        main = os.path.join(d, "main")
+        os.makedirs(main, exist_ok=True)
+        for feature in args.features:
+            subprocess.check_call(["cp", "-ar", "%s/%s/." % (args.skeleton, feature), main])
         # Update epoch
         pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
         # Should itirate all the .conf drop ins
-        with open(
-            os.path.join(main, "usr/lib/modules-load.d/ubuntu-core-initramfs.conf")
-        ) as f:
-            for module in f.readlines():
-                module = module.strip()
-                if module:
-                    if module[0] in ["#", ";"]:
-                        continue
-                    subprocess.check_call(
-                        [
-                            "/usr/lib/dracut/dracut-install",
-                            "-D",
-                            main,
-                            "-r", kernel_root,
-                            "--kerneldir",
-                            modules,
-                            "--firmwaredirs",
-                            firmware,
-                            "--module",
-                            "--optional",
-                            module,
-                        ]
-                    )
+        for module_load in glob.iglob("%s/usr/lib/modules-load.d/*.conf" % main):
+            with open(module_load) as f:
+                for module in f.readlines():
+                    module = module.strip()
+                    if module:
+                        if module[0] in ["#", ";"]:
+                            continue
+                        subprocess.check_call(
+                            [
+                                "/usr/lib/dracut/dracut-install",
+                                "-D",
+                                main,
+                                "-r", kernel_root,
+                                "--kerneldir",
+                                modules,
+                                "--firmwaredirs",
+                                firmware,
+                                "--module",
+                                "--optional",
+                                module,
+                            ]
+                        )
 
         for modulesf in ["modules.order", "modules.builtin", "modules.builtin.bin"]:
             subprocess.check_call(
@@ -131,6 +133,7 @@ def main():
         ["uname", "-r"], universal_newlines=True
     ).strip()
     suffix = {"x86_64": "x64", "aarch64": "aa64"}.get(platform.machine())
+    features = {"x86_64": "main server", "aarch64": "main"}.get(platform.machine())
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
     efi_parser = subparser.add_parser(
@@ -173,6 +176,12 @@ def main():
         "--skeleton", help="path to skeleton", default="/usr/lib/ubuntu-core-initramfs"
     )
     initrd_parser.add_argument(
+        "--feature",
+        dest="features",
+        help="list of features to enable, if unspecified defaults to %s" % features,
+        nargs="+"
+    )
+    initrd_parser.add_argument(
         "--kerneldir", help="path to kernel modules dir", default="/lib/modules/%s" % kernelver
     )
     initrd_parser.add_argument("--kernelver", help="kernel version", default=kernelver)
@@ -189,6 +198,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if not args.features:
+        args.features = features.split()
     globals()[args.subcmd.replace("-", "_")](parser, args)
 
 
