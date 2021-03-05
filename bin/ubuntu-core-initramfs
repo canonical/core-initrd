@@ -10,6 +10,8 @@ import shutil
 
 
 def create_initrd(parser, args):
+    if not args.kerneldir:
+        args.kerneldir = "/lib/modules/%s" % args.kernelver
     if args.root:
         args.skeleton = os.path.join(args.root, args.skeleton)
         args.kerneldir = os.path.join(args.root, args.kerneldir)
@@ -18,8 +20,6 @@ def create_initrd(parser, args):
     if args.kernelver:
         args.output = "-".join([args.output, args.kernelver])
     with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
-
-
         kernel_root = os.path.join(d, "kernel")
         modules = os.path.join(kernel_root, "usr", "lib", "modules")
         os.makedirs(modules, exist_ok=True)
@@ -182,7 +182,7 @@ def main():
         nargs="+"
     )
     initrd_parser.add_argument(
-        "--kerneldir", help="path to kernel modules dir", default="/lib/modules/%s" % kernelver
+        "--kerneldir", help="path to kernel modules dir default /lib/modules/KERNELVER"
     )
     initrd_parser.add_argument("--kernelver", help="kernel version", default=kernelver)
     initrd_parser.add_argument(
