@@ -198,7 +198,7 @@ def main():
     )
 
     args = parser.parse_args()
-    if not args.features:
+    if args.subcmd == "create-initrd" and not args.features:
         args.features = features.split()
     globals()[args.subcmd.replace("-", "_")](parser, args)
 
