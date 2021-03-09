@@ -133,7 +133,7 @@ def main():
         ["uname", "-r"], universal_newlines=True
     ).strip()
     suffix = {"x86_64": "x64", "aarch64": "aa64"}.get(platform.machine())
-    features = {"x86_64": "main server", "aarch64": "main"}.get(platform.machine())
+    features = {"x86_64": "main server"}.get(platform.machine(), "main")
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
     efi_parser = subparser.add_parser(
