@@ -1,5 +1,6 @@
-ubuntu-core-initramfs (44) focal; urgency=medium
+ubuntu-core-initramfs (45) focal; urgency=medium
 
+  [ Dimitri John Ledkov ]
   * Initial Release.
 
- -- Dimitri John Ledkov <xnox@ubuntu.com>  Tue, 09 Mar 2021 08:43:10 +0000
+ -- Łukasz 'sil2100' Zemczak <lukasz.zemczak@ubuntu.com>  Mon, 10 May 2021 21:38:34 +0200
