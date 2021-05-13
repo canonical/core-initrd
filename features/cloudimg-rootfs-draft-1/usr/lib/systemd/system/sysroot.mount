@@ -1,0 +1,9 @@
+[Unit]
+Before=initrd-cleanup.target
+After=run-mnt-data.mount
+After=the-tool.service
+Requires=run-mnt-data.mount
+[Mount]
+What=/run/mnt/data
+Type=none
+Options=bind
