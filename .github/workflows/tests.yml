@@ -1,0 +1,19 @@
+name: Tests
+on:
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Install spread
+      run: curl -s https://storage.googleapis.com/snapd-spread-tests/spread/spread-amd64.tar.gz | sudo tar xzv -C /usr/bin
+
+    - name: Run tests
+      env:
+        SPREAD_GOOGLE_KEY: ${{ secrets.SPREAD_GOOGLE_KEY }}
+      run: |
+        spread google-nested:
