@@ -97,8 +97,7 @@ def create_efi(parser, args):
         args.kernel = "-".join([args.kernel, args.kernelver])
         args.initrd = "-".join([args.initrd, args.kernelver])
         args.output = "-".join([args.output, args.kernelver])
-    subprocess.check_call(
-        [
+    objcopy_cmd = [
             "objcopy",
             "--add-section",
             ".linux=%s" % args.kernel,
@@ -111,7 +110,17 @@ def create_efi(parser, args):
             args.stub,
             args.output,
         ]
-    )
+    if args.cmdline:
+        cmdline = tempfile.NamedTemporaryFile(mode='w')
+        cmdline.write('%s' % args.cmdline)
+        cmdline.flush()
+        objcopy_cmd += [
+            "--add-section",
+            ".cmdline=%s" % cmdline.name,
+            "--change-section-vma",
+            ".cmdline=0x30000"
+            ]
+    subprocess.check_call(objcopy_cmd)
     if not args.unsigned:
         subprocess.check_call(
             [
@@ -151,6 +160,9 @@ def main():
     )
     efi_parser.add_argument(
         "--initrd", help="path to initramfs", default="/boot/ubuntu-core-initramfs.img"
+    )
+    efi_parser.add_argument(
+        "--cmdline", help="commandline to embed (can be overriden with LoadOptions)"
     )
     efi_parser.add_argument(
         "--unsigned", help="do not sign efi app", default=False, action="store_true"
