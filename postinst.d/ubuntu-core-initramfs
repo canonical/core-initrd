@@ -21,6 +21,6 @@ ubuntu-core-initramfs create-initrd --kernelver $version
 
 case `dpkg --print-architecture` in
     amd64)
-        ubuntu-core-initramfs create-efi --kernelver $version
+        ubuntu-core-initramfs create-efi --kernelver $version --cmdline 'snapd_recovery_mode=run-cloudimg-rootfs-draft-1'
         ;;
 esac
