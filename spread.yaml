@@ -14,7 +14,7 @@ backends:
   google-nested:
     type: google
     key: '$(HOST: echo "$SPREAD_GOOGLE_KEY")'
-    location: computeengine/us-east1-b
+    location: snapd-spread/us-east1-b
     plan: n1-standard-2
     halt-timeout: 2h
     systems:
