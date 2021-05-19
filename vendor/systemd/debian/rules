@@ -44,6 +44,7 @@ CONFFLAGS = \
 	-Dversion-tag="$(DEB_VERSION)" \
 	-Dquotaon-path=/sbin/quotaon \
 	-Dquotacheck-path=/sbin/quotacheck \
+	-Dsbat-distro=auto \
 	-Dkmod-path=/bin/kmod \
 	-Dkexec-path=/sbin/kexec \
 	-Dsulogin-path=/sbin/sulogin \

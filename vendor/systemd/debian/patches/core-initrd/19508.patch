@@ -1,0 +1,49 @@
+From 03679c566d4da9eade9f10959336ed14f2285a21 Mon Sep 17 00:00:00 2001
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Tue, 4 May 2021 19:15:00 +0100
+Subject: [PATCH] boot/efi: add ARM (THUMB) and RISCV64 machine types
+
+Also drop defines from shared/pe-header.h, appear to be unused.
+---
+ src/boot/efi/pe.c      | 6 +++++-
+ src/shared/pe-header.h | 3 ---
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/boot/efi/pe.c b/src/boot/efi/pe.c
+index cb3583807211..e65701734307 100644
+--- a/src/boot/efi/pe.c
++++ b/src/boot/efi/pe.c
+@@ -31,6 +31,8 @@ struct DosFileHeader {
+ #define PE_HEADER_MACHINE_I386          0x014c
+ #define PE_HEADER_MACHINE_X64           0x8664
+ #define PE_HEADER_MACHINE_ARM64         0xaa64
++#define PE_HEADER_MACHINE_ARM           0x01c2
++#define PE_HEADER_MACHINE_RISCV64       0x5064
+ struct PeFileHeader {
+         UINT16  Machine;
+         UINT16  NumberOfSections;
+@@ -76,7 +78,9 @@ EFI_STATUS pe_memory_locate_sections(CHAR8 *base, CHAR8 **sections, UINTN *addrs
+         /* PE32+ Subsystem type */
+         if (pe->FileHeader.Machine != PE_HEADER_MACHINE_X64 &&
+             pe->FileHeader.Machine != PE_HEADER_MACHINE_ARM64 &&
+-            pe->FileHeader.Machine != PE_HEADER_MACHINE_I386)
++            pe->FileHeader.Machine != PE_HEADER_MACHINE_I386 &&
++            pe->FileHeader.Machine != PE_HEADER_MACHINE_ARM &&
++            pe->FileHeader.Machine != PE_HEADER_MACHINE_RISCV64)
+                 return EFI_LOAD_ERROR;
+ 
+         if (pe->FileHeader.NumberOfSections > 96)
+diff --git a/src/shared/pe-header.h b/src/shared/pe-header.h
+index 54433c79b851..4ddfce39e6b0 100644
+--- a/src/shared/pe-header.h
++++ b/src/shared/pe-header.h
+@@ -29,9 +29,6 @@ struct DosFileHeader {
+         le32_t ExeHeader;
+ } _packed_;
+ 
+-#define PE_HEADER_MACHINE_I386 0x014cU
+-#define PE_HEADER_MACHINE_X64  0x8664U
+-
+ struct PeFileHeader {
+         le16_t Machine;
+         le16_t NumberOfSections;

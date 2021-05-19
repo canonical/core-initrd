@@ -1,0 +1,166 @@
+From 9137c03c043c702d0f3d8056cd8fcc4b578a5b43 Mon Sep 17 00:00:00 2001
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Tue, 27 Apr 2021 16:53:53 +0100
+Subject: [PATCH] boot: add optional EFI SBAT support
+
+Add SBAT support, when -Dsbat-distro value is specified. One can use
+-Dsbat-distro=auto for autodetection of all sbat options. Many meson configure
+options added to customize SBAT CSV values, but sensible defaults are auto
+detected by default. SBAT support is required if shim v15+ is used to load
+systemd-boot binary or kernel.efi (Type II BootLoaderSpec).
+
+Fixes #19247
+---
+ meson_options.txt                   | 12 ++++++++++
+ src/basic/macro.h                   |  6 -----
+ src/boot/efi/meson.build            | 37 +++++++++++++++++++++++++++++
+ src/boot/efi/secure-boot.c          |  7 ++++++
+ src/fundamental/macro-fundamental.h |  6 +++++
+ 5 files changed, 62 insertions(+), 6 deletions(-)
+
+diff --git a/meson_options.txt b/meson_options.txt
+index ad7174cf69ef..b7f30ce16bf5 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -370,6 +370,18 @@ option('efi-includedir', type : 'string', value : '/usr/include/efi',
+        description : 'path to the EFI header directory')
+ option('tpm-pcrindex', type : 'integer', value : 8,
+        description : 'TPM PCR register number to use')
++option('sbat-distro', type : 'string',
++       description : 'SBAT distribution ID, e.g. fedora, or auto for autodetection')
++option('sbat-distro-generation', type : 'integer', value : 1,
++       description : 'SBAT distribution generation')
++option('sbat-distro-summary', type : 'string',
++       description : 'SBAT distribution summary, e.g. Fedora')
++option('sbat-distro-pkgname', type : 'string',
++       description : 'SBAT distribution package name, e.g. systemd')
++option('sbat-distro-version', type : 'string',
++       description : 'SBAT distribution package version, e.g. 248-7.fc34')
++option('sbat-distro-url', type : 'string',
++       description : 'SBAT distribution URL, e.g. https://src.fedoraproject.org/rpms/systemd')
+ 
+ option('bashcompletiondir', type : 'string',
+        description : 'directory for bash completion scripts ["no" disables]')
+diff --git a/src/basic/macro.h b/src/basic/macro.h
+index f1d5e0894e3a..072fed437893 100644
+--- a/src/basic/macro.h
++++ b/src/basic/macro.h
+@@ -18,8 +18,6 @@
+ #  define _alloc_(...) __attribute__((__alloc_size__(__VA_ARGS__)))
+ #endif
+ #define _sentinel_ __attribute__((__sentinel__))
+-#define _section_(x) __attribute__((__section__(x)))
+-#define _used_ __attribute__((__used__))
+ #define _destructor_ __attribute__((__destructor__))
+ #define _deprecated_ __attribute__((__deprecated__))
+ #define _packed_ __attribute__((__packed__))
+@@ -30,7 +28,6 @@
+ #define _public_ __attribute__((__visibility__("default")))
+ #define _hidden_ __attribute__((__visibility__("hidden")))
+ #define _weakref_(x) __attribute__((__weakref__(#x)))
+-#define _align_(x) __attribute__((__aligned__(x)))
+ #define _alignas_(x) __attribute__((__aligned__(__alignof(x))))
+ #define _alignptr_ __attribute__((__aligned__(sizeof(void*))))
+ #if __GNUC__ >= 7
+@@ -138,9 +135,6 @@
+ /* automake test harness */
+ #define EXIT_TEST_SKIP 77
+ 
+-#define XSTRINGIFY(x) #x
+-#define STRINGIFY(x) XSTRINGIFY(x)
+-
+ /* builtins */
+ #if __SIZEOF_INT__ == 4
+ #define BUILTIN_FFS_U32(x) __builtin_ffs(x);
+diff --git a/src/boot/efi/meson.build b/src/boot/efi/meson.build
+index 47768931082f..ab5530bec17a 100644
+--- a/src/boot/efi/meson.build
++++ b/src/boot/efi/meson.build
+@@ -102,6 +102,42 @@ if have_gnu_efi
+         efi_conf.set10('ENABLE_TPM', get_option('tpm'))
+         efi_conf.set('SD_TPM_PCR', get_option('tpm-pcrindex'))
+ 
++        if get_option('sbat-distro') != ''
++                efi_conf.set_quoted('SBAT_PROJECT', meson.project_name())
++                efi_conf.set_quoted('PROJECT_VERSION', substs.get('PROJECT_VERSION'))
++                efi_conf.set_quoted('PROJECT_URL', substs.get('PROJECT_URL'))
++                if get_option('sbat-distro-generation') < 1
++                       error('SBAT Distro Generation must be a positive integer')
++                endif
++                efi_conf.set('SBAT_DISTRO_GENERATION', get_option('sbat-distro-generation'))
++                sbatvars = [['sbat-distro', 'ID'],
++                            ['sbat-distro-summary', 'NAME'],
++                            ['sbat-distro-url', 'BUG_REPORT_URL']]
++                foreach sbatvar : sbatvars
++                        value = get_option(sbatvar[0])
++                        if value == '' or value == 'auto'
++                                value = run_command('sh', '-c', 'if [ -e /etc/os-release ]; then . /etc/os-release; else . /usr/lib/os-release; fi; echo $' + sbatvar[1]).stdout().strip()
++                        endif
++                        if value == ''
++                                error('Required @0@ option not set and autodetection failed'.format(sbatvar[0]))
++                        endif
++                        efi_conf.set_quoted(sbatvar[0].underscorify().to_upper(), value)
++                endforeach
++
++                pkgname = get_option('sbat-distro-pkgname')
++                if pkgname == ''
++                        pkgname = meson.project_name()
++                endif
++                efi_conf.set_quoted('SBAT_DISTRO_PKGNAME', pkgname)
++
++                pkgver = get_option('sbat-distro-version')
++                if pkgver == ''
++                        efi_conf.set('SBAT_DISTRO_VERSION', 'GIT_VERSION')
++                else
++                        efi_conf.set_quoted('SBAT_DISTRO_VERSION', pkgver)
++                endif
++        endif
++
+         efi_config_h = configure_file(
+                 output : 'efi_config.h',
+                 configuration : efi_conf)
+@@ -244,6 +280,7 @@ if have_gnu_efi
+                         command : [objcopy,
+                                    '-j', '.text',
+                                    '-j', '.sdata',
++                                   '-j', '.sbat',
+                                    '-j', '.data',
+                                    '-j', '.dynamic',
+                                    '-j', '.dynsym',
+diff --git a/src/boot/efi/secure-boot.c b/src/boot/efi/secure-boot.c
+index cacf3b6a7b83..c1dfcfc5cb0b 100644
+--- a/src/boot/efi/secure-boot.c
++++ b/src/boot/efi/secure-boot.c
+@@ -11,3 +11,10 @@ BOOLEAN secure_boot_enabled(void) {
+ 
+         return !EFI_ERROR(err) && secure;
+ }
++
++#ifdef SBAT_DISTRO
++static const char sbat[] _used_ _section_ (".sbat") _align_ (512) =
++        "sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md\n"
++        SBAT_PROJECT ",1,The systemd Developers," SBAT_PROJECT "," PROJECT_VERSION "," PROJECT_URL "\n"
++        SBAT_PROJECT "." SBAT_DISTRO "," STRINGIFY(SBAT_DISTRO_GENERATION) "," SBAT_DISTRO_SUMMARY "," SBAT_DISTRO_PKGNAME "," SBAT_DISTRO_VERSION "," SBAT_DISTRO_URL "\n";
++#endif
+diff --git a/src/fundamental/macro-fundamental.h b/src/fundamental/macro-fundamental.h
+index 790920eb23ba..6ff8372f3cdd 100644
+--- a/src/fundamental/macro-fundamental.h
++++ b/src/fundamental/macro-fundamental.h
+@@ -7,11 +7,17 @@
+ 
+ #include "type.h"
+ 
++#define _align_(x) __attribute__((__aligned__(x)))
+ #define _const_ __attribute__((__const__))
+ #define _pure_ __attribute__((__pure__))
++#define _section_(x) __attribute__((__section__(x)))
++#define _used_ __attribute__((__used__))
+ #define _unused_ __attribute__((__unused__))
+ #define _cleanup_(x) __attribute__((__cleanup__(x)))
+ 
++#define XSTRINGIFY(x) #x
++#define STRINGIFY(x) XSTRINGIFY(x)
++
+ #ifndef __COVERITY__
+ #  define VOID_0 ((void)0)
+ #else
