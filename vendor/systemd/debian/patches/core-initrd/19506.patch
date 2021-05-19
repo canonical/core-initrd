@@ -13,11 +13,19 @@ linux/cmdline/splash sections and then convert the result to a PE binary.
  src/boot/efi/meson.build | 11 +++++++----
  1 file changed, 7 insertions(+), 4 deletions(-)
 
-diff --git a/src/boot/efi/meson.build b/src/boot/efi/meson.build
-index ab5530bec17a..547d918a7867 100644
---- a/src/boot/efi/meson.build
-+++ b/src/boot/efi/meson.build
-@@ -254,18 +254,21 @@ if have_gnu_efi
+Index: systemd/src/boot/efi/meson.build
+===================================================================
+--- systemd.orig/src/boot/efi/meson.build
++++ systemd/src/boot/efi/meson.build
+@@ -210,6 +210,7 @@ if have_gnu_efi
+                        '-Bsymbolic',
+                        '-nostdlib',
+                        '-znocombreloc',
++                       '--build-id=sha1',
+                        '-L', efi_libdir,
+                        efi_crt0]
+         if efi_arch == 'aarch64' or efi_arch == 'arm'
+@@ -240,24 +241,22 @@ if have_gnu_efi
  
          libgcc_file_name = run_command(efi_cc + ['-print-libgcc-file-name']).stdout().strip()
          systemd_boot_efi_name = 'systemd-boot@0@.efi'.format(EFI_MACHINE_TYPE_NAME)
@@ -27,96 +35,31 @@ index ab5530bec17a..547d918a7867 100644
  
 -        foreach tuple : [['systemd_boot.so', systemd_boot_efi_name, systemd_boot_objects],
 -                         ['stub.so', stub_efi_name, stub_objects]]
-+        foreach tuple : [['systemd_boot.so', systemd_boot_efi_name, systemd_boot_objects, 'systemd_boot.so', false],
-+                         ['stub.so', stub_efi_name, stub_objects, stub_elf_name, true]]
-                 so = custom_target(
-                         tuple[0],
-                         input : tuple[2],
--                        output : tuple[0],
-+                        output : tuple[3],
-                         command : [efi_ld, '-o', '@OUTPUT@'] +
-                                   efi_ldflags + tuple[2] +
--                                  ['-lefi', '-lgnuefi', libgcc_file_name])
-+                                  ['-lefi', '-lgnuefi', libgcc_file_name],
-+                        install : tuple[4],
-+                        install_dir : bootlibdir)
- 
-                 if want_tests != 'false'
-                         test('no-undefined-symbols-' + tuple[0],
-
-From 36c5f589fbe267bf149711b7c4ac701675c5695a Mon Sep 17 00:00:00 2001
-From: Dimitri John Ledkov <xnox@ubuntu.com>
-Date: Wed, 5 May 2021 17:07:48 +0100
-Subject: [PATCH 2/5] boot/efi: add --build-id=sha1 to ELF efi objects
-
-As it is not nice to ship ELF binary without a note.gnu.build-id set.
----
- src/boot/efi/meson.build | 1 +
- 1 file changed, 1 insertion(+)
-
-diff --git a/src/boot/efi/meson.build b/src/boot/efi/meson.build
-index 547d918a7867..ecb67eb689af 100644
---- a/src/boot/efi/meson.build
-+++ b/src/boot/efi/meson.build
-@@ -224,6 +224,7 @@ if have_gnu_efi
-                        '-Bsymbolic',
-                        '-nostdlib',
-                        '-znocombreloc',
-+                       '--build-id=sha1',
-                        '-L', efi_libdir,
-                        efi_crt0]
-         if ['aarch64', 'arm', 'riscv64'].contains(efi_arch)
-
-From 4f3dca78bb4f5d5bd6e8b1748601b123cdb9e367 Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?Zbigniew=20J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
-Date: Mon, 10 May 2021 20:28:14 +0200
-Subject: [PATCH 3/5] meson: rework test-efi-disk.img creation to not require
- variables
-
-The primary goal is to make the name of the custom_target() rule match
-the output file again. Having them different is confusing.
----
- src/boot/efi/meson.build | 41 ++++++++++++++++++++--------------------
- 1 file changed, 20 insertions(+), 21 deletions(-)
-
-diff --git a/src/boot/efi/meson.build b/src/boot/efi/meson.build
-index ecb67eb689af..26e6dc79fc22 100644
---- a/src/boot/efi/meson.build
-+++ b/src/boot/efi/meson.build
-@@ -259,24 +259,19 @@ if have_gnu_efi
-         stub_efi_name = 'linux@0@.efi.stub'.format(EFI_MACHINE_TYPE_NAME)
-         no_undefined_symbols = find_program('no-undefined-symbols.sh')
- 
--        foreach tuple : [['systemd_boot.so', systemd_boot_efi_name, systemd_boot_objects, 'systemd_boot.so', false],
--                         ['stub.so', stub_efi_name, stub_objects, stub_elf_name, true]]
 +        efi_stubs = []
 +        foreach tuple : [['systemd_boot.so', systemd_boot_efi_name, systemd_boot_objects, false],
 +                         [stub_elf_name, stub_efi_name, stub_objects, true]]
                  so = custom_target(
                          tuple[0],
                          input : tuple[2],
--                        output : tuple[3],
+                         output : tuple[0],
 -                        command : [efi_ld, '-o', '@OUTPUT@'] +
 -                                  efi_ldflags + tuple[2] +
--                                  ['-lefi', '-lgnuefi', libgcc_file_name],
--                        install : tuple[4],
-+                        output : tuple[0],
-+                        command : [efi_ld, '-o', '@OUTPUT@',
-+                                   efi_ldflags, tuple[2],
-+                                   '-lefi', '-lgnuefi', libgcc_file_name],
-+                        install : tuple[3],
-                         install_dir : bootlibdir)
- 
+-                                  ['-lefi', '-lgnuefi', libgcc_file_name])
+-
 -                if want_tests != 'false'
 -                        test('no-undefined-symbols-' + tuple[0],
 -                             no_undefined_symbols,
 -                             args : [so])
 -                endif
--
++                        command : [efi_ld, '-o', '@OUTPUT@',
++                                   efi_ldflags, tuple[2],
++                                   '-lefi', '-lgnuefi', libgcc_file_name],
++                        install : tuple[3],
++                        install_dir : bootlibdir)
+ 
                  stub = custom_target(
                          tuple[1],
-                         input : so,
-@@ -288,22 +283,26 @@ if have_gnu_efi
+@@ -270,22 +269,26 @@ if have_gnu_efi
                                     '-j', '.data',
                                     '-j', '.dynamic',
                                     '-j', '.dynsym',
@@ -151,24 +94,15 @@ index ecb67eb689af..26e6dc79fc22 100644
 -                           '@INPUT0@', '@INPUT1@', splash_bmp])
 +                command : [test_efi_create_disk_sh, '@OUTPUT@','@INPUT@', splash_bmp])
  endif
-
-From bdf5d8d4c0f6e895f7792b633d4847015701239e Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?Zbigniew=20J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
-Date: Mon, 10 May 2021 20:29:08 +0200
-Subject: [PATCH 4/5] test-efi-create-disk: shellcheckify
-
----
- test/test-efi-create-disk.sh | 31 +++++++++++++++----------------
- 1 file changed, 15 insertions(+), 16 deletions(-)
-
-diff --git a/test/test-efi-create-disk.sh b/test/test-efi-create-disk.sh
-index 783b7874500d..b7a2bf5b9dce 100755
---- a/test/test-efi-create-disk.sh
-+++ b/test/test-efi-create-disk.sh
-@@ -1,13 +1,10 @@
+Index: systemd/test/test-efi-create-disk.sh
+===================================================================
+--- systemd.orig/test/test-efi-create-disk.sh
++++ systemd/test/test-efi-create-disk.sh
+@@ -1,13 +1,13 @@
  #!/usr/bin/env bash
 -set -e
--
++set -eo pipefail
+ 
 -out="$1"
 -systemd_efi="$2"
 -boot_stub="$3"
@@ -176,16 +110,17 @@ index 783b7874500d..b7a2bf5b9dce 100755
 -if [ -z "$out" -o -z "$systemd_efi" -o -z "$boot_stub" -o -z "$splash_bmp" ]; then
 -    exit 1
 -fi
-+set -eo pipefail
-+
 +out="${1:?}"
 +systemd_efi="${2:?}"
 +boot_stub="${3:?}"
 +splash_bmp="${4:?}"
++
++efi_dir="$(bootctl -p)"
++entry_dir="${efi_dir}/$(cat /etc/machine-id)/$(uname -r)"
  
  # create GPT table with EFI System Partition
  rm -f "$out"
-@@ -15,15 +12,17 @@ dd if=/dev/null of="$out" bs=1M seek=512 count=1 status=none
+@@ -15,15 +15,17 @@ dd if=/dev/null of="$out" bs=1M seek=512
  parted --script "$out" "mklabel gpt" "mkpart ESP fat32 1MiB 511MiB" "set 1 boot on"
  
  # create FAT32 file system
@@ -207,56 +142,20 @@ index 783b7874500d..b7a2bf5b9dce 100755
  
  mkdir mnt/EFI/Linux
  echo -n "foo=yes bar=no root=/dev/fakeroot debug rd.break=initqueue" >mnt/cmdline.txt
-@@ -31,8 +30,8 @@ objcopy \
+@@ -31,8 +33,8 @@ objcopy \
      --add-section .osrel=/etc/os-release --change-section-vma .osrel=0x20000 \
      --add-section .cmdline=mnt/cmdline.txt --change-section-vma .cmdline=0x30000 \
      --add-section .splash="$splash_bmp" --change-section-vma .splash=0x40000 \
 -    --add-section .linux=/boot/$(cat /etc/machine-id)/$(uname -r)/linux --change-section-vma .linux=0x2000000 \
 -    --add-section .initrd=/boot/$(cat /etc/machine-id)/$(uname -r)/initrd --change-section-vma .initrd=0x3000000 \
-+    --add-section .linux="/boot/$(cat /etc/machine-id)/$(uname -r)/linux" --change-section-vma .linux=0x2000000 \
-+    --add-section .initrd="/boot/$(cat /etc/machine-id)/$(uname -r)/initrd" --change-section-vma .initrd=0x3000000 \
-     "$boot_stub" mnt/EFI/Linux/linux-test.efi
- 
- # install entries
-@@ -48,4 +47,4 @@ echo -e "title Test6\nlinux /test6\n" > mnt/loader/entries/test6.conf
- sync
- umount mnt
- rmdir mnt
--losetup -d $LOOP
-+losetup -d "$LOOP"
-
-From 031e7e3241d6339f4e6154c445ac24dd090483fb Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?Zbigniew=20J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
-Date: Mon, 10 May 2021 20:35:31 +0200
-Subject: [PATCH 5/5] test-efi-create-disk: support /boot/efi
-
-Most of our tools allow EFI mount to be on /boot/efi. Do the same here.
----
- test/test-efi-create-disk.sh | 7 +++++--
- 1 file changed, 5 insertions(+), 2 deletions(-)
-
-diff --git a/test/test-efi-create-disk.sh b/test/test-efi-create-disk.sh
-index b7a2bf5b9dce..e0949ba7295c 100755
---- a/test/test-efi-create-disk.sh
-+++ b/test/test-efi-create-disk.sh
-@@ -6,6 +6,9 @@ systemd_efi="${2:?}"
- boot_stub="${3:?}"
- splash_bmp="${4:?}"
- 
-+efi_dir="$(bootctl -p)"
-+entry_dir="${efi_dir}/$(cat /etc/machine-id)/$(uname -r)"
-+
- # create GPT table with EFI System Partition
- rm -f "$out"
- dd if=/dev/null of="$out" bs=1M seek=512 count=1 status=none
-@@ -30,8 +33,8 @@ objcopy \
-     --add-section .osrel=/etc/os-release --change-section-vma .osrel=0x20000 \
-     --add-section .cmdline=mnt/cmdline.txt --change-section-vma .cmdline=0x30000 \
-     --add-section .splash="$splash_bmp" --change-section-vma .splash=0x40000 \
--    --add-section .linux="/boot/$(cat /etc/machine-id)/$(uname -r)/linux" --change-section-vma .linux=0x2000000 \
--    --add-section .initrd="/boot/$(cat /etc/machine-id)/$(uname -r)/initrd" --change-section-vma .initrd=0x3000000 \
 +    --add-section .linux="${entry_dir}/linux" --change-section-vma .linux=0x2000000 \
 +    --add-section .initrd="${entry_dir}/initrd" --change-section-vma .initrd=0x3000000 \
      "$boot_stub" mnt/EFI/Linux/linux-test.efi
  
  # install entries
+@@ -48,4 +50,4 @@ echo -e "title Test6\nlinux /test6\n" >
+ sync
+ umount mnt
+ rmdir mnt
+-losetup -d $LOOP
++losetup -d "$LOOP"
