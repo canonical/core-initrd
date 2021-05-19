@@ -122,7 +122,8 @@ prepare_kernel() {
             ubuntu-core-initramfs create-initrd \
                                   --kernelver "$kver" \
                                   --skeleton "$skeletondir" \
-                                  --kerneldir "lib/modules" \
+                                  --feature main \
+                                  --kerneldir "lib/modules/$kver" \
                                   --output "$target/work/repacked-initrd"
         )
 
