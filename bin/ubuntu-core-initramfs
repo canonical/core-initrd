@@ -97,11 +97,7 @@ def create_efi(parser, args):
         args.kernel = "-".join([args.kernel, args.kernelver])
         args.initrd = "-".join([args.initrd, args.kernelver])
         args.output = "-".join([args.output, args.kernelver])
-    if args.cmdline:
-        cmdline = tempfile.NamedTemporaryFile(mode='w')
-        cmdline.write('%s' % args.cmdline)
-        cmdline.flush()
-    args = [
+    objcopy_cmd = [
             "objcopy",
             "--add-section",
             ".linux=%s" % args.kernel,
@@ -118,13 +114,13 @@ def create_efi(parser, args):
         cmdline = tempfile.NamedTemporaryFile(mode='w')
         cmdline.write('%s' % args.cmdline)
         cmdline.flush()
-        args += [
+        objcopy_cmd += [
             "--add-section",
             ".cmdline=%s" % cmdline.name,
             "--change-section-vma",
             ".cmdline=0x30000"
             ]
-    subprocess.check_call(args)
+    subprocess.check_call(objcopy_cmd)
     if not args.unsigned:
         subprocess.check_call(
             [
