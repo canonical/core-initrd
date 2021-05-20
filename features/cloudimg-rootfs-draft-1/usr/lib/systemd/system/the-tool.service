@@ -12,5 +12,6 @@ Wants=systemd-udev-settle.service
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/usr/lib/the-tool
+ExecStartPost=/usr/bin/systemctl --no-block isolate initrd.target
 StandardOutput=journal+console
 StandardError=journal+console
