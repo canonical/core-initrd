@@ -1,3 +1,26 @@
+systemd (245.4-4ubuntu3.6) focal; urgency=medium
+
+  * debian/patches/lp1916485-Newer-Glibc-use-faccessat2-to-implement-faccessat.patch:
+    Add support for faccessat2 (LP: #1916485)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=affb2c6507dccfeed02820a2267639648e2a2260
+  * d/p/lp1918696-shared-seccomp-util-address-family-filtering-is-brok.patch:
+    Stop attempting to restrict address families on ppc archs
+    (LP: #1918696)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=daff4b6604362fcb5d305682216d5ca15a4c5738
+  * d/p/lp1891810-seccomp-util-add-new-syscalls-from-kernel-5.6-to-sys.patch:
+    Add openat2() syscall to seccomp filter list
+    (LP: #1891810)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=69c8a684e2513b2f6530e5a5cf15c83abfb7bc74
+  * d/p/lp1915887-Downgrade-a-couple-of-warnings-to-debug.patch:
+    Downgrade some log messages so they stop spamming logs
+    (LP: #1915887)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=3c2c4731b90ed430ca1790270e69cd125643b94b
+  * d/p/lp1887744-basic-unit-file-when-loading-linked-unit-files-use-l.patch:
+    Use src name, not dst name, of symlinked unit files (LP: #1887744)
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=03770601097cfdc09adeadf5593083da69345409
+
+ -- Dan Streetman <ddstreet@canonical.com>  Wed, 17 Mar 2021 17:36:08 -0400
+
 systemd (245.4-4ubuntu3.5) focal; urgency=medium
 
   [ Ioanna Alifieraki ]
@@ -15,9 +38,6 @@ systemd (245.4-4ubuntu3.5) focal; urgency=medium
   * d/p/lp1913189-test-accept-that-char-device-0-0-can-now-be-created-.patch:
     - Fix failing test case under 5.8 kernel (LP: #1913189)
     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=782a382017ce188dbf9a40adabd265943d7db119
-  * d/p/lp1906331-sd-event-ref-event-loop-while-in-sd_event_prepare-ot.patch:
-    Take event reference while processing (LP: #1906331)
-    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b2bf4045ade41aa7bcf8e98f6a95fdaaab6197d3
   * d/p/lp1913423-hashmap-make-sure-to-initialize-shared-hash-key-atom.patch:
     Thread-safe init of hashmap shared key (LP: #1913423)
     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=fc8dde7c4b1944d1583866f61c2314174b4dd06a

@@ -1,0 +1,131 @@
+From 9137c03c043c702d0f3d8056cd8fcc4b578a5b43 Mon Sep 17 00:00:00 2001
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Tue, 27 Apr 2021 16:53:53 +0100
+Subject: [PATCH] boot: add optional EFI SBAT support
+
+Add SBAT support, when -Dsbat-distro value is specified. One can use
+-Dsbat-distro=auto for autodetection of all sbat options. Many meson configure
+options added to customize SBAT CSV values, but sensible defaults are auto
+detected by default. SBAT support is required if shim v15+ is used to load
+systemd-boot binary or kernel.efi (Type II BootLoaderSpec).
+
+Fixes #19247
+---
+ meson_options.txt                   | 12 ++++++++++
+ src/basic/macro.h                   |  6 -----
+ src/boot/efi/meson.build            | 37 +++++++++++++++++++++++++++++
+ src/boot/efi/secure-boot.c          |  7 ++++++
+ src/fundamental/macro-fundamental.h |  6 +++++
+ 5 files changed, 62 insertions(+), 6 deletions(-)
+
+Index: systemd/meson_options.txt
+===================================================================
+--- systemd.orig/meson_options.txt
++++ systemd/meson_options.txt
+@@ -329,6 +329,18 @@ option('efi-includedir', type : 'string'
+        description : 'path to the EFI header directory')
+ option('tpm-pcrindex', type : 'integer', value : 8,
+        description : 'TPM PCR register number to use')
++option('sbat-distro', type : 'string',
++       description : 'SBAT distribution ID, e.g. fedora, or auto for autodetection')
++option('sbat-distro-generation', type : 'integer', value : 1,
++       description : 'SBAT distribution generation')
++option('sbat-distro-summary', type : 'string',
++       description : 'SBAT distribution summary, e.g. Fedora')
++option('sbat-distro-pkgname', type : 'string',
++       description : 'SBAT distribution package name, e.g. systemd')
++option('sbat-distro-version', type : 'string',
++       description : 'SBAT distribution package version, e.g. 248-7.fc34')
++option('sbat-distro-url', type : 'string',
++       description : 'SBAT distribution URL, e.g. https://src.fedoraproject.org/rpms/systemd')
+ 
+ option('bashcompletiondir', type : 'string',
+        description : 'directory for bash completion scripts ["no" disables]')
+Index: systemd/src/boot/efi/meson.build
+===================================================================
+--- systemd.orig/src/boot/efi/meson.build
++++ systemd/src/boot/efi/meson.build
+@@ -96,6 +96,42 @@ if have_gnu_efi
+         efi_conf.set10('ENABLE_TPM', get_option('tpm'))
+         efi_conf.set('SD_TPM_PCR', get_option('tpm-pcrindex'))
+ 
++        if get_option('sbat-distro') != ''
++                efi_conf.set_quoted('SBAT_PROJECT', meson.project_name())
++                efi_conf.set_quoted('PROJECT_VERSION', substs.get('PROJECT_VERSION'))
++                efi_conf.set_quoted('PROJECT_URL', substs.get('PROJECT_URL'))
++                if get_option('sbat-distro-generation') < 1
++                       error('SBAT Distro Generation must be a positive integer')
++                endif
++                efi_conf.set('SBAT_DISTRO_GENERATION', get_option('sbat-distro-generation'))
++                sbatvars = [['sbat-distro', 'ID'],
++                            ['sbat-distro-summary', 'NAME'],
++                            ['sbat-distro-url', 'BUG_REPORT_URL']]
++                foreach sbatvar : sbatvars
++                        value = get_option(sbatvar[0])
++                        if value == '' or value == 'auto'
++                                value = run_command('sh', '-c', 'if [ -e /etc/os-release ]; then . /etc/os-release; else . /usr/lib/os-release; fi; echo $' + sbatvar[1]).stdout().strip()
++                        endif
++                        if value == ''
++                                error('Required @0@ option not set and autodetection failed'.format(sbatvar[0]))
++                        endif
++                        efi_conf.set_quoted(sbatvar[0].underscorify().to_upper(), value)
++                endforeach
++
++                pkgname = get_option('sbat-distro-pkgname')
++                if pkgname == ''
++                        pkgname = meson.project_name()
++                endif
++                efi_conf.set_quoted('SBAT_DISTRO_PKGNAME', pkgname)
++
++                pkgver = get_option('sbat-distro-version')
++                if pkgver == ''
++                        efi_conf.set('SBAT_DISTRO_VERSION', 'GIT_VERSION')
++                else
++                        efi_conf.set_quoted('SBAT_DISTRO_VERSION', pkgver)
++                endif
++        endif
++
+         efi_config_h = configure_file(
+                 output : 'efi_config.h',
+                 configuration : efi_conf)
+@@ -230,6 +266,7 @@ if have_gnu_efi
+                         command : [objcopy,
+                                    '-j', '.text',
+                                    '-j', '.sdata',
++                                   '-j', '.sbat',
+                                    '-j', '.data',
+                                    '-j', '.dynamic',
+                                    '-j', '.dynsym',
+Index: systemd/src/boot/efi/util.h
+===================================================================
+--- systemd.orig/src/boot/efi/util.h
++++ systemd/src/boot/efi/util.h
+@@ -67,4 +67,10 @@ extern const EFI_GUID loader_guid;
+                 _ptr_;                          \
+         })
+ 
++#define _align_(x) __attribute__((__aligned__(x)))
++#define _section_(x) __attribute__((__section__(x)))
++#define _used_ __attribute__((__used__))
++#define XSTRINGIFY(x) #x
++#define STRINGIFY(x) XSTRINGIFY(x
++
+ EFI_STATUS log_oom(void);
+Index: systemd/src/boot/efi/pe.c
+===================================================================
+--- systemd.orig/src/boot/efi/pe.c
++++ systemd/src/boot/efi/pe.c
+@@ -59,6 +59,13 @@ struct PeSectionHeader {
+         UINT32  Characteristics;
+ } __attribute__((packed));
+ 
++#ifdef SBAT_DISTRO
++static const char sbat[] _used_ _section_ (".sbat") _align_ (512) =
++        "sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md\n"
++        SBAT_PROJECT ",1,The systemd Developers," SBAT_PROJECT "," PROJECT_VERSION "," PROJECT_URL "\n"
++        SBAT_PROJECT "." SBAT_DISTRO "," STRINGIFY(SBAT_DISTRO_GENERATION) "," SBAT_DISTRO_SUMMARY "," SBAT_DISTRO_PKGNAME "," SBAT_DISTRO_VERSION "," SBAT_DISTRO_URL "\n";
++#endif
++
+ EFI_STATUS pe_memory_locate_sections(CHAR8 *base, CHAR8 **sections, UINTN *addrs, UINTN *offsets, UINTN *sizes) {
+         struct DosFileHeader *dos;
+         struct PeHeader *pe;

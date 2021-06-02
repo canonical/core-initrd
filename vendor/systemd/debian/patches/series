@@ -1,5 +1,8 @@
 ubuntu-core-initramfs-fix-default.target
 ubuntu-core-initramfs-clock-util-read-timestamp-from-usr-lib-clock-epoch.patch
+core-initrd/19436.patch
+core-initrd/19506.patch
+core-initrd/19508.patch
 pid1-by-default-make-user-units-inherit-their-umask-from-.patch
 userdbctl-drop-redundant-user-name-validity-check.patch
 user-util-rework-how-we-validate-user-names.patch
@@ -108,10 +111,14 @@ lp1907306/0007-test-network-increase-wait_online-timeout-to-handle-.patch
 lp1907306/0008-sd-dhcp-client-fix-renew-rebind-timeout-calculation-.patch
 lp1902960-udev-re-assign-ID_NET_DRIVER-ID_NET_LINK_FILE-ID_NET.patch
 lp1913189-test-accept-that-char-device-0-0-can-now-be-created-.patch
-lp1906331-sd-event-ref-event-loop-while-in-sd_event_prepare-ot.patch
 lp1913423-hashmap-make-sure-to-initialize-shared-hash-key-atom.patch
 lp1911187-systemctl-do-not-shutdown-immediately-on-scheduled-shutdo.patch
 lp1902236-nss-systemd-don-t-synthesize-root-nobody-when-iterat.patch
 lp1878969-meson-initialize-time-epoch-to-reproducible-builds-compat.patch
 lp1880258-log-nxdomain-as-debug.patch
 lp1913763-udev-rules-add-rule-to-create-dev-ptp_hyperv.patch
+lp1916485-Newer-Glibc-use-faccessat2-to-implement-faccessat.patch
+lp1918696-shared-seccomp-util-address-family-filtering-is-brok.patch
+lp1891810-seccomp-util-add-new-syscalls-from-kernel-5.6-to-sys.patch
+lp1915887-Downgrade-a-couple-of-warnings-to-debug.patch
+lp1887744-basic-unit-file-when-loading-linked-unit-files-use-l.patch
