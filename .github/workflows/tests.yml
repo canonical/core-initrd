@@ -1,5 +1,11 @@
 name: Tests
 on:
+  schedule:
+    # Weekly sunday testing for bitrot
+    - cron: '0 12 * * 0'
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
