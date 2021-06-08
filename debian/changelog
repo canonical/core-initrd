@@ -1,6 +1,6 @@
-ubuntu-core-initramfs (45) focal; urgency=medium
+ubuntu-core-initramfs (46) focal; urgency=medium
 
-  [ Dimitri John Ledkov ]
+  [ Łukasz 'sil2100' Zemczak ]
   * Initial Release.
 
- -- Łukasz 'sil2100' Zemczak <lukasz.zemczak@ubuntu.com>  Mon, 10 May 2021 21:38:34 +0200
+ -- Dimitri John Ledkov <xnox@ubuntu.com>  Tue, 08 Jun 2021 17:58:08 +0100
