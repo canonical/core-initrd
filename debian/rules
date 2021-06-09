@@ -202,13 +202,25 @@ endif
 
 	ldconfig -r debian/tmp
 
+ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH_BITS),64)
+ BUILDFLAGS=-buildmode=pie
+endif
+
 override_dh_install:
 	dh_install
+	# Forked snap-bootstrap until https://github.com/snapcore/snapd/pull/10267 lands
+	GOPATH=$(CURDIR)/vendor/gopath/ HOME=$(CURDIR)/debian CGO_ENABLED=1 go build $(BUILDFLAGS) -tags nomanagers -o $(CURDIR)/debian/$(DEB_SOURCE)/usr/lib/$(DEB_SOURCE)/cloudimg-rootfs/usr/lib/snapd/snap-bootstrap github.com/snapcore/snapd/cmd/snap-bootstrap
+	# For some reason tests fail when building in chroot
+	GOPATH=$(CURDIR)/vendor/gopath/ HOME=$(CURDIR)/debian CGO_ENABLED=1 go test $(BUILDFLAGS) -tags nomanagers github.com/snapcore/snapd/cmd/snap-bootstrap || :
 	rm -rf debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/main/usr/lib/systemd/boot
 ifeq ($(DEB_HOST_ARCH),amd64)
 	mkdir -p debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/early/
 	debian/generate-x86-microcode debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/early/microcode.cpio
 endif
+
+override_dh_clean:
+	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; GOPATH= ./get-deps.sh )
+	dh_clean
 
 override_dh_python3:
 	dh_python3 --no-ext-rename

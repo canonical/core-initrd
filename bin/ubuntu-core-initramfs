@@ -32,6 +32,9 @@ def create_initrd(parser, args):
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
         for feature in args.features:
+            # Needs https://github.com/snapcore/snapd/pull/10351 to land
+            if feature == "cloudimg-rootfs":
+                os.unlink(os.path.join(main, "usr/lib/systemd/system/sysroot.mount"))
             subprocess.check_call(["cp", "-ar", "%s/%s/." % (args.skeleton, feature), main])
         # Update epoch
         pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
