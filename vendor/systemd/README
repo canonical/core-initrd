@@ -196,6 +196,9 @@ REQUIREMENTS:
           sudo ninja install
           DESTDIR=... ninja install
 
+XXX
+ninja -C build -v src/boot/efi/test-efi-disk.img
+
         A tarball can be created with:
           git archive --format=tar --prefix=systemd-222/ v222 | xz > systemd-222.tar.xz
 
