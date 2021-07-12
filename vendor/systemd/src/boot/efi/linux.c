@@ -72,3 +72,24 @@ EFI_STATUS linux_exec(EFI_HANDLE *image,
         linux_efi_handover(image, boot_params);
         return EFI_LOAD_ERROR;
 }
+
+// linux_addr: .linux section address
+EFI_STATUS linux_aarch64_exec(EFI_HANDLE image,
+                              CHAR8 *cmdline, UINTN cmdline_len,
+                              UINTN linux_addr,
+                              UINTN initrd_addr, UINTN initrd_size) {
+        struct arm64_kernel_header *hdr;
+        struct arm64_linux_pe_header *pe;
+        handover_f handover;
+
+        hdr = (struct arm64_kernel_header *) linux_addr;
+
+        pe = (void *)((UINTN)linux_addr + hdr->hdr_offset);
+        handover = (handover_f)((UINTN)linux_addr + pe->opt.entry_addr);
+
+        Print(L"Calling now EFI kernel stub\n");
+
+        handover(image, ST, image);
+
+        return EFI_LOAD_ERROR;
+}
