@@ -2,6 +2,7 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <libfdt.h>
 
 #include "linux.h"
 #include "util.h"
@@ -73,6 +74,30 @@ EFI_STATUS linux_exec(EFI_HANDLE *image,
         return EFI_LOAD_ERROR;
 }
 
+// Update fdt /chosen module with initrd address and size
+static void update_fdt() {
+        EFI_STATUS status;
+        /* Look for a device tree configuration table entry. */
+        void *fdt;
+        unsigned long fdt_size;
+
+        status = LibGetSystemConfigurationTable(&EfiDtbTableGuid,
+                                                (VOID**) &fdt);
+        if (EFI_ERROR(status)) {
+                Print(L"DTB table not found\n");
+                return;
+        }
+
+        if (fdt_check_header(fdt) != 0) {
+		Print(L"Invalid header detected on UEFI supplied FDT\n");
+		return;
+	}
+	fdt_size = fdt_totalsize(fdt);
+        Print(L"Size of fdt is %lu\n", fdt_size);
+
+        Print(L"\n");
+}
+
 // linux_addr: .linux section address
 EFI_STATUS linux_aarch64_exec(EFI_HANDLE image,
                               CHAR8 *cmdline, UINTN cmdline_len,
@@ -81,6 +106,8 @@ EFI_STATUS linux_aarch64_exec(EFI_HANDLE image,
         struct arm64_kernel_header *hdr;
         struct arm64_linux_pe_header *pe;
         handover_f handover;
+
+        update_fdt();
 
         hdr = (struct arm64_kernel_header *) linux_addr;
 
