@@ -74,28 +74,73 @@ EFI_STATUS linux_exec(EFI_HANDLE *image,
         return EFI_LOAD_ERROR;
 }
 
-// Update fdt /chosen module with initrd address and size
-static void update_fdt() {
+static void *open_fdt(void) {
         EFI_STATUS status;
-        /* Look for a device tree configuration table entry. */
         void *fdt;
         unsigned long fdt_size;
 
+        /* Look for a device tree configuration table entry. */
         status = LibGetSystemConfigurationTable(&EfiDtbTableGuid,
                                                 (VOID**) &fdt);
         if (EFI_ERROR(status)) {
                 Print(L"DTB table not found\n");
-                return;
+                return 0;
         }
 
         if (fdt_check_header(fdt) != 0) {
 		Print(L"Invalid header detected on UEFI supplied FDT\n");
-		return;
+		return 0;
 	}
 	fdt_size = fdt_totalsize(fdt);
         Print(L"Size of fdt is %lu\n", fdt_size);
 
-        Print(L"\n");
+        return fdt;
+}
+
+#ifndef fdt_setprop_var
+#define fdt_setprop_var(fdt, node_offset, name, var) \
+	fdt_setprop((fdt), (node_offset), (name), &(var), sizeof(var))
+#endif
+
+// Update fdt /chosen module with initrd address and size
+// TODO we are updating in-place, probably we need to copy around and
+// then update the configuration table to be safe, although usually
+// you have some slack in the dtb, I think.
+static void update_fdt(UINTN initrd_addr, UINTN initrd_size) {
+        EFI_STATUS status;
+        void *fdt;
+	int node, num_rsv;
+        uint64_t initrd_start, initrd_end;
+
+        fdt = open_fdt();
+        if (fdt == 0)
+                return;
+
+        node = fdt_subnode_offset(fdt, 0, "chosen");
+	if (node < 0) {
+		node = fdt_add_subnode(fdt, 0, "chosen");
+		if (node < 0) {
+			/* 'node' is an error code when negative: */
+			status = node;
+                        Print(L"Error creating chosen\n");
+			return;
+		}
+	}
+
+        initrd_start = cpu_to_fdt64(initrd_addr);
+        initrd_end = cpu_to_fdt64(initrd_addr + initrd_size);
+
+        status = fdt_setprop_var(fdt, node, "linux,initrd-start", initrd_start);
+        if (status) {
+                Print(L"Cannot create initrd-start property\n");
+                return;
+        }
+
+        status = fdt_setprop_var(fdt, node, "linux,initrd-end", initrd_end);
+        if (status) {
+                Print(L"Cannot create initrd-end property\n");
+                return;
+        }
 }
 
 // linux_addr: .linux section address
@@ -107,7 +152,8 @@ EFI_STATUS linux_aarch64_exec(EFI_HANDLE image,
         struct arm64_linux_pe_header *pe;
         handover_f handover;
 
-        update_fdt();
+        if (initrd_size != 0)
+                update_fdt(initrd_addr, initrd_size);
 
         hdr = (struct arm64_kernel_header *) linux_addr;
 
