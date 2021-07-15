@@ -1,9 +1,9 @@
 #
 # Deb package dependencies: clang, lld
 CC=clang
-GNU_EFI=/home/abeato/src/snappy/kernel/core-initrd/vendor/gnu-efi
+GNU_EFI=./gnu-efi-coff
 LIBFDT=./libfdt
-SUBDIRS=$(LIBFDT)
+SUBDIRS=$(LIBFDT) $(GNU_EFI)/lib
 
 CFLAGS+= \
 	-DGIT_VERSION=\"FAFAFA\" -DEFI_MACHINE_TYPE_NAME=\"aa64\" \
@@ -18,7 +18,7 @@ CFLAGS+= \
 # lld-link-10 for PE+ binaries
 LDFLAGS+= \
 	-target aarch64-unknown-windows \
-	$(GNU_EFI)/aarch64/lib/libefi.a \
+	$(GNU_EFI)/lib/libefi.a \
 	$(LIBFDT)/libfdt.a \
 	-nostdlib \
 	-Wl,-entry:efi_main \
@@ -35,6 +35,7 @@ stub: $(SUBDIRS) $(OBJS)
 clean:
 	rm -f *.o stub
 	make -C $(LIBFDT) clean
+	make -C $(GNU_EFI)/lib clean
 
 $(SUBDIRS):
 	$(MAKE) -C $@
