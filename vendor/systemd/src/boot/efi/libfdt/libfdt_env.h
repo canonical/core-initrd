@@ -10,8 +10,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
 #include <limits.h>
 
 #ifdef __CHECKER__
@@ -34,6 +32,17 @@ typedef uint64_t FDT_BITWISE fdt64_t;
 			 (EXTRACT_BYTE(x, 2) << 40) | (EXTRACT_BYTE(x, 3) << 32) | \
 			 (EXTRACT_BYTE(x, 4) << 24) | (EXTRACT_BYTE(x, 5) << 16) | \
 			 (EXTRACT_BYTE(x, 6) << 8) | EXTRACT_BYTE(x, 7))
+
+void *memcpy(void *dest, const void *src, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
+void *memset(void *s, int c, size_t n);
+void *memchr(const void *s, int c, size_t n);
+size_t strlen(const char *s);
+size_t strnlen(const char *s, size_t maxlen);
+char *strchr(const char *s, int c);
+char *strrchr(const char *s, int c);
+unsigned long int strtoul(const char *nptr, char **endptr, int base);
 
 static inline uint16_t fdt16_to_cpu(fdt16_t x)
 {
