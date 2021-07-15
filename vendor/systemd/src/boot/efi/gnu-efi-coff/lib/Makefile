@@ -12,7 +12,6 @@ CFLAGS+= \
 	-ffreestanding \
 	-fshort-wchar \
 	-mno-red-zone \
-	-I. \
 	-I../inc/
 
 LIBEFI_SRCS = boxdraw.c console.c data.c dpath.c event.c guid.c hw.c lock.c \
