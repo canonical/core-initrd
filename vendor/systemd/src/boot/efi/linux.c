@@ -74,6 +74,39 @@ EFI_STATUS linux_exec(EFI_HANDLE *image,
         return EFI_LOAD_ERROR;
 }
 
+static void *create_new_fdt() {
+        EFI_STATUS err;
+        // TODO what is the max address for the fdt?
+        void *fdt = (void *) 0xFFFFFFFF;
+        int fdt_sz = 2048, ret;
+
+        err = uefi_call_wrapper(BS->AllocatePages, 4,
+                                AllocateMaxAddress,
+                                EfiACPIReclaimMemory,
+                                EFI_SIZE_TO_PAGES(fdt_sz),
+                                (EFI_PHYSICAL_ADDRESS*) &fdt);
+        if (EFI_ERROR(err)) {
+                Print(L"Cannot allocate when creating fdt\n");
+                return 0;
+        }
+
+        ret = fdt_create_empty_tree(fdt, fdt_sz);
+        if (ret != 0) {
+                Print(L"Error %d when creating fdt\n", ret);
+                return 0;
+        }
+
+        /* Set in EFI configuration table */
+        err = uefi_call_wrapper(BS->InstallConfigurationTable, 2,
+                                &EfiDtbTableGuid, fdt);
+        if (EFI_ERROR(err)) {
+                Print(L"Cannot set fdt in EFI configuration\n");
+                return 0;
+        }
+
+        return fdt;
+}
+
 static void *open_fdt(void) {
         EFI_STATUS status;
         void *fdt;
@@ -83,8 +116,10 @@ static void *open_fdt(void) {
         status = LibGetSystemConfigurationTable(&EfiDtbTableGuid,
                                                 (VOID**) &fdt);
         if (EFI_ERROR(status)) {
-                Print(L"DTB table not found\n");
-                return 0;
+                Print(L"DTB table not found, create new one\n");
+                fdt = create_new_fdt();
+                if (!fdt)
+                        return 0;
         }
 
         if (fdt_check_header(fdt) != 0) {
