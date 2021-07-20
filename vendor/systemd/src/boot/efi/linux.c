@@ -74,11 +74,11 @@ EFI_STATUS linux_exec(EFI_HANDLE *image,
         return EFI_LOAD_ERROR;
 }
 
-static void *create_new_fdt() {
+/* Create new fdt, either empty or with the content of old_fdt if not null */
+static void *create_new_fdt(void *old_fdt, int fdt_sz) {
         EFI_STATUS err;
-        // TODO what is the max address for the fdt?
-        void *fdt = (void *) 0xFFFFFFFF;
-        int fdt_sz = 2048, ret;
+        void *fdt = (void *) 0xFFFFFFFFUL;
+        int ret;
 
         err = uefi_call_wrapper(BS->AllocatePages, 4,
                                 AllocateMaxAddress,
@@ -90,10 +90,18 @@ static void *create_new_fdt() {
                 return 0;
         }
 
-        ret = fdt_create_empty_tree(fdt, fdt_sz);
-        if (ret != 0) {
-                Print(L"Error %d when creating fdt\n", ret);
-                return 0;
+        if (old_fdt) {
+                ret = fdt_open_into(old_fdt, fdt, fdt_sz);
+                if (ret != 0) {
+                        Print(L"Error %d when copying fdt\n", ret);
+                        return 0;
+                }
+        } else {
+                ret = fdt_create_empty_tree(fdt, fdt_sz);
+                if (ret != 0) {
+                        Print(L"Error %d when creating empty fdt\n", ret);
+                        return 0;
+                }
         }
 
         /* Set in EFI configuration table */
@@ -117,7 +125,7 @@ static void *open_fdt(void) {
                                                 (VOID**) &fdt);
         if (EFI_ERROR(status)) {
                 Print(L"DTB table not found, create new one\n");
-                fdt = create_new_fdt();
+                fdt = create_new_fdt(NULL, 2048);
                 if (!fdt)
                         return 0;
         }
@@ -132,49 +140,58 @@ static void *open_fdt(void) {
         return fdt;
 }
 
-#ifndef fdt_setprop_var
-#define fdt_setprop_var(fdt, node_offset, name, var) \
-	fdt_setprop((fdt), (node_offset), (name), &(var), sizeof(var))
-#endif
-
-// Update fdt /chosen module with initrd address and size
-// TODO we are updating in-place, probably we need to copy around and
-// then update the configuration table to be safe, although usually
-// you have some slack in the dtb, I think.
-static void update_fdt(UINTN initrd_addr, UINTN initrd_size) {
-        EFI_STATUS status;
-        void *fdt;
-	int node, num_rsv;
+static int update_chosen(void *fdt, UINTN initrd_addr, UINTN initrd_size) {
         uint64_t initrd_start, initrd_end;
-
-        fdt = open_fdt();
-        if (fdt == 0)
-                return;
+	int ret, node;
 
         node = fdt_subnode_offset(fdt, 0, "chosen");
 	if (node < 0) {
 		node = fdt_add_subnode(fdt, 0, "chosen");
 		if (node < 0) {
 			/* 'node' is an error code when negative: */
-			status = node;
+			ret = node;
                         Print(L"Error creating chosen\n");
-			return;
+			return ret;
 		}
 	}
 
         initrd_start = cpu_to_fdt64(initrd_addr);
         initrd_end = cpu_to_fdt64(initrd_addr + initrd_size);
 
-        status = fdt_setprop_var(fdt, node, "linux,initrd-start", initrd_start);
-        if (status) {
+        ret = fdt_setprop(fdt, node, "linux,initrd-start",
+                          &initrd_start, sizeof initrd_start);
+        if (ret) {
                 Print(L"Cannot create initrd-start property\n");
-                return;
+                return ret;
         }
 
-        status = fdt_setprop_var(fdt, node, "linux,initrd-end", initrd_end);
-        if (status) {
+        ret = fdt_setprop(fdt, node, "linux,initrd-end",
+                          &initrd_end, sizeof initrd_end);
+        if (ret) {
                 Print(L"Cannot create initrd-end property\n");
+                return ret;
+        }
+
+        return 0;
+}
+
+#define MAX_FDT_SIZE 2*1024*1024
+
+// Update fdt /chosen node with initrd address and size
+static void update_fdt(UINTN initrd_addr, UINTN initrd_size) {
+        void *fdt;
+
+        fdt = open_fdt();
+        if (fdt == 0)
                 return;
+
+        if (update_chosen(fdt, initrd_addr, initrd_size) == -FDT_ERR_NOSPACE) {
+                /* Copy to new tree and re-try */
+                Print(L"Not enough space, creating a new fdt\n");
+                fdt = create_new_fdt(NULL, MAX_FDT_SIZE);
+                if (!fdt)
+                        return;
+                update_chosen(fdt, initrd_addr, initrd_size);
         }
 }
 
