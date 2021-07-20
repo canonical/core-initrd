@@ -7,6 +7,7 @@ SUBDIRS=$(LIBFDT) $(GNU_EFI)/lib
 
 CFLAGS+= \
 	-DGIT_VERSION=\"FAFAFA\" -DEFI_MACHINE_TYPE_NAME=\"aa64\" \
+        -Wall -Wextra -Werror -Wno-unused-const-variable -Wno-unused-parameter \
 	-isystem $(GNU_EFI)/inc/ \
 	-isystem $(GNU_EFI)/inc/aarch64/ \
 	-isystem $(LIBFDT) \
