@@ -188,7 +188,7 @@ static void update_fdt(UINTN initrd_addr, UINTN initrd_size) {
         if (update_chosen(fdt, initrd_addr, initrd_size) == -FDT_ERR_NOSPACE) {
                 /* Copy to new tree and re-try */
                 Print(L"Not enough space, creating a new fdt\n");
-                fdt = create_new_fdt(NULL, fdt_totalsize(fdt) + FDT_EXTRA_SIZE);
+                fdt = create_new_fdt(fdt, fdt_totalsize(fdt) + FDT_EXTRA_SIZE);
                 if (!fdt)
                         return;
                 update_chosen(fdt, initrd_addr, initrd_size);
