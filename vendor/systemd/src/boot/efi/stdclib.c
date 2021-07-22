@@ -1,6 +1,7 @@
 /* Taken from grub. GPL3, consider taking from elsewhere?
    (https://clc-wiki.net/wiki) */
 #include <stdint.h>
+#include <stddef.h>
 
 #include "stdclib.h"
 
