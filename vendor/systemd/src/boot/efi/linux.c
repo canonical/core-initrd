@@ -13,6 +13,12 @@
 #define __regparm0__
 #endif
 
+#ifndef EFI_DTB_TABLE_GUID
+#define EFI_DTB_TABLE_GUID \
+    { 0xb1b621d5, 0xf19c, 0x41a5, {0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0} }
+EFI_GUID EfiDtbTableGuid          = EFI_DTB_TABLE_GUID;
+#endif
+
 typedef VOID(*handover_f)(VOID *image, EFI_SYSTEM_TABLE *table, struct boot_params *params) __regparm0__;
 static VOID linux_efi_handover(EFI_HANDLE image, struct boot_params *params) {
         handover_f handover;
