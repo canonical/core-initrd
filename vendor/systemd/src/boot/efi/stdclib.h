@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier:  */
+/* Public domain  */
 #pragma once
 
 void *memmove(void *dest, const void *src, size_t n);
@@ -8,4 +8,3 @@ size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
 char *strchr(const char *s, int c);
 char *strrchr(const char *s, int c);
-unsigned long int strtoul(const char *nptr, char **endptr, int base);
