@@ -84,11 +84,11 @@ def fix_aarch64_pe_stub():
                 stub.seek(sect_off + off_secth_SizeOfRawData)
                 raw_linux_sz = int.from_bytes(stub.read(4), 'little')
                 stub.seek(sect_off + off_secth_VirtualSize)
-                stub.write(raw_linux_sz.to_bytes(4, 'little', signed=False))
-                stub.write(linux_va.to_bytes(4, 'little', signed=False))
+                stub.write(raw_linux_sz.to_bytes(4, 'little'))
+                stub.write(linux_va.to_bytes(4, 'little'))
 
                 disk_size = align_to_size(raw_linux_sz, file_align)
-                stub.write(disk_size.to_bytes(4, 'little', signed=False))
+                stub.write(disk_size.to_bytes(4, 'little'))
                 disk_data += disk_size
 
                 initrd_va = linux_va + align_to_size(raw_linux_sz,
@@ -100,11 +100,11 @@ def fix_aarch64_pe_stub():
                 stub.seek(sect_off + off_secth_SizeOfRawData)
                 raw_initrd_sz = int.from_bytes(stub.read(4), 'little')
                 stub.seek(sect_off + off_secth_VirtualSize)
-                stub.write(raw_initrd_sz.to_bytes(4, 'little', signed=False))
-                stub.write(initrd_va.to_bytes(4, 'little', signed=False))
+                stub.write(raw_initrd_sz.to_bytes(4, 'little'))
+                stub.write(initrd_va.to_bytes(4, 'little'))
 
                 disk_size = align_to_size(raw_initrd_sz, file_align)
-                stub.write(disk_size.to_bytes(4, 'little', signed=False))
+                stub.write(disk_size.to_bytes(4, 'little'))
                 disk_data += disk_size
 
             sect_off += sz_sect_head
@@ -112,14 +112,14 @@ def fix_aarch64_pe_stub():
         # Size of data sections
         stub.seek(pe_off + sz_signature + sz_coff_fhead +
                   off_opth_SizeOfInitializedData)
-        stub.write(disk_data.to_bytes(4, 'little', signed=False))
+        stub.write(disk_data.to_bytes(4, 'little'))
 
         # Size in memory (page added for headers)
         image_sz = (initrd_va - vma_start +
                     align_to_size(raw_initrd_sz, section_align) +
                     section_align)
         stub.seek(pe_off + sz_signature + sz_coff_fhead + off_opth_SizeOfImage)
-        stub.write(image_sz.to_bytes(4, 'little', signed=False))
+        stub.write(image_sz.to_bytes(4, 'little'))
 
 
 fix_aarch64_pe_stub()
