@@ -37,6 +37,7 @@ stub_sources = '''
         linux.c
         splash.c
         stub.c
+        stdclib.c
 '''.split()
 
 if conf.get('ENABLE_EFI') == 1 and get_option('gnu-efi') != 'false'
