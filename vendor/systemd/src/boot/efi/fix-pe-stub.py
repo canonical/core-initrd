@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 import argparse
+import os
+import shutil
 import subprocess
+import tempfile
 
 # Sizes of different parts of th PE+ file
 sz_signature = 4
@@ -26,6 +29,13 @@ off_secth_VirtualAddress = 12
 off_secth_SizeOfRawData = 16
 
 
+def create_temporary_copy(path):
+    (tmp_file, tmp_path) = tempfile.mkstemp()
+    os.close(tmp_file)
+    shutil.copy2(path, tmp_path)
+    return tmp_path
+
+
 def align_to_size(address, size):
     rest = address % size
     if rest:
@@ -34,7 +44,10 @@ def align_to_size(address, size):
     return address
 
 
-def fix_aarch64_pe_stub(stub, kernel, initramfs, out_file):
+def fix_aarch64_pe_stub(stub_orig, kernel, initramfs, out_file):
+    # Copy over as we need to modify the stub before calling llvm-objcopy
+    stub = create_temporary_copy(stub_orig)
+
     with open(stub, "r+b") as stub_f:
 
         stub_f.seek(off_pe_pointer)
@@ -60,6 +73,8 @@ def fix_aarch64_pe_stub(stub, kernel, initramfs, out_file):
             out_file,
         ]
     )
+
+    os.remove(stub)
 
     # We need to fill properly some values in the PE/COFF headers due to llvm
     # bugs.
