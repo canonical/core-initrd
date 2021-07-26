@@ -202,6 +202,7 @@ static void update_fdt(UINTN initrd_addr, UINTN initrd_size) {
 }
 
 // linux_addr: .linux section address
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 EFI_STATUS linux_aarch64_exec(EFI_HANDLE image,
                               CHAR8 *cmdline, UINTN cmdline_len,
                               UINTN linux_addr,
