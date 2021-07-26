@@ -70,3 +70,9 @@ char *strrchr(const char *s, int c)
     } while(*s++);
     return (char *)ret;
 }
+
+uintptr_t __stack_chk_guard = 0xdeadbeefa55a857;
+
+void __stack_chk_fail(void)
+{
+}
