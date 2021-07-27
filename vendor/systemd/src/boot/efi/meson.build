@@ -36,7 +36,6 @@ systemd_boot_sources = '''
 stub_sources = '''
         splash.c
         stub.c
-        stdclib.c
 '''.split()
 
 if conf.get('ENABLE_EFI') == 1 and get_option('gnu-efi') != 'false'
@@ -183,6 +182,7 @@ if have_gnu_efi
                 efi_format = ['-O', 'binary']
 
                 stub_sources += 'linux-aarch64.c'
+                stub_sources += 'stdclib.c'
 
                 # libfdt needed for arm to pass initrd to kernel
                 cc.find_library('fdt')
