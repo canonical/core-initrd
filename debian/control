@@ -18,6 +18,7 @@ Build-Depends: debhelper-compat (= 12), dh-python, python3:any, dracut-core, qui
                gperf,
                gnu-efi [amd64 i386 arm64 armhf],
                libcap-dev (>= 1:2.24-9~),
+               libfdt-dev [arm64 armhf],
                libpam0g-dev,
                libapparmor-dev (>= 2.9.0-3+exp2) <!stage1>,
                libidn2-dev <!stage1>,
@@ -64,7 +65,7 @@ Homepage: https://launchpad.net/ubuntu-core-initramfs
 
 Package: ubuntu-core-initramfs
 Architecture: amd64 arm64 armhf
-Depends: ${python3:Depends}, ${misc:Depends}, binutils, dracut-core (>= 051-1), lz4, sbsigntool, linux-firmware
+Depends: ${python3:Depends}, ${misc:Depends}, binutils, dracut-core (>= 051-1), lz4, sbsigntool, linux-firmware, llvm [arm64 armhf]
 Description: standard embedded initrd
  Standard embedded initrd implementation to be used with Ubuntu Core
  systems. Currently targetting creating BLS Type2 like binaries.
