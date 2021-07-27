@@ -137,29 +137,28 @@ static void *open_fdt(void) {
         }
 
         if (fdt_check_header(fdt) != 0) {
-		Print(L"Invalid header detected on UEFI supplied FDT\n");
-		return 0;
-	}
-	fdt_size = fdt_totalsize(fdt);
-        Print(L"Size of fdt is %lu\n", fdt_size);
+                Print(L"Invalid header detected on UEFI supplied FDT\n");
+                return 0;
+        }
+        fdt_size = fdt_totalsize(fdt);
 
         return fdt;
 }
 
 static int update_chosen(void *fdt, UINTN initrd_addr, UINTN initrd_size) {
         uint64_t initrd_start, initrd_end;
-	int ret, node;
+        int ret, node;
 
         node = fdt_subnode_offset(fdt, 0, "chosen");
-	if (node < 0) {
-		node = fdt_add_subnode(fdt, 0, "chosen");
-		if (node < 0) {
-			/* 'node' is an error code when negative: */
-			ret = node;
+        if (node < 0) {
+                node = fdt_add_subnode(fdt, 0, "chosen");
+                if (node < 0) {
+                        /* 'node' is an error code when negative: */
+                        ret = node;
                         Print(L"Error creating chosen\n");
-			return ret;
-		}
-	}
+                        return ret;
+                }
+        }
 
         initrd_start = cpu_to_fdt64(initrd_addr);
         initrd_end = cpu_to_fdt64(initrd_addr + initrd_size);
@@ -214,12 +213,12 @@ EFI_STATUS linux_aarch64_exec(EFI_HANDLE image,
         if (initrd_size != 0)
                 update_fdt(initrd_addr, initrd_size);
 
-        hdr = (struct arm64_kernel_header *) linux_addr;
+        hdr = (struct arm64_kernel_header *)linux_addr;
 
         pe = (void *)((UINTN)linux_addr + hdr->hdr_offset);
-        handover = (handover_f)((UINTN)linux_addr + pe->opt.entry_addr);
+        handover = (handover_f)((UINTN)linux_addr + pe->opt.entry_point_addr);
 
-        Print(L"Calling now EFI kernel stub\n");
+        Print(L"Starting EFI kernel stub\n");
 
         handover(image, ST, image);
 

@@ -46,6 +46,8 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
                 return err;
         }
 
+        Print(L"systemd EFI stub\n");
+
         if (efivar_get_raw(&global_guid, L"SecureBoot", &b, &size) == EFI_SUCCESS)
                 if (*b > 0)
                         secure = TRUE;
@@ -123,7 +125,6 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
         if (szs[3] > 0)
                 graphics_splash((UINT8 *)((UINTN)loaded_image->ImageBase + addrs[3]), szs[3], NULL);
 
-        Print(L"Calling linux exec\n");
 #ifdef __aarch64__
         err = linux_aarch64_exec(image, cmdline, cmdline_len,
                                  (UINTN)loaded_image->ImageBase + addrs[1],
