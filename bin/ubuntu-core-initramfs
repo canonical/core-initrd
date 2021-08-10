@@ -238,7 +238,11 @@ def main():
 
     args = parser.parse_args()
     if args.subcmd == "create-initrd" and not args.features:
+        # Set arch specific default set of features
         args.features = features.split()
+        # For generic kernels, enable more server drivers too
+        if args.kernelver.endswith("-generic") and "server" not in args.features:
+            args.features.append("server")
     globals()[args.subcmd.replace("-", "_")](parser, args)
 
 
