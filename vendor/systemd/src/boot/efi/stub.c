@@ -46,6 +46,8 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
                 return err;
         }
 
+        Print(L"systemd EFI stub\n");
+
         if (efivar_get_raw(&global_guid, L"SecureBoot", &b, &size) == EFI_SUCCESS)
                 if (*b > 0)
                         secure = TRUE;
