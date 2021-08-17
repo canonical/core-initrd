@@ -18,6 +18,7 @@ Build-Depends: debhelper-compat (= 12), dh-python, python3:any, dracut-core, qui
                gperf,
                gnu-efi [amd64 i386 arm64 armhf],
                libcap-dev (>= 1:2.24-9~),
+               libfdt-dev [arm64 armhf],
                libpam0g-dev,
                libapparmor-dev (>= 2.9.0-3+exp2) <!stage1>,
                libidn2-dev <!stage1>,
