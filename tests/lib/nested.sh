@@ -129,6 +129,10 @@ start_nested_core_vm_unit(){
     if [ "${ENABLE_TPM}" = "true" ]; then
         if ! snap list swtpm-mvo > /dev/null; then
             snap install swtpm-mvo --beta
+            retry=10
+            while ! test -S /var/snap/swtpm-mvo/current/swtpm-sock; do
+                sleep 1
+            done
         fi
         PARAM_TPM="-chardev socket,id=chrtpm,path=/var/snap/swtpm-mvo/current/swtpm-sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
     fi
