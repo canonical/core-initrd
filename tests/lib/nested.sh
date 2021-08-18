@@ -28,7 +28,7 @@ wait_for_service() {
 }
 
 wait_for_ssh(){
-    retry=400
+    retry=800
     wait=1
     while ! execute_remote true; do
         retry=$(( retry - 1 ))
