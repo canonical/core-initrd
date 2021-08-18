@@ -53,6 +53,12 @@ cleanup_nested_core_vm(){
     rm -rf "${IMAGE_FILE}"
 }
 
+print_nested_status(){
+    SVC_NAME="nested-vm-$(systemd-escape "${SPREAD_JOB:-unknown}")"
+    systemctl status "${SVC_NAME}" || true
+    journalctl -u "${SVC_NAME}" || true
+}
+
 start_nested_core_vm_unit(){
     # copy the image file to create a new one to use
     # TODO: maybe create a snapshot qcow image instead?
