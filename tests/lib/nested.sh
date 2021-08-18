@@ -28,9 +28,15 @@ wait_for_service() {
 }
 
 wait_for_ssh(){
+    local service_name="$1"
     retry=800
     wait=1
     while ! execute_remote true; do
+        if ! systemctl show -p ActiveState "$service_name" | grep -q "ActiveState=active"; then
+            echo "Service no longer active"
+            return 1
+        fi
+
         retry=$(( retry - 1 ))
         if [ $retry -le 0 ]; then
             echo "Timed out waiting for ssh. Aborting!"
@@ -169,7 +175,7 @@ EOF
     fi
 
     # Wait until ssh is ready
-    if ! wait_for_ssh; then
+    if ! wait_for_ssh "${SVC_NAME}"; then
         return 1
     fi
 }
