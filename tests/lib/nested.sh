@@ -29,7 +29,7 @@ wait_for_service() {
 
 wait_for_ssh(){
     local service_name="$1"
-    retry=400
+    retry=800
     wait=1
     while ! execute_remote true; do
         if ! systemctl show -p ActiveState "$service_name" | grep -q "ActiveState=active"; then
@@ -129,7 +129,7 @@ start_nested_core_vm_unit(){
     if [ "${ENABLE_TPM}" = "true" ]; then
         if ! snap list swtpm-mvo > /dev/null; then
             snap install swtpm-mvo --beta
-            retry=10
+            retry=60
             while ! test -S /var/snap/swtpm-mvo/current/swtpm-sock; do
                 retry=$(( retry - 1 ))
                 if [ $retry -le 0 ]; then
