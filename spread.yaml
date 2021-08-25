@@ -83,10 +83,14 @@ restore-each: |
   . "$TESTSLIB/nested.sh"
   cleanup_nested_core_vm
 
+debug-each: |
+  . "$TESTSLIB/nested.sh"
+  print_nested_status
+
 # it takes a while to build everything while preparing the project
-warn-timeout: 20m
+warn-timeout: 40m
 # but it shouldn't take _too_ long...
-kill-timeout: 30m
+kill-timeout: 50m
 
 suites:
   tests/spread/:

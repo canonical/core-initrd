@@ -28,9 +28,15 @@ wait_for_service() {
 }
 
 wait_for_ssh(){
-    retry=400
+    local service_name="$1"
+    retry=800
     wait=1
     while ! execute_remote true; do
+        if ! systemctl show -p ActiveState "$service_name" | grep -q "ActiveState=active"; then
+            echo "Service no longer active"
+            return 1
+        fi
+
         retry=$(( retry - 1 ))
         if [ $retry -le 0 ]; then
             echo "Timed out waiting for ssh. Aborting!"
@@ -51,6 +57,12 @@ cleanup_nested_core_vm(){
 
     # delete the image file
     rm -rf "${IMAGE_FILE}"
+}
+
+print_nested_status(){
+    SVC_NAME="nested-vm-$(systemd-escape "${SPREAD_JOB:-unknown}")"
+    systemctl status "${SVC_NAME}" || true
+    journalctl -u "${SVC_NAME}" || true
 }
 
 start_nested_core_vm_unit(){
@@ -117,6 +129,15 @@ start_nested_core_vm_unit(){
     if [ "${ENABLE_TPM}" = "true" ]; then
         if ! snap list swtpm-mvo > /dev/null; then
             snap install swtpm-mvo --beta
+            retry=60
+            while ! test -S /var/snap/swtpm-mvo/current/swtpm-sock; do
+                retry=$(( retry - 1 ))
+                if [ $retry -le 0 ]; then
+                    echo "Timed out waiting for the swtpm socket. Aborting!"
+                    return 1
+                fi
+                sleep 1
+            done
         fi
         PARAM_TPM="-chardev socket,id=chrtpm,path=/var/snap/swtpm-mvo/current/swtpm-sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
     fi
@@ -163,7 +184,7 @@ EOF
     fi
 
     # Wait until ssh is ready
-    if ! wait_for_ssh; then
+    if ! wait_for_ssh "${SVC_NAME}"; then
         return 1
     fi
 }
