@@ -42,3 +42,11 @@ When your initrd DEB package is built, you need to perform following steps to ma
 
 TODO: Write documentation for how to integrate initrd.img to your (custom or canonical) kernel 
 
+# Bootchart
+
+It is possible to enable bootcharts by adding
+`rd.systemd.wants=systemd-bootchart.service` to the kernel command
+line. The sample collector will run until the systemd switches root,
+and the chart will be saved in `/run/log`. If bootcharts are also
+enabled for the core snap, that file will be eventually moved to the
+`ubuntu-save` partition (see Core snap documentation).
