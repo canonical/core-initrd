@@ -226,7 +226,7 @@ override_dh_clean:
 ifneq ($(CI),true)
 	# only needed for the "--feature main cloudimg-rootfs", not used for the
 	# default initrd
-	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; GOPATH= ./get-deps.sh )
+	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; git checkout ec1bfe7; GOPATH= ./get-deps.sh )
 endif
 	dh_clean
 
