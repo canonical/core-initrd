@@ -1,0 +1,16 @@
+[Unit]
+Description=Show Plymouth Boot Screen
+DefaultDependencies=no
+After=systemd-udev-trigger.service systemd-udevd.service
+Requires=systemd-udev-trigger.service systemd-udevd.service
+ConditionKernelCommandLine=!plymouth.enable=0
+ConditionKernelCommandLine=!nosplash
+ConditionKernelCommandLine=splash
+ConditionVirtualization=!container
+
+[Service]
+ExecStart=@/sbin/plymouthd @plymouth --debug --mode=boot --pid-file=/run/plymouth/pid --attach-to-session
+ExecStartPost=-/bin/plymouth show-splash
+Type=forking
+KillMode=none
+SendSIGKILL=no
