@@ -177,6 +177,10 @@ override_dh_auto_install:
 	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/*/:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
 
+	# Hack for seat rules, for splash to work
+	sed 's#@rootbindir@#/bin#' vendor/systemd/src/login/71-seat.rules.in > \
+	    debian/tmp/lib/udev/rules.d/71-seat.rules
+
 	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /usr/lib/initramfs-tools/bin/busybox usr/bin/busybox
 	set -e; \
 	for alias in `debian/tmp/usr/bin/busybox --list-long | grep -v -e busybox -e reboot -e mount -e umount`; do \
@@ -184,7 +188,7 @@ override_dh_auto_install:
 	done
 
 	set -e; \
-	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1 /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod /usr/bin/unsquashfs /sbin/dmsetup /usr/lib/snapd/snap-bootstrap /usr/lib/snapd/info /lib/systemd/systemd-bootchart /lib/systemd/system/snapd.recovery-chooser-trigger.service"; do \
+	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1 /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod /usr/bin/unsquashfs /sbin/dmsetup /usr/lib/snapd/snap-bootstrap /usr/lib/snapd/info /lib/systemd/systemd-bootchart /lib/systemd/system/snapd.recovery-chooser-trigger.service /sbin/plymouthd /bin/plymouth /usr/share/plymouth/themes/ubuntu-logo/* /usr/share/plymouth/themes/ubuntu-text/* /usr/share/plymouth/themes/default.* /usr/share/plymouth/themes/text.plymouth /usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/*.so /usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so" /usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf; do \
 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
 	done
 	dpkg -L dmsetup | grep rules.d | xargs -L1 /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd
@@ -196,7 +200,7 @@ endif
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
-	for e in $$(find debian/tmp -type f -executable); do \
+	for e in $$(find debian/tmp -type f -executable) $$(find debian/tmp -type f -name \*.so); do \
 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
 	done
 	ldconfig -r debian/tmp
