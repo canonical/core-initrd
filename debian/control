@@ -58,7 +58,6 @@ Build-Depends: debhelper-compat (= 12), dh-python, python3:any, dracut-core, qui
                kmod,
                libgcc-s1,
                plymouth,
-               plymouth-theme-ubuntu-logo,
                plymouth-theme-ubuntu-text,
                squashfs-tools,
                snapd (>= 2.50+20.04),
