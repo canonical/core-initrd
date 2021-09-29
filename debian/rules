@@ -237,7 +237,7 @@ ifneq ($(CI),true)
 	# default initrd
 	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; git checkout ec1bfe7; GOPATH= ./get-deps.sh )
 endif
-	rm -f splash20-core-test_*.snap
+	rm -f splash20-core-test_*
 	dh_clean
 
 override_dh_python3:
