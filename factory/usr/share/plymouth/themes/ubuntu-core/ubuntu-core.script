@@ -1,0 +1,92 @@
+#  ubuntu-core.script - boot splash plugin
+# 
+#  Copyright (C) 2021 Canonical Ltd.
+# 
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2, or (at your option)
+#  any later version.
+# 
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+#  02111-1307, USA.
+
+fun WriteText(text, colour)
+{
+    # Ubuntu Font
+    font = "Ubuntu, sans-serif 16";
+    font_alignment = "center";
+    image = Image.Text(text, colour.red, colour.green, colour.blue, color.alpha,
+                       font, font_alignment);
+    return image;
+}
+
+fun message_callback(message)
+{
+    text_img = WriteText(message, white);
+    # Text centered in last quarter of the screen
+    text.x = Window.GetX() + (Window.GetWidth() - text_img.GetWidth())/2;
+    text.y = Window.GetY() + 7*Window.GetHeight()/8 - text_img.GetHeight()/2;
+    text_sprite.SetImage(text_img);
+    text_sprite.SetPosition(text.x, text.y, 2000);
+}
+
+# Called 50 times every second.
+# NOTE: if a refresh function is not set, Plymouth doesn't seem to be able to
+#       update the screen correctly. This happens, for instance, when getty
+#       takes control of the screen. We need to update with the splash at
+#       that moment (also, this produces a blink). Calling again SetImage
+#       is needed for the update to happen.
+fun refresh_callback()
+{
+    logo.sprite.SetImage(logo.image);
+    logo.sprite.SetPosition(logo.x, logo.y, logo.z);
+    logo.sprite.SetOpacity(1);
+
+    # Spinner
+    if (++spin.frame_cnt % spin.refresh_rate == 0) {
+        if (++spin.idx == 31)
+            spin.idx = 1;
+        spin.image = Image(spin.base_name + spin.idx + ".png");
+    }
+    spin.sprite.SetImage(spin.image);
+    spin.sprite.SetPosition(spin.x, spin.y, spin.z);
+    spin.sprite.SetOpacity(1);
+}
+
+white.red = 1.0;
+white.green = 1.0;
+white.blue = 1.0;
+
+# Warning: Sprites need to be global variables, apparently
+text_sprite = Sprite();
+
+logo_filename = "ubuntu-core.png";
+logo.image = Image(logo_filename);
+logo.sprite = Sprite();
+# Logo right on top of the low-half of the screen
+logo.x = Window.GetX() + Window.GetWidth()/2 - logo.image.GetWidth()/2;
+logo.y = Window.GetY() + Window.GetHeight()/2 - logo.image.GetHeight();
+logo.z = 100;
+
+spin.base_name = "throbber-";
+spin.idx = 1;
+spin.refresh_rate = 5;
+spin.frame_cnt = 0;
+spin.image = Image(spin.base_name + spin.idx + ".png");
+spin.sprite = Sprite();
+# Spin between third and fourth quarters
+spin.x = Window.GetX() + Window.GetWidth()/2 - spin.image.GetWidth()/2;
+spin.y = Window.GetY() + 3*Window.GetHeight()/4 - spin.image.GetHeight()/2;
+spin.z = 100;
+
+refresh_callback();
+
+Plymouth.SetMessageFunction(message_callback);
+Plymouth.SetRefreshFunction(refresh_callback);
