@@ -174,6 +174,15 @@ override_dh_auto_install:
 	done
 	touch debian/tmp/etc/machine-id
 
+	# splash functionality
+	snap download --edge splash20-core-test
+	unsquashfs -f -d debian/tmp/ splash20-core-test_*.snap \
+		etc usr/bin/plymouth usr/lib/$(DEB_HOST_MULTIARCH) usr/sbin \
+		usr/share/fonts usr/share/plymouth
+	# Need the seat rules for drm
+	sed 's#@rootbindir@#/bin#' vendor/systemd/src/login/71-seat.rules.in > \
+	    debian/tmp/lib/udev/rules.d/71-seat.rules
+
 	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/*/:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
 
@@ -196,7 +205,7 @@ endif
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
-	for e in $$(find debian/tmp -type f -executable); do \
+	for e in $$(find debian/tmp -type f -executable) $$(find debian/tmp -type f -name \*.so); do \
 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
 	done
 	ldconfig -r debian/tmp
@@ -228,6 +237,7 @@ ifneq ($(CI),true)
 	# default initrd
 	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; git checkout ec1bfe7; GOPATH= ./get-deps.sh )
 endif
+	rm -f splash20-core-test_*.snap
 	dh_clean
 
 override_dh_python3:
