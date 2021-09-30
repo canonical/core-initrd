@@ -177,7 +177,7 @@ override_dh_auto_install:
 	# splash functionality
 	snap download --edge splash20-core-test
 	unsquashfs -f -d debian/tmp/ splash20-core-test_*.snap \
-		etc usr/bin/plymouth usr/lib/$(DEB_HOST_MULTIARCH) usr/sbin \
+		usr/bin/plymouth usr/lib/$(DEB_HOST_MULTIARCH) usr/sbin \
 		usr/share/fonts usr/share/plymouth
 	# Need the seat rules for drm
 	sed 's#@rootbindir@#/bin#' vendor/systemd/src/login/71-seat.rules.in > \
