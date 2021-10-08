@@ -166,7 +166,7 @@ Hello world
 ## Hacking generic x86 initrd
 
 For x86 the process is a bit different as in this case the initrd is a
-section in a PE+/COFF binary. We can download the snapd and extract the
+section in a PE+/COFF binary. We can download the snap and extract the
 initrd with:
 
 ```
