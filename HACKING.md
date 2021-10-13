@@ -84,7 +84,9 @@ In this state, if you want to pivot-root to main rootfs, just execute:
 
 # Hacking without re-building
 
-Sometimes, in order for testing some new feature, rebuilding is not necessary. It is possible to add your fancy nice application to current initrd.img.
+Sometimes, in order for testing some new feature, rebuilding is not necessary. It is possible to add your fancy nice application to current initrd.img. Depending on the board, we need to do different things, so we will show how to do this for an RPi and for x86 images.
+
+## Hacking an RPi initrd
 
 Basically:
 - Download current initrd.img from your RPi to your host
@@ -117,7 +119,7 @@ somedir/
 Hello world
  ~/uc-initrd $  
  ~/uc-initrd $  cd somedir/
- ~/uc-initrd/somedir $  find ./ | cpio -H newc -o | lz4 -9 -l > ../initrd.img.new
+ ~/uc-initrd/somedir $  find ./ | cpio --create --quiet --format=newc --owner=0:0 | lz4 -9 -l > ../initrd.img.new
 103890 blocks
  ~/uc-initrd/somedir $  cd ..
  ~/uc-initrd $  file initrd.img
@@ -161,10 +163,98 @@ Hello world
 
 ```
 
+## Hacking generic x86 initrd
+
+For x86 the process is a bit different as in this case the initrd is a
+section in a PE+/COFF binary. We can download the snap and extract the
+initrd with:
+
+```
+$ snap download --channel=20/stable pc-kernel
+$ unsquashfs -d pc-kernel pc-kernel_*.snap
+$ objcopy -O binary -j .initrd pc-kernel/kernel.efi initrd.img
+$ unmkinitramfs initrd.img initrd
+```
+
+Then, you can change the initrd as described in the RPi section. After
+that, to repack everything, run these commands:
+
+
+```
+$ cd initrd
+$ find . | cpio --create --quiet --format=newc --owner=0:0 | lz4 -l -7 > ../initrd.img
+$ cd -
+$ sudo add-apt-repository ppa:snappy-dev/image
+$ apt download ubuntu-core-initramfs
+$ dpkg --fsys-tarfile ubuntu-core-initramfs_*_amd64.deb |
+       tar xf - ./usr/lib/ubuntu-core-initramfs/efi/linuxx64.efi.stub
+$ objcopy -O binary -j .linux pc-kernel/kernel.efi linux
+$ objcopy --add-section .linux=linux --change-section-vma .linux=0x2000000 \
+          --add-section .initrd=initrd.img --change-section-vma .initrd=0x3000000 \
+          usr/lib/ubuntu-core-initramfs/efi/linuxx64.efi.stub \
+          pc-kernel/kernel.efi
+$ snap pack pc-kernel
+```
+
+You can use this new kernel snap while building image, or copy it over
+to your device and install. Note that the new `kernel.efi` won't be
+signed, so Secure Boot will not be possible anymore.
 
 # Hacking with rebuilding
 
+The initrd is part of the kernel snap, so ideally we would prefer to
+simply build it by using snapcraft. However, the snapcraft recipe for
+the kernel downloads binaries from already built kernel packages, so
+we cannot use it easily for local hacking. So we will provide
+instructions on how to build the initrd from scratch and insert it in
+the kernel snap.
 
+As we are going to install a kernel, it is preferable to run these
+instructions inside an lxd container or VM. First, we need to build
+the debian package, for this you can use debuild or dpkg-buildpackage
+from the root folder:
+
+```
+$ sudo apt build-dep ./
+$ debuild -us -uc
+```
+
+Then, install the package in the container:
+
+```
+$ sudo apt install ../ubuntu-core-initramfs_*.deb
+```
+
+We need to check now which kernel version matches the kernel snap
+where we want to introduce the new `kernel.efi` binary. `snap info`
+can help us here, as we need to install that kernel locally to get the
+kernel modules that are part of the initrd. For instance:
+
+```
+$ snap info pc-kernel | grep grep 20/stable
+  20/stable:        5.4.0-87.98.1  2021-09-30 (838) 295MB -
+$ kernelver=5.4.0-87-generic
+$ sudo apt install linux-firmware linux-image-$kernelver \
+                   linux-modules-$kernelver linux-modules-extra-$kernelver
+```
+Installation of the kernel automatically creates a file in the `/boot` folder:
+
+```
+$ ls -l /boot/kernel.efi*
+-rw------- 1 root root 40117656 Oct  7 08:58 /boot/kernel.efi-5.4.0-87-generic
+```
+
+We can inject it in the kernel snap as in previous sections. It is
+also possible to force the build of `kernel.efi` or just the initrd
+respectively, with
+
+```
+$ ubuntu-core-initramfs create-efi --kernelver=$kernelver
+$ ubuntu-core-initramfs create-initrd --kernelver=$kernelver
+```
+
+(the initrd image will also be created in the `/boot` folder). Note
+again that for RPi we need only the initrd image file.
 
 # Troubleshooting
 
