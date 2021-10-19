@@ -1,0 +1,27 @@
+[Unit]
+Description=Show Plymouth Boot Screen
+DefaultDependencies=no
+Wants=systemd-ask-password-plymouth.path systemd-vconsole-setup.service
+After=systemd-vconsole-setup.service systemd-udev-trigger.service systemd-udevd.service
+After=the-tool.service
+Before=systemd-ask-password-plymouth.service
+ConditionKernelCommandLine=!plymouth.enable=0
+ConditionKernelCommandLine=!nosplash
+ConditionKernelCommandLine=splash
+ConditionVirtualization=!container
+IgnoreOnIsolate=true
+
+[Service]
+Environment=LD_LIBRARY_PATH=/run/mnt/base/usr/lib/x86_64-linux-gnu
+Environment=PLYMOUTH_PLUGIN_PATH=/run/mnt/base/usr/lib/x86_64-linux-gnu/plymouth/
+Environment=PLYMOUTH_THEME_PATH=/run/plymouth
+Environment=PLYMOUTH_POLICY_DIR=/run/mnt/base/usr/share/plymouth
+ExecStartPre=mkdir -p /run/plymouth/
+ExecStartPre=cp /run/mnt/base/usr/share/plymouth/themes/default.plymouth /run/plymouth/
+ExecStartPre=-sed -i 's#/usr/share/plymouth#/run/mnt/base/usr/share/plymouth#' /run/plymouth/default.plymouth
+ExecStart=/run/mnt/base/sbin/plymouthd --debug --mode=boot --pid-file=/run/plymouth/pid --attach-to-session --ignore-serial-consoles
+ExecStartPost=-/run/mnt/base/bin/plymouth show-splash
+Type=forking
+RemainAfterExit=yes
+KillMode=mixed
+SendSIGKILL=no
