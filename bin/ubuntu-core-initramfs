@@ -78,12 +78,14 @@ def create_initrd(parser, args):
             for early in glob.iglob("%s/early/*.cpio" % args.skeleton):
                 with open(early, "rb") as f:
                     shutil.copyfileobj(f, output)
-            subprocess.check_call(
-                "find . | cpio --create --quiet --format='newc' --owner=0:0 | lz4 -9 -l",
-                cwd=main,
-                shell=True,
-                stdout=output,
-            )
+            output.write(
+                subprocess.run(
+                    "find . | cpio --create --quiet --format='newc' --owner=0:0 | lz4 -9 -l",
+                    cwd=main,
+                    capture_output=True,
+                    shell=True,
+                    check=True,
+                ).stdout)
 
 
 def create_efi(parser, args):
