@@ -177,6 +177,10 @@ override_dh_auto_install:
 	# Need the seat rules for drm/fb
 	sed 's#@rootbindir@#/bin#' vendor/systemd/src/login/71-seat.rules.in > \
 	    debian/tmp/lib/udev/rules.d/71-seat.rules
+	# Fonts config for splash
+	mkdir -p debian/tmp/etc/fonts
+	sed 's#/usr/share/fonts#/run/mnt/base/usr/share/fonts#' /etc/fonts/fonts.conf > \
+		debian/tmp/etc/fonts/fonts.conf
 
 	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/*/:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
