@@ -16,6 +16,7 @@ Environment=LD_LIBRARY_PATH=/run/mnt/base/usr/lib/x86_64-linux-gnu
 Environment=PLYMOUTH_PLUGIN_PATH=/run/mnt/base/usr/lib/x86_64-linux-gnu/plymouth/
 Environment=PLYMOUTH_THEME_PATH=/run/plymouth
 Environment=PLYMOUTH_POLICY_DIR=/run/mnt/base/usr/share/plymouth
+ExecStartPre=-/bin/load-drm-module.sh
 ExecStartPre=mkdir -p /run/plymouth/
 ExecStartPre=cp /run/mnt/base/usr/share/plymouth/themes/default.plymouth /run/plymouth/
 ExecStartPre=-sed -i 's#/usr/share/plymouth#/run/mnt/base/usr/share/plymouth#' /run/plymouth/default.plymouth
