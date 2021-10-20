@@ -7,7 +7,7 @@ ConditionPathExists=/run/plymouth/pid
 
 [Service]
 Type=oneshot
-Environment=LD_LIBRARY_PATH=/run/mnt/base/usr/lib/x86_64-linux-gnu
+Environment=LD_LIBRARY_PATH=/run/mnt/base/usr/lib/@DEB_HOST_MULTIARCH@
 ExecStart=-/run/mnt/base/bin/plymouth update-root-fs --new-root-dir=/sysroot
 StandardInput=null
 StandardOutput=null

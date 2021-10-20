@@ -129,6 +129,9 @@ override_dh_auto_install:
 	rm -rf debian/tmp
 	mkdir debian/tmp
 	cp -ar factory/* debian/tmp
+	sed -i 's#@DEB_HOST_MULTIARCH@#$(DEB_HOST_MULTIARCH)#' \
+		debian/tmp/usr/lib/systemd/system/plymouth-start.service \
+		debian/tmp/usr/lib/systemd/system/plymouth-switch-root.service
 	mkdir -p debian/tmp/usr/bin
 	mkdir -p debian/tmp/usr/lib64
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd

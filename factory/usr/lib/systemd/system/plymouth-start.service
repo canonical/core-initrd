@@ -12,8 +12,8 @@ ConditionVirtualization=!container
 IgnoreOnIsolate=true
 
 [Service]
-Environment=LD_LIBRARY_PATH=/run/mnt/base/usr/lib/x86_64-linux-gnu
-Environment=PLYMOUTH_PLUGIN_PATH=/run/mnt/base/usr/lib/x86_64-linux-gnu/plymouth/
+Environment=LD_LIBRARY_PATH=/run/mnt/base/usr/lib/@DEB_HOST_MULTIARCH@
+Environment=PLYMOUTH_PLUGIN_PATH=/run/mnt/base/usr/lib/@DEB_HOST_MULTIARCH@/plymouth/
 Environment=PLYMOUTH_THEME_PATH=/run/plymouth
 Environment=PLYMOUTH_POLICY_DIR=/run/mnt/base/usr/share/plymouth
 ExecStartPre=-/bin/load-drm-module.sh
