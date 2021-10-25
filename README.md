@@ -11,16 +11,7 @@ See: https://en.wikipedia.org/wiki/Initial_ramdisk
 In Ubuntu Core, initrd.img file is part of Kernel Snap as a binary. This file is brought to Kernel snap from a PPA. See [integration](#integrating-with-kernel-snap) below.
 
 In UC20, initrd is migrated from script based implementation (UC16/18) to **systemd based**.
-
-## Typical boot sequence 
-
-On arm SBC's:
-FSBL-->SBL-->Uboot-->Kernel-->**Initrd**-->pivot-root to persistent storage root.
-
-On amd64 devices:
-Bootrom-->UEFI Firmware-->GRUB-->Kernel-->**Initrd**-->pivot-root to persistent storage root.
-
-TODO: How to explain this in better words?
+See the [architecture document](ARCHITECTURE.md) for more details.
 
 # Building initrd for Ubuntu Core
 
