@@ -1,9 +1,0 @@
-[NetDev]
-Name=gretun96
-Kind=gre
-
-[Tunnel]
-Local=any
-Remote=any
-Key=106
-SerializeTunneledPackets=false

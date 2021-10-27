@@ -6,7 +6,12 @@ include /usr/share/dpkg/default.mk
 %:
 	dh $@ --buildsystem=meson+ninja --sourcedirectory=vendor/systemd --with python3
 
+SYSTEMD_EXTRA_PATCHES=								       \
+	ubuntu-core-initramfs-clock-util-read-timestamp-from-usr-lib-clock-epoch.patch \
+	ubuntu-core-initramfs-fix-default.target
+
 override_dh_auto_configure:
+	cd vendor/systemd; for patch in $(SYSTEMD_EXTRA_PATCHES); do QUILT_PATCHES=debian/patches quilt import "../systemd-patches/$${patch}"; done || true
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a || true
 	sed -i '/"minix"/s/^/\/\//' vendor/systemd/src/test/test-path-util.c
 	dh_auto_configure --buildsystem=meson+ninja --sourcedirectory=vendor/systemd -- \
@@ -123,6 +128,7 @@ override_dh_auto_clean:
 	dh_auto_clean --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
 	sed -i '/"minix"/s/^\/*//' vendor/systemd/src/test/test-path-util.c
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a || true
+	cd vendor/systemd; for patch in $(SYSTEMD_EXTRA_PATCHES); do QUILT_PATCHES=debian/patches quilt delete -r "$${patch}"; done || true
 	rm -rf vendor/systemd/.pc
 
 override_dh_auto_install:

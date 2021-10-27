@@ -1,3 +1,0 @@
-rm_conffile /etc/init/udev.conf 233-1~
-rm_conffile /etc/init/udevmonitor.conf 233-1~
-rm_conffile /etc/init/udevtrigger.conf 233-1~

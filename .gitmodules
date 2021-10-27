@@ -1,0 +1,4 @@
+[submodule "vendor/systemd"]
+	path = vendor/systemd
+	url = https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd
+	branch = ubuntu-focal
