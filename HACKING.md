@@ -209,10 +209,8 @@ we cannot use it easily for local hacking. So we will provide
 instructions on how to build the initrd from scratch and insert it in
 the kernel snap.
 
-As we are going to install a kernel, it is preferable to run these
-instructions inside an lxd container or VM. First, we need to build
-the debian package, for this you can use debuild or dpkg-buildpackage
-from the root folder:
+First, we need to build the debian package, for this you can use
+debuild or dpkg-buildpackage from the root folder:
 
 ```
 $ sudo apt build-dep ./
@@ -225,36 +223,38 @@ Then, install the package in the container:
 $ sudo apt install ../ubuntu-core-initramfs_*.deb
 ```
 
-We need to check now which kernel version matches the kernel snap
-where we want to introduce the new `kernel.efi` binary. `snap info`
-can help us here, as we need to install that kernel locally to get the
-kernel modules that are part of the initrd. For instance:
+We extract the kernel from the pc-kernel snap:
 
 ```
-$ snap info pc-kernel | grep grep 20/stable
+$ snap download --channel=20/stable pc-kernel
+$ unsquashfs -d pc-kernel pc-kernel_*.snap
+```
+
+We can now extract the kernel image from kernel.efi:
+
+```
+$ snap info pc-kernel | grep 20/stable
   20/stable:        5.4.0-87.98.1  2021-09-30 (838) 295MB -
 $ kernelver=5.4.0-87-generic
-$ sudo apt install linux-firmware linux-image-$kernelver \
-                   linux-modules-$kernelver linux-modules-extra-$kernelver
-```
-Installation of the kernel automatically creates a file in the `/boot` folder:
-
-```
-$ ls -l /boot/kernel.efi*
--rw------- 1 root root 40117656 Oct  7 08:58 /boot/kernel.efi-5.4.0-87-generic
+$ objcopy -O binary -j .linux pc-kernel/kernel.efi kernel.img-"${kernelver}"
 ```
 
 We can inject it in the kernel snap as in previous sections. It is
-also possible to force the build of `kernel.efi` or just the initrd
-respectively, with
+also possible to force the build of `kernel.efi` (or just the initrd), with:
 
 ```
-$ ubuntu-core-initramfs create-efi --kernelver=$kernelver
-$ ubuntu-core-initramfs create-initrd --kernelver=$kernelver
+$ ubuntu-core-initramfs create-initrd --kernelver=$kernelver --kerneldir pc-kernel/modules/${kernelver} --firmwaredir pc-kernel/firmware --output initrd.img
+$ ubuntu-core-initramfs create-efi --kernelver=$kernelver --initrd initrd.img --kernel kernel.img --output kernel.efi
 ```
 
-(the initrd image will also be created in the `/boot` folder). Note
-again that for RPi we need only the initrd image file.
+Note that for RPi we need only the initrd image file.
+
+Now `kernel.efi-5.4.0-87-generic` has been created with the new initramfs. We can put it back into the snap:
+
+```
+$ cp kernel.efi-$kernelver pc-kernel/kernel.efi
+$ snap pack pc-kernel
+```
 
 # Troubleshooting
 
