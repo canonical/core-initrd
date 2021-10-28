@@ -125,6 +125,7 @@ override_dh_auto_clean:
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a || true
 	rm -rf vendor/systemd/.pc
 
+override_dh_auto_install: TEMPLIBDIR := $(shell mktemp -d)
 override_dh_auto_install:
 	rm -rf debian/tmp
 	mkdir debian/tmp
@@ -183,9 +184,18 @@ override_dh_auto_install:
 		ln -v -s busybox debian/tmp/usr/bin/$$alias; \
 	done
 
+	# We want the deps from the systemd libs we have compiled, not from the ones
+	# installed in the system. Copy them around so we can point LD_LIBRARY_PATH
+	# to them.
+	for lib in libudev.so libnss_systemd.so libsystemd.so; do \
+		cp -a $(CURDIR)/debian/tmp/lib/$(DEB_HOST_MULTIARCH)/$$lib* $(TEMPLIBDIR); \
+	done
+	cp -a $(CURDIR)/debian/tmp/usr/lib/systemd/libsystemd-shared* $(TEMPLIBDIR)
+
 	set -e; \
 	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1 /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod /usr/bin/unsquashfs /sbin/dmsetup /usr/lib/snapd/snap-bootstrap /usr/lib/snapd/info /lib/systemd/systemd-bootchart /lib/systemd/system/snapd.recovery-chooser-trigger.service"; do \
-		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
+		LD_PRELOAD= LD_LIBRARY_PATH=$(TEMPLIBDIR) \
+			/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
 	done
 	dpkg -L dmsetup | grep rules.d | xargs -L1 /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd
 ifeq ($(DEB_HOST_ARCH),amd64)
@@ -197,9 +207,14 @@ endif
 
 	set -e; \
 	for e in $$(find debian/tmp -type f -executable); do \
-		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
+		LD_PRELOAD= LD_LIBRARY_PATH=$(TEMPLIBDIR) \
+	 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
 	done
 	ldconfig -r debian/tmp
+	rm -rf $(TEMPLIBDIR)
+	# dracut has installed the libraries from TEMPLIBDIR inside the packaging
+	# folder, remove that artifact too.
+	rm -rf debian/tmp/tmp/
 
 override_dh_install:
 	dh_install
