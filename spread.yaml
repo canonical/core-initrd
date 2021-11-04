@@ -6,6 +6,7 @@ environment:
   PATH: $PATH:$PROJECT_PATH/tests/bin
   TESTSLIB: $PROJECT_PATH/tests/lib
   TESTSTOOLS: $PROJECT_PATH/tests/lib/tools
+  MODEL_BRANCH: "edge" # stable/edge/beta
   # TODO: are these vars needed still?
   LANG: "C.UTF-8"
   LANGUAGE: "en"
@@ -32,6 +33,13 @@ backends:
       - ubuntu-20.04-64:
           username: ubuntu
           password: ubuntu
+
+  lxd-nested:
+    type: lxd
+    profiles: coreinitrd
+    systems:
+      - ubuntu-20.04:
+          image: ucspread
 
 path: /home/core-initrd
 

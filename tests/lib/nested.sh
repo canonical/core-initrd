@@ -50,6 +50,10 @@ cleanup_nested_core_vm(){
     # stop the VM if it is running
     systemctl stop nested-vm-*
 
+    if [ -d "/tmp/qtpm" ]; then
+        rm -rf /tmp/qtpm
+    fi
+
     # remove the swtpm
     # TODO: we could just remove/reset the swtpm instead of removing the snap 
     # wholesale
@@ -73,6 +77,9 @@ start_nested_core_vm_unit(){
 
     # use only 2G of RAM for qemu-nested
     if [ "${SPREAD_BACKEND}" = "google-nested" ]; then
+        PARAM_MEM="-m 4096"
+        PARAM_SMP="-smp 2"
+    elif [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
         PARAM_MEM="-m 4096"
         PARAM_SMP="-smp 2"
     elif [ "${SPREAD_BACKEND}" = "qemu-nested" ]; then
@@ -107,6 +114,8 @@ start_nested_core_vm_unit(){
     # with qemu-nested, we can't use kvm acceleration
     if [ "${SPREAD_BACKEND}" = "google-nested" ]; then
         PARAM_MACHINE="-machine ubuntu${ATTR_KVM}"
+    elif [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
+        PARAM_MACHINE="-machine ubuntu${ATTR_KVM}"
     elif [ "${SPREAD_BACKEND}" = "qemu-nested" ]; then
         PARAM_MACHINE=""
     else
@@ -127,7 +136,12 @@ start_nested_core_vm_unit(){
     PARAM_MACHINE="-machine q35${ATTR_KVM} -global ICH9-LPC.disable_s3=1"
 
     if [ "${ENABLE_TPM}" = "true" ]; then
-        if ! snap list swtpm-mvo > /dev/null; then
+        TPMSOCK_PATH="/var/snap/swtpm-mvo/current/swtpm-sock"
+        if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
+            mkdir -p /tmp/qtpm
+            swtpm socket --tpmstate dir=/tmp/qtpm --ctrl type=unixio,path=/tmp/qtpm/sock --tpm2 -d -t
+            TPMSOCK_PATH="/tmp/qtpm/sock"
+        elif ! snap list swtpm-mvo > /dev/null; then
             snap install swtpm-mvo --beta
             retry=60
             while ! test -S /var/snap/swtpm-mvo/current/swtpm-sock; do
@@ -139,7 +153,7 @@ start_nested_core_vm_unit(){
                 sleep 1
             done
         fi
-        PARAM_TPM="-chardev socket,id=chrtpm,path=/var/snap/swtpm-mvo/current/swtpm-sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
+        PARAM_TPM="-chardev socket,id=chrtpm,path=${TPMSOCK_PATH} -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
     fi
 
     PARAM_IMAGE="-drive file=${IMAGE_FILE},cache=none,format=raw,id=disk1,if=none -device virtio-blk-pci,drive=disk1,bootindex=1"

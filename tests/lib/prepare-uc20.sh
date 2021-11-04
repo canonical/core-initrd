@@ -11,9 +11,11 @@ apt update -yqq
 add-apt-repository ppa:snappy-dev/image -y
 apt update
 
-# these should already be installed in GCE images with the google-nested 
+# these should already be installed in GCE and LXD images with the google/lxd-nested 
 # backend, but in qemu local images from qemu-nested, we might not have them
-apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
+if [ "${SPREAD_BACKEND}" = "qemu-nested" ]; then
+    apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
+fi
 
 # use the snapd snap explicitly
 # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
@@ -22,8 +24,7 @@ apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
 snap install snapd
 
 # install some dependencies
-# TODO:UC20: when should we start using candidate / stable ubuntu-image?
-snap install ubuntu-image --edge --classic
+snap install ubuntu-image --classic
 
 # install build-deps for ubuntu-core-initramfs
 (
@@ -62,14 +63,15 @@ apt install -yqq "$SETUPDIR"/ubuntu-core-initramfs*.deb
 
 # now download snap dependencies 
 # TODO:UC20: when should some of these things start tracking stable ?
-snap download pc-kernel --channel=20/edge --basename=upstream-pc-kernel
-snap download pc --channel=20/edge --basename=upstream-pc-gadget
-snap download core20 --channel=edge --basename=upstream-core20
+snap download pc-kernel --channel=20/$MODEL_BRANCH --basename=upstream-pc-kernel
+snap download pc --channel=20/$MODEL_BRANCH --basename=upstream-pc-gadget
+snap download core20 --channel=$MODEL_BRANCH --basename=upstream-core20
+
 # note that we currently use snap-bootstrap from the snapd deb package, but we 
 # could instead copy a potentially more up-to-date version out of the snapd snap
 # but we don't currently do that as it doesn't represent what 
 # ubuntu-core-initramfs would actually used if that package was built from LP
-snap download snapd --channel=edge --basename=upstream-snapd
+snap download snapd --channel=$MODEL_BRANCH --basename=upstream-snapd
 
 # next repack / modify the snaps we use in the image, we do this for a few 
 # reasons:
@@ -257,26 +259,45 @@ echo "ubuntu:x:1001:" >> /root/test-var/lib/extrausers/group
 sed -r -i -e 's/^systemd-journal:x:([0-9]+):$/systemd-journal:x:\1:test/' /root/test-etc/group
 
 # mount fresh image and add all our SPREAD_PROJECT data
-kpartx -avs pc.img
-# losetup --list --noheadings returns:
-# /dev/loop1   0 0  1  1 /var/lib/snapd/snaps/ohmygiraffe_3.snap                0     512
-# /dev/loop57  0 0  1  1 /var/lib/snapd/snaps/http_25.snap                      0     512
-# /dev/loop19  0 0  1  1 /var/lib/snapd/snaps/test-snapd-netplan-apply_75.snap  0     512
-devloop=$(losetup --list --noheadings | grep pc.img | awk '{print $1}')
-dev=$(basename "$devloop")
+# for the lxd backend this step is a bit different as the device mapper kernel module
+# is not supported by lxd containers. We thus have to do some manual setup of the image
+# partition mount.
+if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
+    devloop=$(losetup -f)
+    losetup $devloop pc.img -o 2097152
+    mkdir /mnt/p2
+    mount $devloop /mnt/p2
 
-# mount it so we can use it now
-mkdir -p /mnt
-mount "/dev/mapper/${dev}p2" /mnt
+    # add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
+    # mounted partition
+    tar -c -z \
+        -f /mnt/p2/run-mode-overlay-data.tar.gz \
+        /root/test-etc /root/test-var/lib/extrausers
 
-# add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
-# mounted partition
-tar -c -z \
-    -f /mnt/run-mode-overlay-data.tar.gz \
-    /root/test-etc /root/test-var/lib/extrausers
+    umount /mnt/p2
+    losetup -d $devloop
+else
+    kpartx -avs pc.img
+    # losetup --list --noheadings returns:
+    # /dev/loop1   0 0  1  1 /var/lib/snapd/snaps/ohmygiraffe_3.snap                0     512
+    # /dev/loop57  0 0  1  1 /var/lib/snapd/snaps/http_25.snap                      0     512
+    # /dev/loop19  0 0  1  1 /var/lib/snapd/snaps/test-snapd-netplan-apply_75.snap  0     512
+    devloop=$(losetup --list --noheadings | grep pc.img | awk '{print $1}')
+    dev=$(basename "$devloop")
 
-# tear down the mounts
-umount /mnt
-kpartx -d pc.img
+    # mount it so we can use it now
+    mkdir -p /mnt
+    mount "/dev/mapper/${dev}p2" /mnt
+
+    # add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
+    # mounted partition
+    tar -c -z \
+        -f /mnt/run-mode-overlay-data.tar.gz \
+        /root/test-etc /root/test-var/lib/extrausers
+
+    # tear down the mounts
+    umount /mnt
+    kpartx -d pc.img
+fi
 
 # the image is now ready to be booted
