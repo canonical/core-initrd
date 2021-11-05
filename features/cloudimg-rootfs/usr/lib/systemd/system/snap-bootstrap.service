@@ -11,7 +11,7 @@ Wants=systemd-udev-settle.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/lib/the-tool
+ExecStart=/usr/lib/snap-bootstrap-starter.sh
 ExecStartPost=/usr/bin/systemctl --no-block isolate initrd.target
 StandardOutput=journal+console
 StandardError=journal+console

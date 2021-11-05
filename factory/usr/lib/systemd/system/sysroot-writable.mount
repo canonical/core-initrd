@@ -3,11 +3,11 @@ Before=initrd-cleanup.target
 After=run-mnt-data.mount
 After=run-mnt-base.mount
 After=sysroot.mount
-After=the-tool.service
+After=snap-bootstrap.service
 Requires=run-mnt-data.mount
 Requires=run-mnt-base.mount
 Requires=sysroot.mount
-Requires=the-tool.service
+Requires=snap-bootstrap.service
 Wants=populate-writable.service
 [Mount]
 What=/run/mnt/data

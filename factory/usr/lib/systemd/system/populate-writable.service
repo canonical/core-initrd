@@ -10,8 +10,8 @@ Requires=run-mnt-data.mount
 Requires=run-mnt-base.mount
 Requires=sysroot.mount
 Requires=sysroot-writable.mount
-Wants=the-tool.service
-After=the-tool.service
+Wants=snap-bootstrap.service
+After=snap-bootstrap.service
 
 [Service]
 Type=oneshot
