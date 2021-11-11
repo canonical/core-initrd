@@ -27,11 +27,49 @@ TODO: Write documentation for how to build initrd locally
 
 See [Hacking](HACKING.md)
 
-# Integrating with Kernel Snap
+# Releasing
 
-When your initrd DEB package is built, you need to perform following steps to make it a part of kernel snap:
+The UC initrd is included in kernel snaps. However, the process to get
+it inside the kernel snap is not immediate and consists of a few
+steps. First, we need to build the `ubuntu-core-initramfs`
+debian package in the [snappy-dev/image
+PPA](https://launchpad.net/~snappy-dev/+archive/ubuntu/image) by
+following these steps:
 
-TODO: Write documentation for how to integrate initrd.img to your (custom or canonical) kernel 
+1. Update the changelog with latest changes since last release (use `dch -i` for this)
+1. Propose a PR to the repo with the new changelog, get it reviewed and merged
+1. Tag the repository with the new version
+1. Build the source package by running
+
+        git clean -fdx
+        dpkg-buildpackage -S -sa -d
+
+1. Compare with the latest package that was uploaded to the snappy-dev
+PPA to make sure that the changes are correct.  For this, you can
+download the .dsc file and the tarball from the PPA, then run debdiff
+to find out the differences:
+
+        wget https://launchpad.net/~snappy-dev/+archive/ubuntu/image/+sourcefiles/ubuntu-core-initramfs/<old_version>/ubuntu-core-initramfs_<old_version>.dsc \
+             https://launchpad.net/~snappy-dev/+archive/ubuntu/image/+sourcefiles/ubuntu-core-initramfs/<old_version>/ubuntu-core-initramfs_<old_version>.tar.xz
+        debdiff ubuntu-core-initramfs_<old_version>.dsc ubuntu-core-initramfs_<new_version>.dsc > diff.txt
+
+1. Upload to the snappy-dev PPA
+
+        dput ppa:snappy-dev/image ubuntu-core-initramfs_<new_version>_source.changes
+
+1. Make sure that the package has been built correctly. If not, make
+   changes appropriately and repeat these steps, including creating a
+   new changelog entry.
+
+Note that `ubuntu-core-initramfs` gets some files from its build
+dependencies while being built, including for instance
+`snap-bootstrap`, so we need to make sure that the snappy-dev PPA
+already contains the desired version of the snapd deb package (or
+others) when we upload the package.
+
+After this, the initrd changes will be included in future kernel snaps
+releases automatically, following the usual 3 weeks cadence, as the
+snappy-dev PPA is included when these build happen.
 
 # Bootchart
 
