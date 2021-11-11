@@ -42,15 +42,14 @@ following these steps:
 1. Build the source package by running
 
         git clean -fdx
-        dpkg-buildpackage -S -sa -d
+        gbp buildpackage -S -sa -d
 
 1. Compare with the latest package that was uploaded to the snappy-dev
 PPA to make sure that the changes are correct.  For this, you can
 download the .dsc file and the tarball from the PPA, then run debdiff
 to find out the differences:
 
-        wget https://launchpad.net/~snappy-dev/+archive/ubuntu/image/+sourcefiles/ubuntu-core-initramfs/<old_version>/ubuntu-core-initramfs_<old_version>.dsc \
-             https://launchpad.net/~snappy-dev/+archive/ubuntu/image/+sourcefiles/ubuntu-core-initramfs/<old_version>/ubuntu-core-initramfs_<old_version>.tar.xz
+        dget https://launchpad.net/~snappy-dev/+archive/ubuntu/image/+sourcefiles/ubuntu-core-initramfs/<old_version>/ubuntu-core-initramfs_<old_version>.dsc
         debdiff ubuntu-core-initramfs_<old_version>.dsc ubuntu-core-initramfs_<new_version>.dsc > diff.txt
 
 1. Upload to the snappy-dev PPA
