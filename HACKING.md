@@ -33,8 +33,9 @@ You need to have the following software installed before you can test with sprea
 
 ## Installing spread
 
-Manually installing spread is the recommended way to get started as
-we need some LXD profile support that has not reached upstream. This document will be updated with the upstream version when this happens.
+You can install spread by simply using ```snap install spread```, however this does not allow for the lxd-backend to be used.
+To use the lxd backend you need to install spread from source, as the LXD profile support has not been upstreamed yet.
+This document will be updated with the upstream version when this happens. To install spread from source you need to do the following.
 
 ```
 git clone https://github.com/Meulengracht/spread
@@ -51,9 +52,9 @@ go install .
 ```
 sudo apt update && sudo apt install -y qemu-kvm autopkgtest
 ```
-2. Create a suitable ubuntu test image (focal) in the following directory where spread locates images
+2. Create a suitable ubuntu test image (focal) in the following directory where spread locates images. Note that the location is different when using spread installed through snap.
 ```
-mkdir -p ~/.spread/qemu
+mkdir -p ~/.spread/qemu # This location is different if you installed spread from snap
 cd ~/.spread/qemu
 autopkgtest-buildvm-ubuntu-cloud -r focal
 ```
@@ -74,15 +75,20 @@ qemu-kvm acceleration in the container for the nested instance.
 
 This backend requires that your host machine supports KVM.
 
-1. Setup any prerequisites and build the LXD image needed for testing
+1. Setup any prerequisites and build the LXD image needed for testing. The following commands will install lxd
+and yq (needed for yaml manipulation), download the newest image and import it into LXD.
 ```
 sudo snap install lxd --channel=latest/stable
 sudo snap install yq --channel=latest/stable
-curl -o build-lxd-image.sh https://raw.githubusercontent.com/Meulengracht/spread-utils/master/build-core-lxd-image.sh
-chmod +x build-lxd-image.sh
-./build-lxd-image.sh
+curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd-img.tar.gz
+lxc image import lxd-initrd-img.tar.gz --alias ucspread
+lxc image show ucspread > temp.profile
+yq e '.properties.aliases = "ucspread,amd64"' -i ./temp.profile
+yq e '.properties.remote = "images"' -i ./temp.profile
+cat ./temp.profile | lxc image edit ucspread
+rm ./temp.profile ./lxd-initrd-img.tar.gz
 ```
-2. Import the LXD core-initrd test profile. Make sure your working directory is the root of this repository.
+2. Import the LXD coreinitrd test profile. Make sure your working directory is the root of this repository.
 ```
 lxc profile create coreinitrd
 cat tests/spread/core-initrd.lxdprofile | lxc profile edit coreinitrd
