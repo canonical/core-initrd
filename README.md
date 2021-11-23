@@ -40,7 +40,8 @@ following these steps:
 1. Commit using `debcommit --release -a` which will commit the changelog update & tag the release
 1. Propose a PR to the repo with the new changelog, get it reviewed and merged
 1. Push the tag to the repository with the new version (GitHub pull requests do not update tags)
-1. Build the source package by running
+1. Build the source package by running (note that the clean command
+   removes all untracked files, including subtrees with .git folders)
 
         git clean -ffdx
         gbp buildpackage -S -sa -d --git-ignore-branch
