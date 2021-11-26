@@ -5,7 +5,8 @@ environment:
   PROJECT_PATH: $SETUPDIR
   PATH: $PATH:$PROJECT_PATH/tests/bin
   TESTSLIB: $PROJECT_PATH/tests/lib
-  TESTSTOOLS: $PROJECT_PATH/tests/lib/tools
+  EXTTESTSLIB: $TESTSLIB/external/snapd-testing-tools/lib/core
+  SNAP_BRANCH: "edge" # stable/edge/beta
   # TODO: are these vars needed still?
   LANG: "C.UTF-8"
   LANGUAGE: "en"
@@ -15,7 +16,7 @@ backends:
     type: google
     key: '$(HOST: echo "$SPREAD_GOOGLE_KEY")'
     location: snapd-spread/us-east1-b
-    plan: n1-standard-2
+    plan: n2-standard-2
     halt-timeout: 2h
     systems:
       - ubuntu-20.04-64:
@@ -32,6 +33,13 @@ backends:
       - ubuntu-20.04-64:
           username: ubuntu
           password: ubuntu
+
+  lxd-nested:
+    type: lxd
+    container-profiles: coreinitrd
+    systems:
+      - ubuntu-20.04:
+          image: ucspread
 
 path: /home/core-initrd
 
@@ -80,11 +88,11 @@ prepare: |
 restore-each: |
   # delete the nested VM image after each task finishes so we don't use too much
   # disk space
-  . "$TESTSLIB/nested.sh"
+  . "$EXTTESTSLIB/nested.sh"
   cleanup_nested_core_vm
 
 debug-each: |
-  . "$TESTSLIB/nested.sh"
+  . "$EXTTESTSLIB/nested.sh"
   print_nested_status
 
 # it takes a while to build everything while preparing the project

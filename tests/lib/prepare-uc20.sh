@@ -62,14 +62,15 @@ apt install -yqq "$SETUPDIR"/ubuntu-core-initramfs*.deb
 
 # now download snap dependencies 
 # TODO:UC20: when should some of these things start tracking stable ?
-snap download pc-kernel --channel=20/edge --basename=upstream-pc-kernel
-snap download pc --channel=20/edge --basename=upstream-pc-gadget
-snap download core20 --channel=edge --basename=upstream-core20
+snap download pc-kernel --channel=20/$SNAP_BRANCH --basename=upstream-pc-kernel
+snap download pc --channel=20/$SNAP_BRANCH --basename=upstream-pc-gadget
+snap download core20 --channel=$SNAP_BRANCH --basename=upstream-core20
+
 # note that we currently use snap-bootstrap from the snapd deb package, but we 
 # could instead copy a potentially more up-to-date version out of the snapd snap
 # but we don't currently do that as it doesn't represent what 
 # ubuntu-core-initramfs would actually used if that package was built from LP
-snap download snapd --channel=edge --basename=upstream-snapd
+snap download snapd --channel=$SNAP_BRANCH --basename=upstream-snapd
 
 # next repack / modify the snaps we use in the image, we do this for a few 
 # reasons:
