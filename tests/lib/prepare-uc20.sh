@@ -258,26 +258,46 @@ echo "ubuntu:x:1001:" >> /root/test-var/lib/extrausers/group
 sed -r -i -e 's/^systemd-journal:x:([0-9]+):$/systemd-journal:x:\1:test/' /root/test-etc/group
 
 # mount fresh image and add all our SPREAD_PROJECT data
-kpartx -avs pc.img
-# losetup --list --noheadings returns:
-# /dev/loop1   0 0  1  1 /var/lib/snapd/snaps/ohmygiraffe_3.snap                0     512
-# /dev/loop57  0 0  1  1 /var/lib/snapd/snaps/http_25.snap                      0     512
-# /dev/loop19  0 0  1  1 /var/lib/snapd/snaps/test-snapd-netplan-apply_75.snap  0     512
-devloop=$(losetup --list --noheadings | grep pc.img | awk '{print $1}')
-dev=$(basename "$devloop")
+# for the lxd backend this step is a bit different as the device mapper kernel module
+# is not supported by lxd containers. We thus have to do some manual setup of the image
+# partition mount.
+if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
+    devloop=$(losetup -f)
+    partoffset=$(fdisk -lu pc.img | awk '/EFI System$/ {print $2}')
+    losetup $devloop pc.img -o $(($partoffset * 512))
+    mkdir /mnt/p2
+    mount $devloop /mnt/p2
 
-# mount it so we can use it now
-mkdir -p /mnt
-mount "/dev/mapper/${dev}p2" /mnt
+    # add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
+    # mounted partition
+    tar -c -z \
+        -f /mnt/p2/run-mode-overlay-data.tar.gz \
+        /root/test-etc /root/test-var/lib/extrausers
 
-# add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
-# mounted partition
-tar -c -z \
-    -f /mnt/run-mode-overlay-data.tar.gz \
-    /root/test-etc /root/test-var/lib/extrausers
+    umount /mnt/p2
+    losetup -d $devloop
+else
+    kpartx -avs pc.img
+    # losetup --list --noheadings returns:
+    # /dev/loop1   0 0  1  1 /var/lib/snapd/snaps/ohmygiraffe_3.snap                0     512
+    # /dev/loop57  0 0  1  1 /var/lib/snapd/snaps/http_25.snap                      0     512
+    # /dev/loop19  0 0  1  1 /var/lib/snapd/snaps/test-snapd-netplan-apply_75.snap  0     512
+    devloop=$(losetup --list --noheadings | grep pc.img | awk '{print $1}')
+    dev=$(basename "$devloop")
 
-# tear down the mounts
-umount /mnt
-kpartx -d pc.img
+    # mount it so we can use it now
+    mkdir -p /mnt
+    mount "/dev/mapper/${dev}p2" /mnt
+
+    # add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
+    # mounted partition
+    tar -c -z \
+        -f /mnt/run-mode-overlay-data.tar.gz \
+        /root/test-etc /root/test-var/lib/extrausers
+
+    # tear down the mounts
+    umount /mnt
+    kpartx -d pc.img
+fi
 
 # the image is now ready to be booted
