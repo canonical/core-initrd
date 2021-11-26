@@ -13,9 +13,7 @@ apt update
 
 # these should already be installed in GCE and LXD images with the google/lxd-nested 
 # backend, but in qemu local images from qemu-nested, we might not have them
-if [ "${SPREAD_BACKEND}" = "qemu-nested" ]; then
-    apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
-fi
+apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
 
 # use the snapd snap explicitly
 # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
@@ -63,15 +61,15 @@ apt install -yqq "$SETUPDIR"/ubuntu-core-initramfs*.deb
 
 # now download snap dependencies 
 # TODO:UC20: when should some of these things start tracking stable ?
-snap download pc-kernel --channel=20/$MODEL_BRANCH --basename=upstream-pc-kernel
-snap download pc --channel=20/$MODEL_BRANCH --basename=upstream-pc-gadget
-snap download core20 --channel=$MODEL_BRANCH --basename=upstream-core20
+snap download pc-kernel --channel=20/$SNAP_BRANCH --basename=upstream-pc-kernel
+snap download pc --channel=20/$SNAP_BRANCH --basename=upstream-pc-gadget
+snap download core20 --channel=$SNAP_BRANCH --basename=upstream-core20
 
 # note that we currently use snap-bootstrap from the snapd deb package, but we 
 # could instead copy a potentially more up-to-date version out of the snapd snap
 # but we don't currently do that as it doesn't represent what 
 # ubuntu-core-initramfs would actually used if that package was built from LP
-snap download snapd --channel=$MODEL_BRANCH --basename=upstream-snapd
+snap download snapd --channel=$SNAP_BRANCH --basename=upstream-snapd
 
 # next repack / modify the snaps we use in the image, we do this for a few 
 # reasons:
