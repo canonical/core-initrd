@@ -1,4 +1,7 @@
 [Unit]
+DefaultDependencies=no
+Before=initrd-fs.target
+
 After=sysroot.mount
 After=run-mnt-kernel.mount
 Requires=sysroot.mount

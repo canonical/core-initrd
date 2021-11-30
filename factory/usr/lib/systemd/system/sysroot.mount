@@ -1,5 +1,12 @@
 [Unit]
-Before=initrd-cleanup.target
+DefaultDependencies=no
+Before=initrd-root-fs.target
+
+Requires=run-mnt-base.mount
+After=run-mnt-base.mount
+Requires=the-tool.service
+After=the-tool.service
+
 [Mount]
 What=/run/mnt/base
 Type=none

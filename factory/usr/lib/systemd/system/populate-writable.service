@@ -1,7 +1,10 @@
 [Unit]
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly
-Before=initrd-cleanup.target
+
+DefaultDependencies=no
+Before=initrd-fs.target
+
 After=run-mnt-data.mount
 After=run-mnt-base.mount
 After=sysroot.mount
@@ -10,6 +13,7 @@ Requires=run-mnt-data.mount
 Requires=run-mnt-base.mount
 Requires=sysroot.mount
 Requires=sysroot-writable.mount
+
 Wants=the-tool.service
 After=the-tool.service
 

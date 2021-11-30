@@ -1,12 +1,10 @@
 [Unit]
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly
+
 DefaultDependencies=no
-After=systemd-tmpfiles-setup.service
-After=systemd-modules-load.service
-Wants=systemd-modules-load.service
-After=systemd-udev-settle.service
-Wants=systemd-udev-settle.service
+After=sysinit.target
+Before=initrd-root-device.target
 
 [Service]
 Type=oneshot

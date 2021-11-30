@@ -2,6 +2,7 @@
 Description=Stop Boot Process Profiler
 DefaultDependencies=no
 Before=initrd-switch-root.service
+After=initrd.target
 ConditionKernelCommandLine=core.bootchart
 
 [Service]

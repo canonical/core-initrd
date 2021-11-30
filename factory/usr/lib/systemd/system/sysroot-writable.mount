@@ -1,5 +1,7 @@
 [Unit]
-Before=initrd-cleanup.target
+DefaultDependencies=no
+Before=initrd-fs.target
+
 After=run-mnt-data.mount
 After=run-mnt-base.mount
 After=sysroot.mount
@@ -8,7 +10,7 @@ Requires=run-mnt-data.mount
 Requires=run-mnt-base.mount
 Requires=sysroot.mount
 Requires=the-tool.service
-Wants=populate-writable.service
+
 [Mount]
 What=/run/mnt/data
 Type=none
