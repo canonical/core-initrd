@@ -2,6 +2,7 @@
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly
 DefaultDependencies=no
+Before=initrd-root-device.target
 After=systemd-tmpfiles-setup.service
 After=systemd-modules-load.service
 Wants=systemd-modules-load.service
