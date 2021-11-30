@@ -23,4 +23,3 @@ ExecStart=/usr/bin/touch /sysroot/run/fstab
 ExecStart=/usr/bin/chroot /sysroot /usr/lib/core/handle-writable-paths / /etc/system-image/writable-paths /run/fstab
 # TODO:UC20: move the-modeenv implementation to snap-bootstrap too
 ExecStart=/usr/lib/the-modeenv
-ExecStartPost=/usr/bin/systemctl --no-block isolate initrd.target

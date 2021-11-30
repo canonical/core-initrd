@@ -20,4 +20,3 @@ if grep -q snapd_recovery_mode=run /proc/cmdline; then
 fi
 mount -o bind /run/image.fstab /sysroot/etc/fstab
 umount -lf /sysroot/run
-cp /run/systemd/transient/*.mount /etc/systemd/system
