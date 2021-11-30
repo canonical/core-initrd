@@ -1,5 +1,0 @@
-[Unit]
-Description=DML slice
-
-[Slice]
-DefaultMemoryLow=50

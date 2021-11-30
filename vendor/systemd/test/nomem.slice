@@ -1,5 +1,0 @@
-[Unit]
-Description=Nomem Parent Slice
-
-[Slice]
-DisableControllers=memory

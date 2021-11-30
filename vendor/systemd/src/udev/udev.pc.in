@@ -1,5 +1,0 @@
-Name: udev
-Description: udev
-Version: @PROJECT_VERSION@
-
-udevdir=@udevlibexecdir@

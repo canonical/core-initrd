@@ -1,5 +1,0 @@
-[NetDev]
-Name=w
-Kind=wireguard
-[WireGuard]
-PrivateKey=E
