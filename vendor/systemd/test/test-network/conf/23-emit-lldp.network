@@ -1,0 +1,6 @@
+[Match]
+Name=veth-peer
+
+[Network]
+IPv6AcceptRA=no
+EmitLLDP=yes

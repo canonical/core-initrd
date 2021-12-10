@@ -1,0 +1,17 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Thu, 13 May 2021 14:48:34 +0200
+Subject: Deny-list TEST-10-ISSUE-2467 on all architectures because it is
+ still flaky
+
+---
+ test/TEST-10-ISSUE-2467/deny-list-upstream-ci | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 test/TEST-10-ISSUE-2467/deny-list-upstream-ci
+
+diff --git a/test/TEST-10-ISSUE-2467/deny-list-upstream-ci b/test/TEST-10-ISSUE-2467/deny-list-upstream-ci
+new file mode 100644
+index 0000000..3b69b40
+--- /dev/null
++++ b/test/TEST-10-ISSUE-2467/deny-list-upstream-ci
+@@ -0,0 +1 @@
++# this is still flaky https://github.com/systemd/systemd/issues/11706

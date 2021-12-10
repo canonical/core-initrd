@@ -1,0 +1,8 @@
+[Match]
+Name=veth99
+
+[Network]
+IPv6AcceptRA=true
+
+[IPv6AcceptRA]
+UseDomains=yes

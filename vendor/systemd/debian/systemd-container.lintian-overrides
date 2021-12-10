@@ -1,0 +1,2 @@
+# False positive: nspawn containers are supposed to be started via machines.target
+systemd-container: systemd-service-file-refers-to-unusual-wantedby-target lib/systemd/system/systemd-nspawn@.service machines.target

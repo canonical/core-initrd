@@ -1,0 +1,28 @@
+From: Michael Vogt <michael.vogt@ubuntu.com>
+Date: Wed, 14 Feb 2018 16:38:13 +0000
+Subject: Add "AssumedApparmorLabel=unconfined" to timedate1 dbus service file
+
+A change in apparmor mediates auto-activation attempts now through
+AppArmor: https://cgit.freedesktop.org/dbus/dbus/commit/?id=dc25979eb
+
+This breaks the snapd time{zone,server}-control interfaces which limt
+sending dbus message to a (label=unconfined) org.freedesktop.timedate1
+peers.
+
+By adding the AssumedApparmorLabel=unconfined label the snapd interfaces
+work again.
+
+LP: #1749000
+---
+ src/timedate/org.freedesktop.timedate1.service | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/timedate/org.freedesktop.timedate1.service b/src/timedate/org.freedesktop.timedate1.service
+index 6b82d70..e3b0f46 100644
+--- a/src/timedate/org.freedesktop.timedate1.service
++++ b/src/timedate/org.freedesktop.timedate1.service
+@@ -12,3 +12,4 @@ Name=org.freedesktop.timedate1
+ Exec=/bin/false
+ User=root
+ SystemdService=dbus-org.freedesktop.timedate1.service
++AssumedAppArmorLabel=unconfined

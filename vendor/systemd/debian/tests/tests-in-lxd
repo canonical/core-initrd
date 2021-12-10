@@ -1,0 +1,64 @@
+#!/bin/sh
+
+# run some autopkgtest tests in lxd
+
+set -eu
+
+lxd init --auto
+
+IMAGE=autopkgtest/ubuntu/$(lsb_release -cs)/$(dpkg --print-architecture)
+
+# work around LP: #1878225 as fallback
+autopkgtest-build-lxd ubuntu-daily:$(lsb_release -cs) || \
+    patch /usr/bin/autopkgtest-build-lxd <<'EOF'
+@@ -70,6 +70,8 @@
+ 
+     sleep 5
+     if lxc exec "$CONTAINER" -- systemctl mask serial-getty@getty.service; then
++       lxc exec "$CONTAINER" -- systemctl mask snapd.service
++       lxc exec "$CONTAINER" -- systemctl mask snapd.seeded.service
+        lxc exec "$CONTAINER" -- reboot
+     fi
+ 
+EOF
+
+# help debugging if building lxd image still fails
+lxc image list | grep -q autopkgtest/ || autopkgtest-build-lxd ubuntu-daily:$(lsb_release -cs) || \
+    (lxc launch ubuntu-daily:$(lsb_release -cs) systemd-lxc
+     sleep 60
+     lxc exec systemd-lxc systemctl is-system-running || (lxc exec systemd-lxc -- systemctl list-units --failed ; lxc exec systemd-lxc systemctl list-jobs ; lxc exec systemd-lxc -- journalctl -a)
+     exit 1)
+
+# push local apt configuration to match pinning
+lxc launch $IMAGE systemd-lxc
+lxc file push -r /etc/apt systemd-lxc/etc/
+lxc exec systemd-lxc -- sed -i 's|/tmp/autopkgtest.[^/]*/|/root/|' /etc/apt/sources.list.d/autopkgtest.list || true
+
+if [ -d /tmp/autopkgtest.*/build.*/src ]; then
+    cd /tmp/autopkgtest.*/build.*/src
+else
+    cd /tmp/autopkgtest.*/build.*/real-tree
+fi
+
+# push potential locally built packages
+if [ -d ../../binaries ]; then
+    lxc file push -r ../../binaries systemd-lxc/root/
+fi
+
+# systemd-sysusers is unable to pass credentials on privileged containers (LP: #1950787)
+lxc exec systemd-lxc -- mkdir -p /etc/systemd/system/systemd-sysusers.service.d
+lxc exec systemd-lxc -- sh -c "echo [Service] > /etc/systemd/system/systemd-sysusers.service.d/override.conf"
+lxc exec systemd-lxc -- sh -c "echo LoadCredential= >> /etc/systemd/system/systemd-sysusers.service.d/override.conf"
+
+lxc stop systemd-lxc
+lxc publish systemd-lxc --alias $IMAGE
+
+for t in unit-tests boot-and-services; do
+    autopkgtest -U -B . --test-name=$t -- lxd $IMAGE || [ $? = 2 ] # see Debian's #960267
+done
+
+# also check tests in privileged containers
+lxc profile set default security.privileged "true"
+for t in unit-tests boot-and-services; do
+    autopkgtest -U -B . --test-name=$t -- lxd $IMAGE || [ $? = 2 ] # see Debian's #960267
+done
