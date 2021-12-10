@@ -1,0 +1,7 @@
+[Match]
+Name=dummy98
+
+[Network]
+IPv6AcceptRA=no
+Address=149.10.124.58/28
+Gateway=149.10.124.60

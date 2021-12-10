@@ -1,0 +1,59 @@
+From: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+Date: Tue, 28 Jul 2020 14:16:35 +0200
+Subject: skip disk/by-uuid for bcache devices
+
+blkid reports bcache superblock dev.uuid as a filesystem UUID but it actually
+is not a filesystem, it's the UUID of the backing device, which is maintained
+at /dev/bcache/by-uuid instead of /dev/disk/by-uuid.
+
+  [Forwarding Note]
+
+  There is an on-going discussion upstream whether this patch should exist.
+  This patch is not a FIX to LP: #1861941, but can work as a mitigation. The
+  FIX for LP: #1861941 is the bcache-tools (0003-Add-bcache-export-cached-
+  helper.patch).
+
+  Ryan Harper arguments are that blkid - and/or udev default rules - should skip
+  devices with "ID_FS_TYPE = bcache" by default from creating symlinks at
+  /dev/disk/{by-uuid,by-label}/{ID_FS_UUID_ENC,ID_FS_LABEL_ENC} just because
+  those devices aren't meant to be used directly (as they are backing devices
+  to bcache). Actually this is what was causing the issue fixed by bcache-tools
+  udev rules: symlink management for bcache backing devices were removing
+  /dev/bcache/xxx symlinks.
+
+  Considering that this is a minor delta, and I agree to Ryan's arguments, of
+  not having /dev/disk/by-uuid/xxx symlinks to devices that should not be
+  accessed directly, thus giving a better experience to end user, I'm keeping
+  this until either upstream provides it by default OR the patch
+  0003-Add-bcache-export-cached-helper.patch can be removed from bcache-tools
+  because udev and/or libblkid started differentiating UUID_CACHED and FS_UUID
+  when doing /dev/disk/ symlinks.
+
+  -
+  rafaeldtinoco
+
+Author: Ryan Harper <ryan.harper@canonical.com>
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1861941
+Forwarded: https://github.com/systemd/systemd/pull/16317
+Reviewed-by: Rafael David Tinoco <rafaeldtinoco@ubuntu.com>
+Last-Update: 2020-07-23
+---
+ rules.d/60-persistent-storage.rules | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/rules.d/60-persistent-storage.rules b/rules.d/60-persistent-storage.rules
+index 6ac17f2..a2417cd 100644
+--- a/rules.d/60-persistent-storage.rules
++++ b/rules.d/60-persistent-storage.rules
+@@ -110,8 +110,11 @@ KERNEL=="sr*", ENV{DISK_EJECT_REQUEST}!="?*", ENV{ID_CDROM_MEDIA_TRACK_COUNT_DAT
+ KERNEL!="sr*|mmcblk[0-9]boot[0-9]", IMPORT{builtin}="blkid"
+ 
+ # by-label/by-uuid links (filesystem metadata)
++# Skip bcache backing devices, handled in 69-bcache.rules
++ENV{ID_FS_TYPE}=="bcache", GOTO="skip_bcache_fs_type"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
++LABEL="skip_bcache_fs_type"
+ 
+ # by-id (World Wide Name)
+ ENV{DEVTYPE}=="disk", ENV{ID_WWN_WITH_EXTENSION}=="?*", SYMLINK+="disk/by-id/wwn-$env{ID_WWN_WITH_EXTENSION}"

@@ -1,0 +1,242 @@
+<?xml version='1.0'?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+  "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+
+<refentry id="kernel-install"
+          xmlns:xi="http://www.w3.org/2001/XInclude">
+
+  <refentryinfo>
+    <title>kernel-install</title>
+    <productname>systemd</productname>
+  </refentryinfo>
+
+  <refmeta>
+    <refentrytitle>kernel-install</refentrytitle>
+    <manvolnum>8</manvolnum>
+  </refmeta>
+
+  <refnamediv>
+    <refname>kernel-install</refname>
+    <refpurpose>Add and remove kernel and initramfs images to and from /boot</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <cmdsynopsis>
+      <command>kernel-install</command>
+      <arg choice="plain">COMMAND</arg>
+      <arg choice="opt" rep="repeat">OPTIONS</arg>
+      <arg choice="plain"><replaceable>KERNEL-VERSION</replaceable></arg>
+      <arg choice="plain"><replaceable>KERNEL-IMAGE</replaceable></arg>
+      <arg choice="opt" rep="repeat"><replaceable>INITRD-FILE</replaceable></arg>
+    </cmdsynopsis>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Description</title>
+    <para><command>kernel-install</command> is used to install and remove kernel and initramfs images to and
+    from the boot loader partition, referred to as <varname>$BOOT</varname> here. It will usually be one of
+    <filename>/boot/</filename>, <filename>/efi/</filename>, or <filename>/boot/efi/</filename>, see below.
+    </para>
+
+    <para><command>kernel-install</command> will execute the files
+    located in the directory <filename>/usr/lib/kernel/install.d/</filename>
+    and the local administration directory <filename>/etc/kernel/install.d/</filename>.
+    All files are collectively sorted and executed in lexical order, regardless of the directory in
+    which they live. However, files with identical filenames replace each other.
+    Files in <filename>/etc/kernel/install.d/</filename> take precedence over files with the same name
+    in <filename>/usr/lib/kernel/install.d/</filename>. This can be used to override a system-supplied
+    executables with a local file if needed; a symbolic link in <filename>/etc/kernel/install.d/</filename>
+    with the same name as an executable in <filename>/usr/lib/kernel/install.d/</filename>,
+    pointing to <filename>/dev/null</filename>, disables the executable entirely. Executables must have the
+    extension <literal>.install</literal>; other extensions are ignored.</para>
+
+    <para>An executable should return <constant>0</constant> on success. It may also
+    return <constant>77</constant> to cause the whole operation to terminate
+    (executables later in lexical order will be skipped).</para>
+  </refsect1>
+
+  <refsect1>
+    <title>Commands</title>
+    <para>The following commands are understood:</para>
+    <variablelist>
+      <varlistentry>
+        <term><command>add <replaceable>KERNEL-VERSION</replaceable> <replaceable>KERNEL-IMAGE</replaceable> [<replaceable>INITRD-FILE</replaceable> ...]</command></term>
+        <listitem>
+          <para>This command expects a kernel version string and a path to a kernel image file as
+          arguments. <command>kernel-install</command> calls the executables from
+          <filename>/usr/lib/kernel/install.d/*.install</filename> and
+          <filename>/etc/kernel/install.d/*.install</filename> with the following arguments:
+
+          <programlisting>add <replaceable>KERNEL-VERSION</replaceable> <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/<replaceable>KERNEL-VERSION</replaceable>/</filename> <replaceable>KERNEL-IMAGE</replaceable> [<replaceable>INITRD-FILE</replaceable> ...]</programlisting>
+          </para>
+
+          <para>Three default plugins execute the following operations in this case:</para>
+
+          <itemizedlist>
+            <listitem><para><filename>00-entry-directory.install</filename> creates the directory
+            <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/<replaceable>KERNEL-VERSION</replaceable>/</filename>
+            if <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/</filename> already exists.
+            </para></listitem>
+
+            <listitem><para><filename>50-depmod.install</filename> runs
+            <citerefentry project='man-pages'><refentrytitle>depmod</refentrytitle><manvolnum>8</manvolnum></citerefentry> for the
+            <replaceable>KERNEL-VERSION</replaceable>.</para></listitem>
+
+            <listitem><para><filename>90-loaderentry.install</filename> copies <replaceable>KERNEL-IMAGE</replaceable>
+            to
+            <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/<replaceable>KERNEL-VERSION</replaceable>/linux</filename>.
+            If an <replaceable>INITRD-FILE</replaceable> is provided, it also copies <replaceable>INITRD-FILE</replaceable>
+            to
+            <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/<replaceable>KERNEL_VERSION</replaceable>/<replaceable>INITRD-FILE</replaceable></filename>.
+            It also creates a boot loader entry according to the <ulink
+            url="https://systemd.io/BOOT_LOADER_SPECIFICATION">Boot Loader Specification</ulink> in
+            <filename>$BOOT/loader/entries/<replaceable>MACHINE-ID</replaceable>-<replaceable>KERNEL-VERSION</replaceable>.conf</filename>.
+            The title of the entry is the <replaceable>PRETTY_NAME</replaceable> parameter specified in
+            <filename>/etc/os-release</filename> or <filename>/usr/lib/os-release</filename> (if the former is
+            missing), or "Linux <replaceable>KERNEL-VERSION</replaceable>", if unset.</para>
+
+            <para>If the entry directory
+            <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/<replaceable>KERNEL-VERSION</replaceable>/</filename>
+            does not exist, this plugin does nothing.</para></listitem>
+          </itemizedlist>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><command>remove <replaceable>KERNEL-VERSION</replaceable></command></term>
+        <listitem>
+          <para>This command expects a kernel version string as single argument. This calls executables from
+          <filename>/usr/lib/kernel/install.d/*.install</filename> and
+          <filename>/etc/kernel/install.d/*.install</filename> with the following arguments:
+
+          <programlisting>remove <replaceable>KERNEL-VERSION</replaceable> <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/<replaceable>KERNEL-VERSION</replaceable>/</filename></programlisting>
+          </para>
+
+          <para>Afterwards, <command>kernel-install</command> removes the directory
+          <filename>$BOOT/<replaceable>MACHINE-ID</replaceable>/<replaceable>KERNEL-VERSION</replaceable>/</filename>
+          and its contents.</para>
+
+          <para>Two default plugins execute the following operations in this case:</para>
+
+          <itemizedlist>
+
+            <listitem><para><filename>50-depmod.install</filename> removes the files generated by <command>depmod</command> for this kernel again.</para></listitem>
+
+            <listitem><para><filename>90-loaderentry.install</filename> removes the file
+            <filename>$BOOT/loader/entries/<replaceable>MACHINE-ID</replaceable>-<replaceable>KERNEL-VERSION</replaceable>.conf</filename>.</para></listitem>
+          </itemizedlist>
+
+        </listitem>
+      </varlistentry>
+
+    </variablelist>
+  </refsect1>
+
+  <refsect1>
+    <title>The <varname>$BOOT</varname> partition</title>
+    <para>The partition where the kernels and <ulink url="https://systemd.io/BOOT_LOADER_SPECIFICATION">Boot
+    Loader Specification</ulink> snippets are located is called <varname>$BOOT</varname>.
+    <command>kernel-install</command> determines the location of this partition by checking
+    <filename>/efi/</filename>, <filename>/boot/</filename>, and <filename>/boot/efi/</filename>
+    in turn. The first location where <filename>$BOOT/loader/entries/</filename> or
+    <filename>$BOOT/$MACHINE_ID/</filename> exists is used.</para>
+  </refsect1>
+
+  <refsect1>
+    <title>Options</title>
+    <para>The following options are understood:</para>
+
+    <variablelist>
+      <varlistentry>
+        <term><option>-v</option></term>
+        <term><option>--verbose</option></term>
+        <listitem>
+          <para>Output additional information about operations being performed.</para>
+        </listitem>
+      </varlistentry>
+
+      <xi:include href="standard-options.xml" xpointer="help" />
+    </variablelist>
+  </refsect1>
+
+  <refsect1>
+    <title>Environment variables</title>
+    <para>If <option>--verbose</option> is used, <varname>$KERNEL_INSTALL_VERBOSE=1</varname> will be set for
+    the plugins. They may output additional logs in this case.</para>
+  </refsect1>
+
+  <refsect1>
+    <title>Exit status</title>
+    <para>If every executable returns 0 or 77, 0 is returned, and a non-zero failure code otherwise.</para>
+  </refsect1>
+
+  <refsect1>
+    <title>Files</title>
+    <variablelist>
+      <varlistentry>
+        <term>
+          <filename>/usr/lib/kernel/install.d/*.install</filename>
+          <filename>/etc/kernel/install.d/*.install</filename>
+        </term>
+          <listitem>
+            <para>Drop-in files which are executed by kernel-install.</para>
+          </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>
+          <filename>/etc/kernel/cmdline</filename>
+          <filename>/proc/cmdline</filename>
+        </term>
+          <listitem>
+            <para>Read by <filename>90-loaderentry.install</filename>. The content of the file
+            <filename>/etc/kernel/cmdline</filename> specifies the kernel command line to use.  If that file does not
+            exist, <filename>/proc/cmdline</filename> is used.</para>
+          </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>
+          <filename>/etc/kernel/tries</filename>
+        </term>
+          <listitem>
+            <para>Read by <filename>90-loaderentry.install</filename>. If this file exists a numeric value is read from
+            it and the naming of the generated entry file is slightly altered to include it as
+            <filename>$BOOT/loader/entries/<replaceable>MACHINE-ID</replaceable>-<replaceable>KERNEL-VERSION</replaceable>+<replaceable>TRIES</replaceable>.conf</filename>. This
+            is useful for boot loaders such as
+            <citerefentry><refentrytitle>systemd-boot</refentrytitle><manvolnum>7</manvolnum></citerefentry> which
+            implement boot attempt counting with a counter embedded in the entry file name.</para>
+          </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>
+          <filename>/etc/machine-id</filename>
+        </term>
+          <listitem>
+            <para>The content of this file specifies the machine identification
+            <replaceable>MACHINE-ID</replaceable>. If it cannot read <filename>/etc/machine-id</filename>,
+            kernel-install will use "Linux" as the machine ID instead.</para>
+          </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>
+          <filename>/etc/os-release</filename>
+          <filename>/usr/lib/os-release</filename>
+        </term>
+          <listitem>
+            <para>The content of the file specifies the operating system title <replaceable>PRETTY_NAME</replaceable>.</para>
+          </listitem>
+      </varlistentry>
+    </variablelist>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para>
+      <citerefentry><refentrytitle>machine-id</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
+      <citerefentry><refentrytitle>os-release</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
+      <citerefentry project='man-pages'><refentrytitle>depmod</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
+      <citerefentry><refentrytitle>systemd-boot</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+      <ulink url="https://systemd.io/BOOT_LOADER_SPECIFICATION">Boot Loader Specification</ulink>
+    </para>
+  </refsect1>
+
+</refentry>

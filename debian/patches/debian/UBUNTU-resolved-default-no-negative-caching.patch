@@ -1,0 +1,70 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Wed, 11 Dec 2019 22:01:13 +0100
+Subject: systemd-resolved: Default to Cache=no-negative
+
+LP: #1895418
+Thanks: Dimitri John Ledkov for the suggestion and
+Co-authored-by: Dan Streetman <ddstreet@canonical.com>
+---
+ man/resolved.conf.xml            | 4 ++--
+ src/resolve/resolved-gperf.gperf | 2 +-
+ src/resolve/resolved-manager.c   | 2 +-
+ src/resolve/resolved.conf.in     | 2 +-
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/man/resolved.conf.xml b/man/resolved.conf.xml
+index ef6fa24..579ea17 100644
+--- a/man/resolved.conf.xml
++++ b/man/resolved.conf.xml
+@@ -246,10 +246,10 @@
+       <varlistentry>
+         <term><varname>Cache=</varname></term>
+         <listitem><para>Takes a boolean or <literal>no-negative</literal> as argument. If
+-        <literal>yes</literal> (the default), resolving a domain name which already got queried earlier will
++        <literal>yes</literal>, resolving a domain name which already got queried earlier will
+         return the previous result as long as it is still valid, and thus does not result in a new network
+         request. Be aware that turning off caching comes at a performance penalty, which is particularly high
+-        when DNSSEC is used. If <literal>no-negative</literal>, only positive answers are cached.</para>
++        when DNSSEC is used. If <literal>no-negative</literal> (the default), only positive answers are cached.</para>
+ 
+         <para>Note that caching is turned off by default for host-local DNS servers.
+         See <varname>CacheFromLocalhost=</varname> for details.</para></listitem>
+diff --git a/src/resolve/resolved-gperf.gperf b/src/resolve/resolved-gperf.gperf
+index eab4c7e..ad15c7a 100644
+--- a/src/resolve/resolved-gperf.gperf
++++ b/src/resolve/resolved-gperf.gperf
+@@ -26,7 +26,7 @@ Resolve.LLMNR,                     config_parse_resolve_support,         0,
+ Resolve.MulticastDNS,              config_parse_resolve_support,         0,                   offsetof(Manager, mdns_support)
+ Resolve.DNSSEC,                    config_parse_dnssec_mode,             0,                   offsetof(Manager, dnssec_mode)
+ Resolve.DNSOverTLS,                config_parse_dns_over_tls_mode,       0,                   offsetof(Manager, dns_over_tls_mode)
+-Resolve.Cache,                     config_parse_dns_cache_mode,          DNS_CACHE_MODE_YES,  offsetof(Manager, enable_cache)
++Resolve.Cache,                     config_parse_dns_cache_mode,          DNS_CACHE_MODE_NO_NEGATIVE,  offsetof(Manager, enable_cache)
+ Resolve.DNSStubListener,           config_parse_dns_stub_listener_mode,  0,                   offsetof(Manager, dns_stub_listener_mode)
+ Resolve.ReadEtcHosts,              config_parse_bool,                    0,                   offsetof(Manager, read_etc_hosts)
+ Resolve.ResolveUnicastSingleLabel, config_parse_bool,                    0,                   offsetof(Manager, resolve_unicast_single_label)
+diff --git a/src/resolve/resolved-manager.c b/src/resolve/resolved-manager.c
+index 246e2d9..74e29a4 100644
+--- a/src/resolve/resolved-manager.c
++++ b/src/resolve/resolved-manager.c
+@@ -591,7 +591,7 @@ int manager_new(Manager **ret) {
+                 .mdns_support = DEFAULT_MDNS_MODE,
+                 .dnssec_mode = DEFAULT_DNSSEC_MODE,
+                 .dns_over_tls_mode = DEFAULT_DNS_OVER_TLS_MODE,
+-                .enable_cache = DNS_CACHE_MODE_YES,
++                .enable_cache = DNS_CACHE_MODE_NO_NEGATIVE,
+                 .dns_stub_listener_mode = DNS_STUB_LISTENER_YES,
+                 .read_resolv_conf = true,
+                 .need_builtin_fallbacks = true,
+diff --git a/src/resolve/resolved.conf.in b/src/resolve/resolved.conf.in
+index 6d4176d..3c506f9 100644
+--- a/src/resolve/resolved.conf.in
++++ b/src/resolve/resolved.conf.in
+@@ -26,7 +26,7 @@
+ #DNSOverTLS={{DEFAULT_DNS_OVER_TLS_MODE_STR}}
+ #MulticastDNS={{DEFAULT_MDNS_MODE_STR}}
+ #LLMNR={{DEFAULT_LLMNR_MODE_STR}}
+-#Cache=yes
++#Cache=no-negative
+ #CacheFromLocalhost=no
+ #DNSStubListener=yes
+ #DNSStubListenerExtra=

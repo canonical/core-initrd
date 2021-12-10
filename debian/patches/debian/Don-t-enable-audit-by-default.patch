@@ -1,0 +1,53 @@
+From: Martin Pitt <martin.pitt@ubuntu.com>
+Date: Sun, 28 Dec 2014 12:49:35 +0100
+Subject: Don't enable audit by default
+
+It causes flooding of dmesg and syslog, suppressing actually important
+messages.
+
+Don't enable it for now, until a better solution is found:
+http://lists.freedesktop.org/archives/systemd-devel/2014-December/026591.html
+
+Bug-Debian: https://bugs.debian.org/773528
+---
+ man/journald.conf.xml         | 2 +-
+ src/journal/journald-server.c | 2 +-
+ src/journal/journald.conf     | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/man/journald.conf.xml b/man/journald.conf.xml
+index ed7e428..0abed9c 100644
+--- a/man/journald.conf.xml
++++ b/man/journald.conf.xml
+@@ -426,7 +426,7 @@
+         <command>systemd-journald</command> collects generated audit records, it just controls whether it
+         tells the kernel to generate them. This means if another tool turns on auditing even if
+         <command>systemd-journald</command> left it off, it will still collect the generated
+-        messages. Defaults to on.</para></listitem>
++        messages. Defaults to off.</para></listitem>
+       </varlistentry>
+ 
+       <varlistentry>
+diff --git a/src/journal/journald-server.c b/src/journal/journald-server.c
+index 2c1c7ac..8d3b822 100644
+--- a/src/journal/journald-server.c
++++ b/src/journal/journald-server.c
+@@ -2200,7 +2200,7 @@ int server_init(Server *s, const char *namespace) {
+                 .compress.threshold_bytes = UINT64_MAX,
+                 .seal = true,
+ 
+-                .set_audit = true,
++                .set_audit = false,
+ 
+                 .watchdog_usec = USEC_INFINITY,
+ 
+diff --git a/src/journal/journald.conf b/src/journal/journald.conf
+index 64f4d4b..a690681 100644
+--- a/src/journal/journald.conf
++++ b/src/journal/journald.conf
+@@ -44,4 +44,4 @@
+ #MaxLevelWall=emerg
+ #LineMax=48K
+ #ReadKMsg=yes
+-#Audit=yes
++#Audit=no

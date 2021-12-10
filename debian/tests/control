@@ -1,0 +1,185 @@
+Tests: timedated, hostnamed, localed-locale, localed-x11-keymap, logind
+Depends: systemd,
+  systemd-timesyncd,
+  libpam-systemd,
+  libnss-systemd,
+  acl,
+  locales,
+  evemu-tools,
+Restrictions: needs-root, isolation-container
+
+Tests: unit-config
+Depends: systemd,
+  udev,
+  libpam-systemd,
+  libnss-systemd,
+  acl,
+  locales,
+  evemu-tools,
+  python3,
+  pkg-config,
+Restrictions: needs-root, allow-stderr
+
+Tests: storage
+Depends: systemd,
+  udev,
+  libpam-systemd,
+  libnss-systemd,
+  acl,
+  locales,
+  evemu-tools,
+  python3,
+  pkg-config,
+  cryptsetup-bin,
+Restrictions: needs-root, isolation-machine
+
+Tests: networkd-test.py
+Tests-Directory: test
+Depends: systemd,
+  udev,
+  libpam-systemd,
+  libnss-systemd,
+  acl,
+  locales,
+  evemu-tools,
+  python3,
+  pkg-config,
+  cryptsetup-bin,
+  systemd-sysv,
+  policykit-1,
+  dnsmasq-base
+Restrictions: needs-root, isolation-container
+
+Tests: build-login
+Depends: systemd,
+  udev,
+  libpam-systemd,
+  libnss-systemd,
+  acl,
+  locales,
+  evemu-tools,
+  python3,
+  pkg-config,
+  cryptsetup-bin,
+  systemd-sysv,
+  policykit-1,
+  dnsmasq-base,
+  build-essential,
+  libsystemd-dev,
+Restrictions: isolation-container
+
+Tests: boot-and-services
+Depends: systemd-sysv,
+  systemd,
+  udev,
+  systemd-container,
+  systemd-coredump,
+  libpam-systemd,
+  xserver-xorg-video-dummy,
+  xserver-xorg,
+  gdm3 [amd64],
+  cron,
+  network-manager,
+  busybox-static,
+  rsyslog,
+  apparmor,
+  pkg-config,
+  python3
+Restrictions: needs-root, isolation-container, breaks-testbed
+
+Tests: udev
+Depends: systemd-tests,
+  udev,
+  python3,
+  tree,
+  perl,
+  xz-utils,
+Restrictions: needs-root, allow-stderr, isolation-machine, skippable
+
+Tests: unit-tests
+Depends: systemd-tests,
+  libpam-systemd,
+  udev,
+  tree,
+  perl,
+  python3,
+  python3-colorama,
+  xz-utils,
+  libcap2-bin,
+  iproute2,
+  liblz4-tool,
+  acl,
+  iputils-ping,
+  dbus-user-session,
+  zstd,
+Restrictions: needs-root, isolation-container, breaks-testbed
+
+Tests: tests-in-lxd
+Depends: systemd-tests,
+  udev,
+  libpam-systemd,
+  autopkgtest,
+  lsb-release,
+  lxd
+Restrictions: needs-root, allow-stderr, isolation-machine, breaks-testbed, skip-not-installable, skippable
+
+Tests: upstream-1, upstream-2
+Depends: systemd-tests,
+  systemd-journal-remote,
+  systemd-container,
+  systemd-coredump,
+  systemd-timesyncd,
+  attr,
+  tree,
+  perl,
+  xz-utils,
+  libcap2-bin,
+  iproute2,
+  liblz4-tool,
+  acl,
+  dmeventd,
+  kbd,
+  cryptsetup-bin,
+  net-tools,
+  isc-dhcp-client,
+  iputils-ping,
+  strace,
+  qemu-system-x86 [amd64 i386],
+  qemu-system-arm [arm64 armhf],
+  qemu-system-ppc [ppc64el],
+  qemu-system-s390x [s390x],
+  seabios,
+  less,
+  pkg-config,
+  gcc,
+  libc6-dev | libc-dev,
+  make,
+  quota,
+  fdisk,
+  netcat-openbsd,
+  socat,
+  busybox-static,
+  plymouth,
+  e2fsprogs,
+  zstd,
+  squashfs-tools,
+  vim-tiny,
+  dosfstools,
+Restrictions: needs-root, allow-stderr, isolation-machine
+
+Tests: boot-smoke
+Depends: systemd-sysv,
+  network-manager,
+  gdm3 [!s390x],
+  xserver-xorg-video-dummy,
+  systemd,
+  udev,
+Restrictions: needs-root, isolation-container, allow-stderr, breaks-testbed
+
+# NOUPSTREAM: Do not run these tests for upstream builds
+
+Tests: systemd-fsckd
+Depends: systemd-sysv,
+  python3,
+  plymouth
+Restrictions: needs-root, isolation-machine, breaks-testbed, skippable, flaky

@@ -1,0 +1,143 @@
+From: Luca Boccassi <luca.boccassi@microsoft.com>
+Date: Sun, 12 Sep 2021 12:56:46 +0100
+Subject: Merge pull request #20705 from yuwata/test-oomd-util
+
+test: skip oomd test on a unified container on a hybrid host
+---
+ src/basic/cgroup-util.c    | 18 +++++-------------
+ src/nspawn/nspawn-cgroup.c |  2 +-
+ src/oom/oomd.c             |  8 ++++++++
+ src/oom/test-oomd-util.c   |  6 ++++++
+ src/shared/mount-setup.c   |  2 +-
+ 5 files changed, 21 insertions(+), 15 deletions(-)
+
+diff --git a/src/basic/cgroup-util.c b/src/basic/cgroup-util.c
+index 1ff6160..d412e23 100644
+--- a/src/basic/cgroup-util.c
++++ b/src/basic/cgroup-util.c
+@@ -1952,7 +1952,7 @@ int cg_mask_supported(CGroupMask *ret) {
+ }
+ 
+ int cg_kernel_controllers(Set **ret) {
+-        _cleanup_set_free_free_ Set *controllers = NULL;
++        _cleanup_set_free_ Set *controllers = NULL;
+         _cleanup_fclose_ FILE *f = NULL;
+         int r;
+ 
+@@ -1962,10 +1962,6 @@ int cg_kernel_controllers(Set **ret) {
+          * and controllers that aren't currently accessible (because not mounted). This does not include "name="
+          * pseudo-controllers. */
+ 
+-        controllers = set_new(&string_hash_ops);
+-        if (!controllers)
+-                return -ENOMEM;
+-
+         r = fopen_unlocked("/proc/cgroups", "re", &f);
+         if (r == -ENOENT) {
+                 *ret = NULL;
+@@ -1978,7 +1974,7 @@ int cg_kernel_controllers(Set **ret) {
+         (void) read_line(f, SIZE_MAX, NULL);
+ 
+         for (;;) {
+-                char *controller;
++                _cleanup_free_ char *controller = NULL;
+                 int enabled = 0;
+ 
+                 errno = 0;
+@@ -1993,17 +1989,13 @@ int cg_kernel_controllers(Set **ret) {
+                         return -EBADMSG;
+                 }
+ 
+-                if (!enabled) {
+-                        free(controller);
++                if (!enabled)
+                         continue;
+-                }
+ 
+-                if (!cg_controller_is_valid(controller)) {
+-                        free(controller);
++                if (!cg_controller_is_valid(controller))
+                         return -EBADMSG;
+-                }
+ 
+-                r = set_consume(controllers, controller);
++                r = set_ensure_consume(&controllers, &string_hash_ops_free, TAKE_PTR(controller));
+                 if (r < 0)
+                         return r;
+         }
+diff --git a/src/nspawn/nspawn-cgroup.c b/src/nspawn/nspawn-cgroup.c
+index cb01b25..d472e80 100644
+--- a/src/nspawn/nspawn-cgroup.c
++++ b/src/nspawn/nspawn-cgroup.c
+@@ -406,7 +406,7 @@ static int mount_legacy_cgns_unsupported(
+                 uid_t uid_range,
+                 const char *selinux_apifs_context) {
+ 
+-        _cleanup_set_free_free_ Set *controllers = NULL;
++        _cleanup_set_free_ Set *controllers = NULL;
+         const char *cgroup_root;
+         int r;
+ 
+diff --git a/src/oom/oomd.c b/src/oom/oomd.c
+index deb7b09..b0143be 100644
+--- a/src/oom/oomd.c
++++ b/src/oom/oomd.c
+@@ -120,6 +120,7 @@ static int run(int argc, char *argv[]) {
+         _cleanup_(manager_freep) Manager *m = NULL;
+         _cleanup_free_ char *swap = NULL;
+         unsigned long long s = 0;
++        CGroupMask mask;
+         int r;
+ 
+         log_setup();
+@@ -153,6 +154,13 @@ static int run(int argc, char *argv[]) {
+         if (r == 0)
+                 return log_error_errno(SYNTHETIC_ERRNO(EOPNOTSUPP), "Requires the unified cgroups hierarchy");
+ 
++        r = cg_mask_supported(&mask);
++        if (r < 0)
++                return log_error_errno(r, "Failed to get supported cgroup controllers: %m");
++
++        if (!FLAGS_SET(mask, CGROUP_MASK_MEMORY))
++                return log_error_errno(SYNTHETIC_ERRNO(EOPNOTSUPP), "Requires the cgroup memory controller.");
++
+         assert_se(sigprocmask_many(SIG_BLOCK, NULL, SIGTERM, SIGINT, -1) >= 0);
+ 
+         if (arg_mem_pressure_usec > 0 && arg_mem_pressure_usec < 1 * USEC_PER_SEC)
+diff --git a/src/oom/test-oomd-util.c b/src/oom/test-oomd-util.c
+index 776c658..29f2c54 100644
+--- a/src/oom/test-oomd-util.c
++++ b/src/oom/test-oomd-util.c
+@@ -90,6 +90,7 @@ static void test_oomd_cgroup_context_acquire_and_insert(void) {
+         _cleanup_free_ char *cgroup = NULL;
+         ManagedOOMPreference root_pref;
+         OomdCGroupContext *c1, *c2;
++        CGroupMask mask;
+         bool test_xattrs;
+         int root_xattrs, r;
+ 
+@@ -102,6 +103,11 @@ static void test_oomd_cgroup_context_acquire_and_insert(void) {
+         if (cg_all_unified() <= 0)
+                 return (void) log_tests_skipped("cgroups are not running in unified mode");
+ 
++        assert_se(cg_mask_supported(&mask) >= 0);
++
++        if (!FLAGS_SET(mask, CGROUP_MASK_MEMORY))
++                return (void) log_tests_skipped("cgroup memory controller is not available");
++
+         assert_se(cg_pid_get_path(NULL, 0, &cgroup) >= 0);
+ 
+         /* If we don't have permissions to set xattrs we're likely in a userns or missing capabilities
+diff --git a/src/shared/mount-setup.c b/src/shared/mount-setup.c
+index ebea7a2..ab40447 100644
+--- a/src/shared/mount-setup.c
++++ b/src/shared/mount-setup.c
+@@ -294,7 +294,7 @@ static int symlink_controller(const char *target, const char *alias) {
+ }
+ 
+ int mount_cgroup_controllers(void) {
+-        _cleanup_set_free_free_ Set *controllers = NULL;
++        _cleanup_set_free_ Set *controllers = NULL;
+         int r;
+ 
+         if (!cg_is_legacy_wanted())

@@ -1,0 +1,7 @@
+../../extra/dhclient-exit-hooks.d/ etc/dhcp/
+etc/systemd/timesyncd.conf
+lib/systemd/ntp-units.d/80-systemd-timesync.list
+lib/systemd/systemd-timesyncd
+lib/systemd/system/systemd-timesyncd.service
+usr/share/dbus-1/*/*timesync*
+usr/share/man/man*/*timesyncd*

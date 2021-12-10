@@ -1,0 +1,17 @@
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Wed, 6 Nov 2019 09:14:50 -0500
+Subject: deny-list-upstream-test-25
+
+Bug: https://github.com/systemd/systemd/issues/13973
+---
+ test/TEST-25-IMPORT/deny-list-upstream-ci | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 test/TEST-25-IMPORT/deny-list-upstream-ci
+
+diff --git a/test/TEST-25-IMPORT/deny-list-upstream-ci b/test/TEST-25-IMPORT/deny-list-upstream-ci
+new file mode 100644
+index 0000000..47a5f15
+--- /dev/null
++++ b/test/TEST-25-IMPORT/deny-list-upstream-ci
+@@ -0,0 +1 @@
++# unknown failure; tracked in https://github.com/systemd/systemd/issues/13973

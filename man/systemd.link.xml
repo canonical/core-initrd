@@ -1,0 +1,946 @@
+<?xml version='1.0'?>
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+  "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+
+<refentry id="systemd.link">
+  <refentryinfo>
+    <title>systemd.link</title>
+    <productname>systemd</productname>
+  </refentryinfo>
+
+  <refmeta>
+    <refentrytitle>systemd.link</refentrytitle>
+    <manvolnum>5</manvolnum>
+  </refmeta>
+
+  <refnamediv>
+    <refname>systemd.link</refname>
+    <refpurpose>Network device configuration</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <para><filename><replaceable>link</replaceable>.link</filename></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>A plain ini-style text file that encodes configuration for matching network devices, used by
+    <citerefentry><refentrytitle>systemd-udevd</refentrytitle><manvolnum>8</manvolnum></citerefentry> and in
+    particular its <command>net_setup_link</command> builtin. See
+    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry> for a
+    general description of the syntax.</para>
+
+    <para>The link files are read from the files located in the system network directory
+    <filename>/usr/lib/systemd/network</filename>, the volatile runtime network directory
+    <filename>/run/systemd/network</filename>, and the local administration network directory
+    <filename>/etc/systemd/network</filename>. Link files must have the extension
+    <filename>.link</filename>; other extensions are ignored. All link files are collectively sorted
+    and processed in lexical order, regardless of the directories in which they live. However, files
+    with identical filenames replace each other. Files in <filename>/etc/</filename> have the highest
+    priority, files in <filename>/run/</filename> take precedence over files with the same name in
+    <filename>/usr/lib/</filename>. This can be used to override a system-supplied link file with a
+    local file if needed. As a special case, an empty file (file size 0) or symlink with the same name
+    pointing to <filename>/dev/null</filename> disables the configuration file entirely (it is
+    "masked").</para>
+
+    <para>Along with the link file <filename>foo.link</filename>, a "drop-in" directory
+    <filename>foo.link.d/</filename> may exist. All files with the suffix <literal>.conf</literal>
+    from this directory will be merged in the alphanumeric order and parsed after the main file itself
+    has been parsed. This is useful to alter or add configuration settings, without having to modify
+    the main configuration file. Each drop-in file must have appropriate section headers.</para>
+
+    <para>In addition to <filename>/etc/systemd/network</filename>, drop-in <literal>.d</literal>
+    directories can be placed in <filename>/usr/lib/systemd/network</filename> or
+    <filename>/run/systemd/network</filename> directories. Drop-in files in <filename>/etc/</filename>
+    take precedence over those in <filename>/run/</filename> which in turn take precedence over those
+    in <filename>/usr/lib/</filename>. Drop-in files under any of these directories take precedence
+    over the main link file wherever located.</para>
+
+    <para>The link file contains a [Match] section, which determines if a given link file may be applied to a
+    given device, as well as a [Link] section specifying how the device should be configured. The first (in
+    lexical order) of the link files that matches a given device is applied. Note that a default file
+    <filename>99-default.link</filename> is shipped by the system. Any user-supplied
+    <filename>.link</filename> should hence have a lexically earlier name to be considered at all.</para>
+
+    <para>See <citerefentry><refentrytitle>udevadm</refentrytitle><manvolnum>8</manvolnum></citerefentry> for
+    diagnosing problems with <filename>.link</filename> files.</para>
+  </refsect1>
+
+  <refsect1>
+    <title>[Match] Section Options</title>
+
+    <para>A link file is said to match a device if all matches specified by the
+    [Match] section are satisfied. When a link file does not contain valid settings
+    in [Match] section, then the file will match all devices and
+    <command>systemd-udevd</command> warns about that. Hint: to avoid the warning and to make it clear
+    that all interfaces shall be matched, add the following:
+    <programlisting>OriginalName=*</programlisting>
+    The following keys are accepted:</para>
+
+    <variablelist class='network-directives'>
+      <!-- This list is reused in systemd.network(3), hence maintain a specific order:
+           1. device matches shared between the two lists
+           2. non-shared settings
+           3. host matches shared between the two lists
+        -->
+
+      <varlistentry id='mac-address'>
+        <term><varname>MACAddress=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of hardware addresses. Use full colon-, hyphen- or dot-delimited hexadecimal. See the example below.
+          This option may appear more than once, in which case the lists are merged. If the empty string is assigned to this option, the list
+          of hardware addresses defined prior to this is reset.</para>
+
+          <para>Example:
+          <programlisting>MACAddress=01:23:45:67:89:ab 00-11-22-33-44-55 AABB.CCDD.EEFF</programlisting></para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='permanent-mac-address'>
+        <term><varname>PermanentMACAddress=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of hardware's permanent addresses. While
+          <varname>MACAddress=</varname> matches the device's current MAC address, this matches the
+          device's permanent MAC address, which may be different from the current one. Use full
+          colon-, hyphen- or dot-delimited hexadecimal. This option may appear more than once, in
+          which case the lists are merged. If the empty string is assigned to this option, the list
+          of hardware addresses defined prior to this is reset.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='path'>
+        <term><varname>Path=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of shell-style globs matching
+          the persistent path, as exposed by the udev property
+          <varname>ID_PATH</varname>.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='driver'>
+        <term><varname>Driver=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of shell-style globs matching the driver currently bound to the
+          device, as exposed by the udev property <varname>ID_NET_DRIVER</varname> of its parent device, or
+          if that is not set, the driver as exposed by <command>ethtool -i</command> of the device itself.
+          If the list is prefixed with a "!", the test is inverted.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='type'>
+        <term><varname>Type=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of shell-style globs matching the device type, as exposed by
+          <command>networkctl list</command>. If the list is prefixed with a "!", the test is inverted.
+          Some valid values are <literal>ether</literal>, <literal>loopback</literal>, <literal>wlan</literal>, <literal>wwan</literal>.
+          Valid types are named either from the udev <literal>DEVTYPE</literal> attribute, or
+          <literal>ARPHRD_</literal> macros in <filename>linux/if_arp.h</filename>, so this is not comprehensive.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='property'>
+        <term><varname>Property=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of udev property names with their values after equals sign
+          (<literal>=</literal>). If multiple properties are specified, the test results are ANDed.
+          If the list is prefixed with a "!", the test is inverted. If a value contains white
+          spaces, then please quote whole key and value pair. If a value contains quotation, then
+          please escape the quotation with <literal>\</literal>.</para>
+
+          <para>Example: if a .link file has the following:
+          <programlisting>Property=ID_MODEL_ID=9999 "ID_VENDOR_FROM_DATABASE=vendor name" "KEY=with \"quotation\""</programlisting>
+          then, the .link file matches only when an interface has all the above three properties.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>OriginalName=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of shell-style globs matching the device name, as exposed by the
+          udev property "INTERFACE". This cannot be used to match on names that have already been changed
+          from userspace. Caution is advised when matching on kernel-assigned names, as they are known to be
+          unstable between reboots.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='host'>
+        <term><varname>Host=</varname></term>
+        <listitem>
+          <para>Matches against the hostname or machine ID of the host. See <varname>ConditionHost=</varname> in
+          <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+          for details. When prefixed with an exclamation mark (<literal>!</literal>), the result is negated.
+          If an empty string is assigned, then previously assigned value is cleared.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='virtualization'>
+        <term><varname>Virtualization=</varname></term>
+        <listitem>
+          <para>Checks whether the system is executed in a virtualized environment and optionally test
+          whether it is a specific implementation. See <varname>ConditionVirtualization=</varname> in
+          <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+          for details. When prefixed with an exclamation mark (<literal>!</literal>), the result is negated.
+          If an empty string is assigned, then previously assigned value is cleared.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='kernel-command-line'>
+        <term><varname>KernelCommandLine=</varname></term>
+        <listitem>
+          <para>Checks whether a specific kernel command line option is set. See
+          <varname>ConditionKernelCommandLine=</varname> in
+          <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+          for details. When prefixed with an exclamation mark (<literal>!</literal>), the result is negated.
+          If an empty string is assigned, then previously assigned value is cleared.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='kernel-version'>
+        <term><varname>KernelVersion=</varname></term>
+        <listitem>
+          <para>Checks whether the kernel version (as reported by <command>uname -r</command>) matches a certain
+          expression. See <varname>ConditionKernelVersion=</varname> in
+          <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry> for
+          details. When prefixed with an exclamation mark (<literal>!</literal>), the result is negated.
+          If an empty string is assigned, then previously assigned value is cleared.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='architecture'>
+        <term><varname>Architecture=</varname></term>
+        <listitem>
+          <para>Checks whether the system is running on a specific architecture. See
+          <varname>ConditionArchitecture=</varname> in
+          <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+          for details. When prefixed with an exclamation mark (<literal>!</literal>), the result is negated.
+          If an empty string is assigned, then previously assigned value is cleared.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry id='firmware'>
+        <term><varname>Firmware=</varname></term>
+        <listitem>
+          <para>Checks whether the system is running on a machine with the specified firmware. See
+          <varname>ConditionFirmware=</varname> in
+          <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+          for details. When prefixed with an exclamation mark (<literal>!</literal>), the result is negated.
+          If an empty string is assigned, then previously assigned value is cleared.
+          </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+  </refsect1>
+
+  <refsect1>
+    <title>[Link] Section Options</title>
+
+    <para>The [Link] section accepts the following
+    keys:</para>
+
+    <variablelist class='network-directives'>
+      <varlistentry>
+        <term><varname>Description=</varname></term>
+        <listitem>
+          <para>A description of the device.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>Alias=</varname></term>
+        <listitem>
+          <para>The <varname>ifalias</varname> interface property is set to this value.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>MACAddressPolicy=</varname></term>
+        <listitem>
+          <para>The policy by which the MAC address should be set. The
+          available policies are:
+          </para>
+
+          <variablelist>
+            <varlistentry>
+              <term><option>persistent</option></term>
+              <listitem>
+                <para>If the hardware has a persistent MAC address, as
+                most hardware should, and if it is used by the kernel,
+                nothing is done. Otherwise, a new MAC address is
+                generated which is guaranteed to be the same on every
+                boot for the given machine and the given device, but
+                which is otherwise random. This feature depends on ID_NET_NAME_*
+                properties to exist for the link. On hardware where these
+                properties are not set, the generation of a persistent MAC address
+                will fail.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>random</option></term>
+              <listitem>
+                <para>If the kernel is using a random MAC address,
+                nothing is done. Otherwise, a new address is randomly
+                generated each time the device appears, typically at
+                boot. Either way, the random address will have the
+                <literal>unicast</literal> and
+                <literal>locally administered</literal> bits set.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>none</option></term>
+              <listitem>
+                <para>Keeps the MAC address assigned by the kernel. Or use the MAC address specified in
+                <varname>MACAddress=</varname>.</para>
+              </listitem>
+            </varlistentry>
+          </variablelist>
+
+          <para>An empty string assignment is equivalent to setting <literal>none</literal>.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>MACAddress=</varname></term>
+        <listitem>
+          <para>The interface MAC address to use. For this setting to take effect,
+          <varname>MACAddressPolicy=</varname> must either be unset, empty, or <literal>none</literal>.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>NamePolicy=</varname></term>
+        <listitem>
+          <para>An ordered, space-separated list of policies by which the interface name should be set.
+          <varname>NamePolicy=</varname> may be disabled by specifying <option>net.ifnames=0</option> on the
+          kernel command line. Each of the policies may fail, and the first successful one is used. The name
+          is not set directly, but is exported to udev as the property <option>ID_NET_NAME</option>, which
+          is, by default, used by a
+          <citerefentry><refentrytitle>udev</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
+          rule to set <varname>NAME</varname>. The available policies are:
+          </para>
+
+          <variablelist>
+            <varlistentry>
+              <term><option>kernel</option></term>
+              <listitem>
+                <para>If the kernel claims that the name it has set
+                for a device is predictable, then no renaming is
+                performed.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>database</option></term>
+              <listitem>
+                <para>The name is set based on entries in the udev's
+                Hardware Database with the key
+                <varname>ID_NET_NAME_FROM_DATABASE</varname>.
+                </para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>onboard</option></term>
+              <listitem>
+                <para>The name is set based on information given by
+                the firmware for on-board devices, as exported by the
+                udev property <varname>ID_NET_NAME_ONBOARD</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
+                </para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>slot</option></term>
+              <listitem>
+                <para>The name is set based on information given by
+                the firmware for hot-plug devices, as exported by the
+                udev property <varname>ID_NET_NAME_SLOT</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
+                </para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>path</option></term>
+              <listitem>
+                <para>The name is set based on the device's physical
+                location, as exported by the udev property
+                <varname>ID_NET_NAME_PATH</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
+                </para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>mac</option></term>
+              <listitem>
+                <para>The name is set based on the device's persistent
+                MAC address, as exported by the udev property
+                <varname>ID_NET_NAME_MAC</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
+                </para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>keep</option></term>
+              <listitem>
+                <para>If the device already had a name given by userspace (as part of creation of the device
+                or a rename), keep it.</para>
+              </listitem>
+            </varlistentry>
+          </variablelist>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>Name=</varname></term>
+        <listitem>
+          <para>The interface name to use. This option has lower precedence than
+          <varname>NamePolicy=</varname>, so for this setting to take effect, <varname>NamePolicy=</varname>
+          must either be unset, empty, disabled, or all policies configured there must fail. Also see the
+          example below with <literal>Name=dmz0</literal>.</para>
+
+          <para>Note that specifying a name that the kernel might use for another
+          interface (for example <literal>eth0</literal>) is dangerous because the
+          name assignment done by udev will race with the assignment done by the
+          kernel, and only one interface may use the name. Depending on the order of
+          operations, either udev or the kernel will win, making the naming
+          unpredictable. It is best to use some different prefix, for example
+          <literal>internal0</literal>/<literal>external0</literal> or
+          <literal>lan0</literal>/<literal>lan1</literal>/<literal>lan3</literal>.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>AlternativeNamesPolicy=</varname></term>
+        <listitem>
+          <para>A space-separated list of policies by which the interface's alternative names
+          should be set. Each of the policies may fail, and all successful policies are used. The
+          available policies are <literal>database</literal>, <literal>onboard</literal>,
+          <literal>slot</literal>, <literal>path</literal>, and <literal>mac</literal>. If the
+          kernel does not support the alternative names, then this setting will be ignored.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>AlternativeName=</varname></term>
+        <listitem>
+          <para>The alternative interface name to use. This option can be specified multiple times.
+          If the empty string is assigned to this option, the list is reset, and all prior assignments
+          have no effect. If the kernel does not support the alternative names, then this setting will
+          be ignored.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TransmitQueues=</varname></term>
+        <listitem>
+          <para>Specifies the device's number of transmit queues. An integer in the range 1…4096.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>ReceiveQueues=</varname></term>
+        <listitem>
+          <para>Specifies the device's number of receive queues. An integer in the range 1…4096.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TransmitQueueLength=</varname></term>
+        <listitem>
+          <para>Specifies the transmit queue length of the device in number of packets. An unsigned integer
+          in the range 0…4294967294. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>MTUBytes=</varname></term>
+        <listitem>
+          <para>The maximum transmission unit in bytes to set for the
+          device. The usual suffixes K, M, G are supported and are
+          understood to the base of 1024.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>BitsPerSecond=</varname></term>
+        <listitem>
+          <para>The speed to set for the device, the value is rounded
+          down to the nearest Mbps. The usual suffixes K, M, G are
+          supported and are understood to the base of 1000.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>Duplex=</varname></term>
+        <listitem>
+          <para>The duplex mode to set for the device. The accepted values are <option>half</option> and
+          <option>full</option>.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>AutoNegotiation=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to yes, automatic negotiation of transmission parameters is enabled.
+          Autonegotiation is a procedure by which two connected ethernet devices choose
+          common transmission parameters, such as speed, duplex mode, and flow control.
+          When unset, the kernel's default will be used.</para>
+
+          <para>Note that if autonegotiation is enabled, speed and duplex settings are
+          read-only. If autonegotiation is disabled, speed and duplex settings are writable
+          if the driver supports multiple link modes.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>WakeOnLan=</varname></term>
+        <listitem>
+          <para>The Wake-on-LAN policy to set for the device. Takes the special value
+          <literal>off</literal> which disables Wake-on-LAN, or space separated list of the following
+          words:</para>
+
+          <variablelist>
+            <varlistentry>
+              <term><option>phy</option></term>
+              <listitem>
+                <para>Wake on PHY activity.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>unicast</option></term>
+              <listitem>
+                <para>Wake on unicast messages.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>multicast</option></term>
+              <listitem>
+                <para>Wake on multicast messages.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>broadcast</option></term>
+              <listitem>
+                <para>Wake on broadcast messages.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>arp</option></term>
+              <listitem>
+                <para>Wake on ARP.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>magic</option></term>
+              <listitem>
+                <para>Wake on receipt of a magic packet.
+                </para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>secureon</option></term>
+              <listitem>
+                <para>Enable secureon(tm) password for MagicPacket(tm).
+                </para>
+              </listitem>
+            </varlistentry>
+          </variablelist>
+
+          <para>Defaults to unset, and the device's default will be used. This setting can be specified
+          multiple times. If an empty string is assigned, then the all previous assignments are
+          cleared.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>Port=</varname></term>
+        <listitem>
+          <para>The port option is used to select the device port. The
+          supported values are:</para>
+
+          <variablelist>
+            <varlistentry>
+              <term><option>tp</option></term>
+              <listitem>
+                <para>An Ethernet interface using Twisted-Pair cable as the medium.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>aui</option></term>
+              <listitem>
+                <para>Attachment Unit Interface (AUI). Normally used with hubs.
+                </para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>bnc</option></term>
+              <listitem>
+                <para>An Ethernet interface using BNC connectors and co-axial cable.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>mii</option></term>
+              <listitem>
+                <para>An Ethernet interface using a Media Independent Interface (MII).</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term><option>fibre</option></term>
+              <listitem>
+                <para>An Ethernet interface using Optical Fibre as the medium.</para>
+              </listitem>
+            </varlistentry>
+          </variablelist>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>Advertise=</varname></term>
+        <listitem>
+          <para>This sets what speeds and duplex modes of operation are advertised for auto-negotiation.
+          This implies <literal>AutoNegotiation=yes</literal>. The supported values are:
+
+          <table>
+            <title>Supported advertise values</title>
+            <tgroup cols='3'>
+              <colspec colname='Advertise' />
+              <colspec colname='Speed' />
+              <colspec colname='Duplex Mode' />
+
+              <thead><row>
+                <entry>Advertise</entry>
+                <entry>Speed (Mbps)</entry>
+                <entry>Duplex Mode</entry>
+              </row></thead>
+              <tbody>
+                <row><entry><option>10baset-half</option></entry>
+                <entry>10</entry><entry>half</entry></row>
+
+                <row><entry><option>10baset-full</option></entry>
+                <entry>10</entry><entry>full</entry></row>
+
+                <row><entry><option>100baset-half</option></entry>
+                <entry>100</entry><entry>half</entry></row>
+
+                <row><entry><option>100baset-full</option></entry>
+                <entry>100</entry><entry>full</entry></row>
+
+                <row><entry><option>1000baset-half</option></entry>
+                <entry>1000</entry><entry>half</entry></row>
+
+                <row><entry><option>1000baset-full</option></entry>
+                <entry>1000</entry><entry>full</entry></row>
+
+                <row><entry><option>10000baset-full</option></entry>
+                <entry>10000</entry><entry>full</entry></row>
+
+                <row><entry><option>2500basex-full</option></entry>
+                <entry>2500</entry><entry>full</entry></row>
+
+                <row><entry><option>1000basekx-full</option></entry>
+                <entry>1000</entry><entry>full</entry></row>
+
+                <row><entry><option>10000basekx4-full</option></entry>
+                <entry>10000</entry><entry>full</entry></row>
+
+                <row><entry><option>10000basekr-full</option></entry>
+                <entry>10000</entry><entry>full</entry></row>
+
+                <row><entry><option>10000baser-fec</option></entry>
+                <entry>10000</entry><entry>full</entry></row>
+
+                <row><entry><option>20000basemld2-full</option></entry>
+                <entry>20000</entry><entry>full</entry></row>
+
+                <row><entry><option>20000basekr2-full</option></entry>
+                <entry>20000</entry><entry>full</entry></row>
+              </tbody>
+            </tgroup>
+          </table>
+
+          By default this is unset, i.e. all possible modes will be advertised.
+          This option may be specified more than once, in which case all specified speeds and modes are advertised.
+          If the empty string is assigned to this option, the list is reset, and all prior assignments have no effect.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>ReceiveChecksumOffload=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to true, hardware offload for checksumming of ingress
+          network packets is enabled. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TransmitChecksumOffload=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to true, hardware offload for checksumming of egress
+          network packets is enabled. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TCPSegmentationOffload=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to true, TCP Segmentation Offload (TSO) is enabled.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+       <varlistentry>
+      <term><varname>TCP6SegmentationOffload=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to true, TCP6 Segmentation Offload (tx-tcp6-segmentation) is enabled.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>GenericSegmentationOffload=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to true, Generic Segmentation Offload (GSO) is enabled.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>GenericReceiveOffload=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to true, Generic Receive Offload (GRO) is enabled.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>LargeReceiveOffload=</varname></term>
+        <listitem>
+          <para>Takes a boolean. If set to true, Large Receive Offload (LRO) is enabled.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxChannels=</varname></term>
+        <listitem>
+          <para>Sets the number of receive channels (a number between 1 and 4294967295) .</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TxChannels=</varname></term>
+        <listitem>
+          <para>Sets the number of transmit channels (a number between 1 and 4294967295).</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>OtherChannels=</varname></term>
+        <listitem>
+          <para>Sets the number of other channels (a number between 1 and 4294967295).</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>CombinedChannels=</varname></term>
+        <listitem>
+          <para>Sets the number of combined set channels (a number between 1 and 4294967295).</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxBufferSize=</varname></term>
+        <listitem>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC receive buffer.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxMiniBufferSize=</varname></term>
+        <listitem>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC mini receive buffer.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxJumboBufferSize=</varname></term>
+        <listitem>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC jumbo receive buffer.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TxBufferSize=</varname></term>
+        <listitem>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC transmit buffer.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxFlowControl=</varname></term>
+        <listitem>
+          <para>Takes a boolean. When set, enables receive flow control, also known as the ethernet
+          receive PAUSE message (generate and send ethernet PAUSE frames). When unset, the kernel's
+          default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TxFlowControl=</varname></term>
+        <listitem>
+          <para>Takes a boolean. When set, enables transmit flow control, also known as the ethernet
+          transmit PAUSE message (respond to received ethernet PAUSE frames). When unset, the kernel's
+          default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>AutoNegotiationFlowControl=</varname></term>
+        <listitem>
+          <para>Takes a boolean. When set, auto negotiation enables the interface to exchange state
+          advertisements with the connected peer so that the two devices can agree on the ethernet
+          PAUSE configuration. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>GenericSegmentOffloadMaxBytes=</varname></term>
+        <listitem>
+          <para>Specifies the maximum size of a Generic Segment Offload (GSO) packet the
+          device should accept. The usual suffixes K, M, G are supported and are
+          understood to the base of 1024. An unsigned integer in the range 1…65536.
+          Defaults to unset.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>GenericSegmentOffloadMaxSegments=</varname></term>
+        <listitem>
+          <para>Specifies the maximum number of Generic Segment Offload (GSO) segments the device should
+          accept. An unsigned integer in the range 1…65535. Defaults to unset.</para>
+        </listitem>
+      </varlistentry>
+
+    </variablelist>
+  </refsect1>
+
+  <refsect1>
+    <title>Examples</title>
+
+    <example>
+      <title>/usr/lib/systemd/network/99-default.link</title>
+
+      <para>The link file <filename>99-default.link</filename> that is
+      shipped with systemd defines the default naming policy for
+      links.</para>
+
+      <programlisting>[Link]
+NamePolicy=kernel database onboard slot path
+MACAddressPolicy=persistent</programlisting>
+    </example>
+
+    <example>
+      <title>/etc/systemd/network/10-dmz.link</title>
+
+      <para>This example assigns the fixed name <literal>dmz0</literal> to the interface with the MAC address
+      00:a0:de:63:7a:e6:</para>
+
+      <programlisting>[Match]
+MACAddress=00:a0:de:63:7a:e6
+
+[Link]
+Name=dmz0</programlisting>
+
+      <para><varname>NamePolicy=</varname> is not set, so <varname>Name=</varname> takes effect. We use the
+      <literal>10-</literal> prefix to order this file early in the list. Note that it needs to be before
+      <literal>99-link</literal>, i.e. it needs a numerical prefix, to have any effect at all.</para>
+    </example>
+
+    <example>
+      <title>Debugging <varname>NamePolicy=</varname> assignments</title>
+
+      <programlisting>$ sudo SYSTEMD_LOG_LEVEL=debug udevadm test-builtin net_setup_link /sys/class/net/hub0
+…
+Parsed configuration file /usr/lib/systemd/network/99-default.link
+Parsed configuration file /etc/systemd/network/10-eth0.link
+ID_NET_DRIVER=cdc_ether
+Config file /etc/systemd/network/10-eth0.link applies to device hub0
+link_config: autonegotiation is unset or enabled, the speed and duplex are not writable.
+hub0: Device has name_assign_type=4
+Using default interface naming scheme 'v240'.
+hub0: Policies didn't yield a name, using specified Name=hub0.
+ID_NET_LINK_FILE=/etc/systemd/network/10-eth0.link
+ID_NET_NAME=hub0
+…</programlisting>
+
+     <para>Explicit <varname>Name=</varname> configuration wins in this case.</para>
+
+     <programlisting>sudo SYSTEMD_LOG_LEVEL=debug udevadm test-builtin net_setup_link /sys/class/net/enp0s31f6
+…
+Parsed configuration file /usr/lib/systemd/network/99-default.link
+Parsed configuration file /etc/systemd/network/10-eth0.link
+Created link configuration context.
+ID_NET_DRIVER=e1000e
+Config file /usr/lib/systemd/network/99-default.link applies to device enp0s31f6
+link_config: autonegotiation is unset or enabled, the speed and duplex are not writable.
+enp0s31f6: Device has name_assign_type=4
+Using default interface naming scheme 'v240'.
+enp0s31f6: Policy *keep*: keeping existing userspace name
+enp0s31f6: Device has addr_assign_type=0
+enp0s31f6: MAC on the device already matches policy *persistent*
+ID_NET_LINK_FILE=/usr/lib/systemd/network/99-default.link
+…
+</programlisting>
+
+     <para>In this case, the interface was already renamed, so the <option>keep</option> policy specified as
+     the first option in <filename index="false">99-default.link</filename> means that the existing name is
+     preserved. If <option>keep</option> was removed, or if were in boot before the renaming has happened,
+     we might get the following instead:</para>
+
+     <programlisting>enp0s31f6: Policy *path* yields "enp0s31f6".
+enp0s31f6: Device has addr_assign_type=0
+enp0s31f6: MAC on the device already matches policy *persistent*
+ID_NET_LINK_FILE=/usr/lib/systemd/network/99-default.link
+ID_NET_NAME=enp0s31f6
+…
+</programlisting>
+
+      <para>Please note that the details of output are subject to change.</para>
+    </example>
+
+    <example>
+      <title>/etc/systemd/network/10-internet.link</title>
+
+      <para>This example assigns the fixed name
+      <literal>internet0</literal> to the interface with the device
+      path <literal>pci-0000:00:1a.0-*</literal>:</para>
+
+      <programlisting>[Match]
+Path=pci-0000:00:1a.0-*
+
+[Link]
+Name=internet0</programlisting>
+    </example>
+
+    <example>
+      <title>/etc/systemd/network/25-wireless.link</title>
+
+      <para>Here's an overly complex example that shows the use of a large number of [Match] and [Link] settings.</para>
+
+      <programlisting>[Match]
+MACAddress=12:34:56:78:9a:bc
+Driver=brcmsmac
+Path=pci-0000:02:00.0-*
+Type=wlan
+Virtualization=no
+Host=my-laptop
+Architecture=x86-64
+
+[Link]
+Name=wireless0
+MTUBytes=1450
+BitsPerSecond=10M
+WakeOnLan=magic
+MACAddress=cb:a9:87:65:43:21</programlisting>
+    </example>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para>
+      <citerefentry>
+        <refentrytitle>systemd-udevd.service</refentrytitle><manvolnum>8</manvolnum>
+      </citerefentry>,
+      <citerefentry>
+        <refentrytitle>udevadm</refentrytitle><manvolnum>8</manvolnum>
+      </citerefentry>,
+      <citerefentry>
+        <refentrytitle>systemd.netdev</refentrytitle><manvolnum>5</manvolnum>
+      </citerefentry>,
+      <citerefentry>
+        <refentrytitle>systemd.network</refentrytitle><manvolnum>5</manvolnum>
+      </citerefentry>
+    </para>
+  </refsect1>
+
+</refentry>

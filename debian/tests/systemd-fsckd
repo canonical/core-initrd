@@ -1,0 +1,323 @@
+#!/usr/bin/python3
+# autopkgtest check: Ensure that systemd-fsckd can report progress and cancel
+# (C) 2015 Canonical Ltd.
+# Author: Didier Roche <didrocks@ubuntu.com>
+
+import fileinput
+import inspect
+import os
+import platform
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import time
+import unittest
+
+from contextlib import suppress
+from pathlib import Path
+
+SYSTEMD_FSCK_ROOT_DROPIN_PATH = '/etc/systemd/system/systemd-fsck-root.service.d/autopkgtest.conf'
+SYSTEMD_FSCK_ROOT_DROPIN_CONTENT = '''
+[Unit]
+ConditionPathIsReadWrite=
+ConditionPathExists=
+
+[Install]
+WantedBy=local-fs.target
+'''
+
+KILL_SERVICE_PATH = '/etc/systemd/system/kill@.service'
+KILL_SERVICE_CONTENT = '''
+[Unit]
+DefaultDependencies=no
+StartLimitInterval=0
+Before=systemd-fsckd.service
+
+[Service]
+RestartSec=1
+Restart=on-failure
+ExecStart=/bin/sh -c "/bin/sleep 5; /usr/bin/pkill -x %i"
+
+[Install]
+WantedBy=systemd-fsckd.service
+'''
+
+DEFAULT_SYSTEM_RUNNING_TIMEOUT = 600
+DEFAULT_SYSTEMD_FSCKD_TIMEOUT = 600
+
+FSCK_PATH = '/sbin/fsck'
+FSCK_BACKUP_PATH = '/sbin/fsck.backup'
+
+RE_SPLASH_QUIET = r'\b\s*(splash|quiet)\b'
+
+
+def tests_setup():
+    # enable persistent journal
+    Path('/var/log/journal').mkdir(parents=True, exist_ok=True)
+    subprocess.run('systemctl -q restart systemd-journald'.split())
+    Path(SYSTEMD_FSCK_ROOT_DROPIN_PATH).parent.mkdir(parents=True, exist_ok=True)
+    Path(SYSTEMD_FSCK_ROOT_DROPIN_PATH).write_text(SYSTEMD_FSCK_ROOT_DROPIN_CONTENT)
+    Path(KILL_SERVICE_PATH).parent.mkdir(parents=True, exist_ok=True)
+    Path(KILL_SERVICE_PATH).write_text(KILL_SERVICE_CONTENT)
+    subprocess.run('systemctl -q daemon-reload'.split())
+    subprocess.run('systemctl -q enable systemd-fsck-root'.split())
+    Path(FSCK_PATH).rename(FSCK_BACKUP_PATH)
+    Path(FSCK_PATH).write_text(Path(__file__).with_name('fsck').read_text())
+    Path(FSCK_PATH).chmod(0o755)
+
+def tests_teardown():
+    Path('/etc/systemd/system/local-fs.target.wants/systemd-fsck-root.service').unlink()
+    subprocess.run('systemctl -q disable systemd-fsck-root'.split())
+    Path(SYSTEMD_FSCK_ROOT_DROPIN_PATH).unlink()
+    Path(KILL_SERVICE_PATH).unlink()
+    subprocess.run('systemctl -q daemon-reload'.split())
+    Path(FSCK_BACKUP_PATH).replace(FSCK_PATH)
+
+def is_system_running():
+    running = subprocess.run('systemctl is-system-running'.split(),
+                             encoding='utf-8',
+                             stdout=subprocess.PIPE).stdout.strip()
+    return running in ['running', 'degraded']
+
+def is_unit_active(unit):
+    return subprocess.run(f'systemctl -q is-active {unit}'.split()).returncode == 0
+
+def has_unit_failed(unit):
+    '''check if this unit failed at least once, this boot'''
+    journal = subprocess.run(f'journalctl -b -u {unit}'.split(),
+                             encoding='utf-8',
+                             stdout=subprocess.PIPE).stdout.strip()
+    return f'{unit}.service: Failed' in journal
+
+def has_unit_started(unit):
+    return subprocess.run(f'systemctl show --value -p ExecMainStartTimestampMonotonic {unit}'.split(),
+                          encoding='utf-8',
+                          stdout=subprocess.PIPE).stdout.strip() != '0'
+
+def get_unit_exec_status(unit):
+    return subprocess.run(f'systemctl show --value -p ExecMainStatus {unit}'.split(),
+                          encoding='utf-8',
+                          stdout=subprocess.PIPE).stdout.strip()
+
+class FsckdTest(unittest.TestCase):
+    '''Check that we run, report and can cancel fsck'''
+    def __init__(self, test_name, after_reboot):
+        super().__init__(test_name)
+        self._test_name = test_name
+        self._after_reboot = after_reboot
+
+    def setUp(self):
+        super().setUp()
+        if self._after_reboot:
+            self.wait_system_running()
+            self.wait_systemd_fsckd()
+        else:
+            configure_plymouth()
+
+    def tearDown(self):
+        super().tearDown()
+
+    def enable_kill_service(self, proc):
+        subprocess.run(f'systemctl -q enable kill@{proc}'.split())
+
+    def disable_kill_service(self, proc):
+        subprocess.run(f'systemctl -q disable kill@{proc}'.split())
+
+    def wait_system_running(self, timeout=DEFAULT_SYSTEM_RUNNING_TIMEOUT):
+        end = time.monotonic() + timeout
+        while time.monotonic() <= end:
+            if is_system_running():
+                return
+            time.sleep(1)
+        self.fail('timeout waiting for system running')
+
+    def wait_systemd_fsckd(self, timeout=DEFAULT_SYSTEMD_FSCKD_TIMEOUT):
+        end = time.monotonic() + timeout
+        while time.monotonic() <= end:
+            if not is_unit_active('systemd-fsckd'):
+                return
+            time.sleep(1)
+        self.fail('timeout waiting for systemd-fsckd to finish')
+
+    def check_systemd_fsckd(self):
+        unit = 'systemd-fsckd'
+        self.assertUnitStarted(unit)
+        self.assertUnitNotActive(unit)
+        self.assertSystemdFsckdNotFailed()
+
+    def check_systemd_fsck_root(self):
+        unit = 'systemd-fsck-root'
+        self.assertUnitStarted(unit)
+        self.assertUnitActive(unit)
+        self.assertUnitNotFailed(unit)
+
+    def check_plymouth_start(self):
+        unit = 'plymouth-start'
+        self.assertUnitStarted(unit)
+        # stays active in 20.10 and later
+        self.assertUnitActive(unit)
+        self.assertUnitNotFailed(unit)
+
+    def test_systemd_fsckd_run(self):
+        '''Ensure we can boot after a fsck was processed'''
+        if not self._after_reboot:
+            self.reboot()
+        else:
+            self.check_systemd_fsckd()
+            self.check_systemd_fsck_root()
+            self.check_plymouth_start()
+
+    def test_systemd_fsckd_run_without_plymouth(self):
+        '''Ensure we can boot without plymouth after a fsck was processed'''
+        if not self._after_reboot:
+            configure_plymouth(enable=False)
+            self.reboot()
+        else:
+            self.check_systemd_fsckd()
+            self.check_systemd_fsck_root()
+            self.assertUnitNeverStarted('plymouth-start')
+
+    def test_fsck_failure(self):
+        '''Ensure that a failing fsck doesn't prevent fsckd to stop'''
+        if not self._after_reboot:
+            self.enable_kill_service('fsck')
+            self.reboot()
+        else:
+            self.check_systemd_fsckd()
+            self.assertUnitFailed('systemd-fsck-root')
+            self.check_plymouth_start()
+            self.disable_kill_service('fsck')
+
+    def test_systemd_fsck_failure(self):
+        '''Ensure that a failing systemd-fsck doesn't prevent fsckd to stop'''
+        if not self._after_reboot:
+            self.enable_kill_service('systemd-fsck')
+            self.reboot()
+        else:
+            self.check_systemd_fsckd()
+            self.assertUnitFailed('systemd-fsck-root')
+            self.check_plymouth_start()
+            self.disable_kill_service('systemd-fsck')
+
+    def test_systemd_fsckd_failure(self):
+        '''Ensure that a failing systemd-fsckd doesn't prevent system to boot'''
+        if not self._after_reboot:
+            self.enable_kill_service('systemd-fsckd')
+            self.reboot()
+        else:
+            self.assertSystemdFsckdFailed()
+            self.assertUnitFailed('systemd-fsck-root')
+            self.check_plymouth_start()
+            self.disable_kill_service('systemd-fsckd')
+
+    def assertUnitActive(self, unit):
+        self.assertTrue(is_unit_active(unit))
+
+    def assertUnitNotActive(self, unit):
+        self.assertFalse(is_unit_active(unit))
+
+    def assertUnitFailed(self, unit):
+        self.assertTrue(has_unit_failed(unit))
+
+    def assertUnitNotFailed(self, unit):
+        self.assertFalse(has_unit_failed(unit))
+
+    def assertUnitStarted(self, unit):
+        self.assertTrue(has_unit_started(unit))
+
+    def assertUnitNeverStarted(self, unit):
+        self.assertFalse(has_unit_started(unit))
+
+    def assertSystemdFsckdFailed(self):
+        self.assertNotEqual(get_unit_exec_status('systemd-fsckd'), '0')
+
+    def assertSystemdFsckdNotFailed(self):
+        self.assertEqual(get_unit_exec_status('systemd-fsckd'), '0')
+
+    def reboot(self):
+        '''Reboot the system with the current test marker'''
+        subprocess.run(f'/tmp/autopkgtest-reboot {self._test_name}'.split())
+
+
+def configure_plymouth_grub(enable=True):
+    grubcfg = Path('/etc/default/grub')
+    grubcfgdir = Path('/etc/default/grub.d')
+    grubcfgdir.mkdir(parents=True, exist_ok=True)
+    mygrubcfg = grubcfgdir.joinpath('99-autopkgtest.cfg')
+    if enable:
+        content = 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT splash quiet"'
+        mygrubcfg.write_text(content)
+    else:
+        mygrubcfg.unlink()
+        for f in [grubcfg] + list(grubcfgdir.glob('*.cfg')):
+            content = f.read_text()
+            if re.search(RE_SPLASH_QUIET, content):
+                f.write_text(re.sub(RE_SPLASH_QUIET, ' ', content))
+    subprocess.run(['update-grub'], stderr=subprocess.DEVNULL, check=True)
+
+def configure_plymouth_zipl(enable=True):
+    ziplcfg = Path('/etc/zipl.conf')
+    content = re.sub(RE_SPLASH_QUIET, ' ', ziplcfg.read_text())
+    if enable:
+        content = re.sub(r'(?m)^(parameters.*[^\'"])(\s*[\'"]?)$', r'\1 splash quiet\2', content)
+    ziplcfg.write_text(content)
+    subprocess.run(['zipl'], stderr=subprocess.DEVNULL, check=True)
+
+def configure_plymouth(enable=True):
+    if platform.processor() == 's390x':
+        configure_plymouth_zipl(enable)
+    else:
+        configure_plymouth_grub(enable)
+
+def getAllTests(unitTestClass):
+    '''get all test names in predictable sorted order from unitTestClass'''
+    return sorted([test[0] for test in inspect.getmembers(unitTestClass, predicate=inspect.isfunction)
+                  if test[0].startswith('test_')])
+
+
+# AUTOPKGTEST_REBOOT_MARK contains the test name to pursue after reboot
+# (to check results and states after reboot, mostly).
+# we append the previous global return code (0 or 1) to it.
+# Example: AUTOPKGTEST_REBOOT_MARK=test_foo:0
+if __name__ == '__main__':
+    if os.path.exists('/run/initramfs/fsck-root'):
+        print('SKIP: root file system is being checked by initramfs already')
+        sys.exit(77)
+
+    if platform.processor() == 'aarch64':
+        print('SKIP: cannot reboot properly on arm64, see https://bugs.launchpad.net/ubuntu/+source/nova/+bug/1748280')
+        sys.exit(77)
+
+    all_tests = getAllTests(FsckdTest)
+    current_test = os.getenv('AUTOPKGTEST_REBOOT_MARK')
+
+    if not current_test:
+        tests_setup()
+        after_reboot = False
+        current_test = all_tests[0]
+    else:
+        after_reboot = True
+
+    # loop on remaining tests to run
+    try:
+        remaining_tests = all_tests[all_tests.index(current_test):]
+    except ValueError:
+        print(f'Invalid value for AUTOPKGTEST_REBOOT_MARK, {current_test} is not a valid test name')
+        sys.exit(2)
+
+    # run all remaining tests
+    for test_name in remaining_tests:
+        suite = unittest.TestSuite()
+        suite.addTest(FsckdTest(test_name, after_reboot))
+        result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
+        if len(result.failures) != 0 or len(result.errors) != 0:
+            j = os.path.join(os.getenv('AUTOPKGTEST_ARTIFACTS'), 'systemd-fsckd-journal.txt')
+            with open(j, 'w') as f:
+                subprocess.run('journalctl -a --no-pager'.split(), encoding='utf-8', stdout=f)
+            sys.exit(1)
+        after_reboot = False
+
+    tests_teardown()
+    sys.exit(0)

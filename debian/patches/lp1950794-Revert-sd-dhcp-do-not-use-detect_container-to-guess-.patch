@@ -1,0 +1,33 @@
+From: =?utf-8?q?Lukas_M=C3=A4rdian?= <slyon@ubuntu.com>
+Date: Wed, 17 Nov 2021 17:24:34 +0100
+Subject: [PATCH] Revert "sd-dhcp: do not use detect_container() to guess udev
+ is running or not"
+
+This reverts commit 0299deab53d2a087727a5d04c1500c322c48b63e.
+---
+ src/libsystemd-network/dhcp-identifier.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/src/libsystemd-network/dhcp-identifier.c b/src/libsystemd-network/dhcp-identifier.c
+index 3313e53..d7813de 100644
+--- a/src/libsystemd-network/dhcp-identifier.c
++++ b/src/libsystemd-network/dhcp-identifier.c
+@@ -12,7 +12,6 @@
+ #include "network-util.h"
+ #include "siphash24.h"
+ #include "sparse-endian.h"
+-#include "stat-util.h"
+ #include "stdio-util.h"
+ #include "udev-util.h"
+ #include "virt.h"
+@@ -172,8 +171,8 @@ int dhcp_identifier_set_iaid(
+         uint64_t id;
+         int r;
+ 
+-        if (path_is_read_only_fs("/sys") <= 0 && !use_mac) {
+-                /* udev should be around */
++        if (detect_container() <= 0 && !use_mac) {
++                /* not in a container, udev will be around */
+ 
+                 r = sd_device_new_from_ifindex(&device, ifindex);
+                 if (r < 0)

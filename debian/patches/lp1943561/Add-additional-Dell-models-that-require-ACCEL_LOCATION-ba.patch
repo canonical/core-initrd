@@ -1,0 +1,41 @@
+From: =?utf-8?b?IllhbyBXZWkgKOmtj+mKmOW7tyki?= <yao.wei@canonical.com>
+Date: Wed, 8 Sep 2021 13:55:49 +0800
+Subject: Add additional Dell models that require ACCEL_LOCATION=base
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+This is a related commit to the bug reported in Ubuntu:
+  https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1938259
+
+This adds additional 4 models that without this param, the screen rotates
+when the clamshell laptop rotates, which is an unwanted behavior.
+
+This commit also merges entries that needs the same param.
+
+Signed-off-by: Yao Wei (魏銘廷) <yao.wei@canonical.com>
+---
+ hwdb.d/60-sensor.hwdb | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/hwdb.d/60-sensor.hwdb b/hwdb.d/60-sensor.hwdb
+index 404a1ed..904ead1 100644
+--- a/hwdb.d/60-sensor.hwdb
++++ b/hwdb.d/60-sensor.hwdb
+@@ -289,12 +289,12 @@ sensor:modalias:acpi:*KIOX000A*:dmi:*svn*CytrixTechnology:*pn*Complex11t:*
+ # Dell
+ #########################################
+ sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:pnVostro5581:*
+- ACCEL_LOCATION=base
+-
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0A36:*
+ sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0A3E:*
+- ACCEL_LOCATION=base
+-
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B09:*
+ sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B0B:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B0D:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B11:*
+  ACCEL_LOCATION=base
+ 
+ # Dell Venue 8 Pro 3845

@@ -1,0 +1,134 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+#pragma once
+
+/***
+  Copyright © 2014-2015 Intel Corporation. All rights reserved.
+***/
+
+#include <net/ethernet.h>
+#include <netinet/in.h>
+
+#include "sd-event.h"
+#include "sd-dhcp6-client.h"
+
+#include "hashmap.h"
+#include "list.h"
+#include "log-link.h"
+#include "macro.h"
+#include "sparse-endian.h"
+
+typedef struct sd_dhcp6_option {
+        unsigned n_ref;
+
+        uint32_t enterprise_identifier;
+        uint16_t option;
+        void *data;
+        size_t length;
+} sd_dhcp6_option;
+
+extern const struct hash_ops dhcp6_option_hash_ops;
+
+/* Common option header */
+typedef struct DHCP6Option {
+        be16_t code;
+        be16_t len;
+        uint8_t data[];
+} _packed_ DHCP6Option;
+
+/* Address option */
+struct iaaddr {
+        struct in6_addr address;
+        be32_t lifetime_preferred;
+        be32_t lifetime_valid;
+} _packed_;
+
+/* Prefix Delegation Prefix option */
+struct iapdprefix {
+        be32_t lifetime_preferred;
+        be32_t lifetime_valid;
+        uint8_t prefixlen;
+        struct in6_addr address;
+} _packed_;
+
+typedef struct DHCP6Address DHCP6Address;
+
+struct DHCP6Address {
+        LIST_FIELDS(DHCP6Address, addresses);
+
+        union {
+                struct iaaddr iaaddr;
+                struct iapdprefix iapdprefix;
+        };
+};
+
+/* Non-temporary Address option */
+struct ia_na {
+        be32_t id;
+        be32_t lifetime_t1;
+        be32_t lifetime_t2;
+} _packed_;
+
+/* Prefix Delegation option */
+struct ia_pd {
+        be32_t id;
+        be32_t lifetime_t1;
+        be32_t lifetime_t2;
+} _packed_;
+
+/* Temporary Address option */
+struct ia_ta {
+        be32_t id;
+} _packed_;
+
+typedef struct DHCP6IA {
+        uint16_t type;
+        union {
+                struct ia_na ia_na;
+                struct ia_pd ia_pd;
+                struct ia_ta ia_ta;
+        };
+
+        LIST_HEAD(DHCP6Address, addresses);
+} DHCP6IA;
+
+typedef struct sd_dhcp6_client sd_dhcp6_client;
+
+int dhcp6_option_append(uint8_t **buf, size_t *buflen, uint16_t code,
+                        size_t optlen, const void *optval);
+int dhcp6_option_append_ia(uint8_t **buf, size_t *buflen, const DHCP6IA *ia);
+int dhcp6_option_append_pd(uint8_t **buf, size_t *buflen, const DHCP6IA *pd, const DHCP6Address *hint_pd_prefix);
+int dhcp6_option_append_fqdn(uint8_t **buf, size_t *buflen, const char *fqdn);
+int dhcp6_option_append_user_class(uint8_t **buf, size_t *buflen, char * const *user_class);
+int dhcp6_option_append_vendor_class(uint8_t **buf, size_t *buflen, char * const *user_class);
+int dhcp6_option_append_vendor_option(uint8_t **buf, size_t *buflen, OrderedHashmap *vendor_options);
+int dhcp6_option_parse(uint8_t **buf, size_t *buflen, uint16_t *optcode,
+                       size_t *optlen, uint8_t **optvalue);
+int dhcp6_option_parse_status(DHCP6Option *option, size_t len);
+int dhcp6_option_parse_ia(sd_dhcp6_client *client, DHCP6Option *iaoption, DHCP6IA *ia, uint16_t *ret_status_code);
+int dhcp6_option_parse_ip6addrs(uint8_t *optval, uint16_t optlen,
+                                struct in6_addr **addrs, size_t count);
+int dhcp6_option_parse_domainname_list(const uint8_t *optval, uint16_t optlen,
+                                       char ***str_arr);
+int dhcp6_option_parse_domainname(const uint8_t *optval, uint16_t optlen, char **str);
+
+int dhcp6_network_bind_udp_socket(int ifindex, struct in6_addr *address);
+int dhcp6_network_send_udp_socket(int s, struct in6_addr *address,
+                                  const void *packet, size_t len);
+
+const char *dhcp6_message_type_to_string(int s) _const_;
+int dhcp6_message_type_from_string(const char *s) _pure_;
+const char *dhcp6_message_status_to_string(int s) _const_;
+int dhcp6_message_status_from_string(const char *s) _pure_;
+
+void dhcp6_client_set_test_mode(sd_dhcp6_client *client, bool test_mode);
+
+#define log_dhcp6_client_errno(client, error, fmt, ...)         \
+        log_interface_prefix_full_errno(                        \
+                "DHCPv6 client: ",                              \
+                sd_dhcp6_client_get_ifname(client),             \
+                error, fmt, ##__VA_ARGS__)
+#define log_dhcp6_client(client, fmt, ...)                      \
+        log_interface_prefix_full_errno_zerook(                 \
+                "DHCPv6 client: ",                              \
+                sd_dhcp6_client_get_ifname(client),             \
+                0, fmt, ##__VA_ARGS__)

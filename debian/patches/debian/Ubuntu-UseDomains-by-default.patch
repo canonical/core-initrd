@@ -1,0 +1,75 @@
+From: Dimitri John Ledkov <xnox@ubuntu.com>
+Date: Thu, 20 Jul 2017 13:48:31 +0100
+Subject: Set UseDomains to true, by default, on Ubuntu.
+
+On Ubuntu, fallback DNS servers are disabled, therefore we do not leak queries
+to a preset 3rd party by default. In resolved, dnssec is also disabled by
+default, as too much of the internet is broken and using Ubuntu users to debug
+the internet is not very productive - most of the time the end-user cannot fix
+or know how to notify the site owners about the dnssec mistakes. Inherintally
+the DHCP acquired DNS servers are therefore trusted, and are free to spoof
+records. Not trusting DNS search domains, in such scenario, provides limited
+security or privacy benefits. From user point of view, this also appears to be
+a regression from previous Ubuntu releases which do trust DHCP acquired search
+domains by default.
+
+Therefore we are enabling UseDomains by default on Ubuntu.
+
+Users may override this setting in the .network files by specifying
+[DHCP|IPv6AcceptRA] UseDomains=no|route options.
+---
+ man/systemd.network.xml        | 6 +++---
+ src/network/networkd-network.c | 2 ++
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/man/systemd.network.xml b/man/systemd.network.xml
+index 9de9816..1d1c0b7 100644
+--- a/man/systemd.network.xml
++++ b/man/systemd.network.xml
+@@ -400,7 +400,7 @@
+             <literal>IPv6AcceptRA=</literal>.</para>
+ 
+             <para>Furthermore, note that by default the domain name
+-            specified through DHCP is not used for name resolution.
++            specified through DHCP, on Ubuntu, are used for name resolution.
+             See option <option>UseDomains=</option> below.</para>
+ 
+             <para>See the [DHCPv4] or [DHCPv6] sections below for further configuration options for the DHCP
+@@ -1842,7 +1842,7 @@ IPv6Token=prefixstable:2002:da8:1::</programlisting></para>
+             effect of the <option>Domains=</option> setting. If set to <option>route</option>, the domain
+             name received from the DHCP server will be used for routing DNS queries only, but not for
+             searching, similar to the effect of the <option>Domains=</option> setting when the argument is
+-            prefixed with <literal>~</literal>. Defaults to false.</para>
++            prefixed with <literal>~</literal>. Defaults to true on Ubuntu.</para>
+ 
+             <para>It is recommended to enable this option only on trusted networks, as setting this affects
+             resolution of all hostnames, in particular of single-label names. It is generally safer to use
+@@ -2222,7 +2222,7 @@ IPv6Token=prefixstable:2002:da8:1::</programlisting></para>
+             the effect of the <option>Domains=</option> setting. If set to <literal>route</literal>, the domain name
+             received via IPv6 RA will be used for routing DNS queries only, but not for searching, similar to the
+             effect of the <option>Domains=</option> setting when the argument is prefixed with
+-            <literal>~</literal>. Defaults to false.</para>
++            <literal>~</literal>. Defaults to true on Ubuntu.</para>
+ 
+             <para>It is recommended to enable this option only on trusted networks, as setting this affects resolution
+             of all hostnames, in particular of single-label names. It is generally safer to use the supplied domain
+diff --git a/src/network/networkd-network.c b/src/network/networkd-network.c
+index 850b4f4..10f4909 100644
+--- a/src/network/networkd-network.c
++++ b/src/network/networkd-network.c
+@@ -341,6 +341,7 @@ int network_load_one(Manager *manager, OrderedHashmap **networks, const char *fi
+                 .dhcp_use_gateway = -1,
+                 .dhcp_send_hostname = true,
+                 .dhcp_send_release = true,
++                .dhcp_use_domains = DHCP_USE_DOMAINS_YES,
+                 .dhcp_route_metric = DHCP_ROUTE_METRIC,
+                 .dhcp_client_identifier = _DHCP_CLIENT_ID_INVALID,
+                 .dhcp_route_table = RT_TABLE_MAIN,
+@@ -407,6 +408,7 @@ int network_load_one(Manager *manager, OrderedHashmap **networks, const char *fi
+                 .proxy_arp = -1,
+ 
+                 .ipv6_accept_ra_use_dns = true,
++                .ipv6_accept_ra_use_domains = DHCP_USE_DOMAINS_YES,
+                 .ipv6_accept_ra_use_autonomous_prefix = true,
+                 .ipv6_accept_ra_use_onlink_prefix = true,
+                 .ipv6_accept_ra_route_table = RT_TABLE_MAIN,

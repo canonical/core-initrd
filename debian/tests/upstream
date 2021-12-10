@@ -1,0 +1,27 @@
+#!/bin/sh
+# run upstream system integration tests
+# Author: Martin Pitt <martin.pitt@ubuntu.com>
+set -e
+
+DPKGARCH=$(dpkg --print-architecture)
+
+# Because this test is used both by upstream and by Debian, we use different deny-list filenames.
+# For more details see https://salsa.debian.org/systemd-team/systemd/merge_requests/52
+# The naming is transitioning from blacklist to deny-list, so currently both are supported
+# More details in https://github.com/systemd/systemd/pull/16262
+if [ -n "$TEST_UPSTREAM" ]; then
+    denylist="deny-list-ubuntu-ci"
+    blacklist="blacklist-ubuntu-ci"
+else
+    denylist="deny-list-upstream-ci"
+    blacklist="blacklist-upstream-ci"
+fi
+
+export BLACKLIST_MARKERS="$blacklist-$DPKGARCH $blacklist $denylist-$DPKGARCH $denylist"
+export DENY_LIST_MARKERS="$blacklist-$DPKGARCH $blacklist $denylist-$DPKGARCH $denylist"
+export ARTIFACT_DIRECTORY=$AUTOPKGTEST_ARTIFACTS
+export TEST_SHOW_JOURNAL=warning
+export TEST_REQUIRE_INSTALL_TESTS=0
+export TEST_PREFER_NSPAWN=1
+export NO_BUILD=1
+test/run-integration-tests.sh
