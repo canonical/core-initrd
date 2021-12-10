@@ -1,0 +1,14 @@
+Index: systemd/src/core/main.c
+===================================================================
+--- systemd.orig/src/core/main.c
++++ systemd/src/core/main.c
+@@ -2197,7 +2197,8 @@ static int do_queue_default_job(
+         if (arg_default_unit)
+                 unit = arg_default_unit;
+         else if (in_initrd())
+-                unit = SPECIAL_INITRD_TARGET;
++                // ubuntu-core-initramfs needs indirection target
++                unit = SPECIAL_DEFAULT_TARGET;
+         else
+                 unit = SPECIAL_DEFAULT_TARGET;
+ 

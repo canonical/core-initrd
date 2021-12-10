@@ -59,3 +59,4 @@ lp1943561/Use-SKU-to-identify-Dell-clamshell-models-for-acceleromet.patch
 lp1943561/Add-additional-Dell-models-that-require-ACCEL_LOCATION-ba.patch
 lp1952733-hwdb-60-keyboard-Update-Dell-Privacy-Micmute-Hotkey-Map.patch
 lp1952735-keymap-Add-microphone-mute-keymap-for-Dell-Machine.patch
+ubuntu-core-initramfs-fix-default.target
