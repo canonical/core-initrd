@@ -1,8 +1,13 @@
 [Unit]
 DefaultDependencies=no
+Before=initrd-fs.target
+
 After=sysroot.mount
+Wants=sysroot.mount
+
 After=run-mnt-kernel.mount
-Requires=sysroot.mount
+After=the-tool.service
+
 [Mount]
 What=/run/mnt/kernel/modules
 Type=none
