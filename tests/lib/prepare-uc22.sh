@@ -20,8 +20,6 @@ apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
 # should we instead install beta/edge snapd here and point ubuntu-image to this
 # version of snapd?
 snap install snapd
-
-# install some dependencies
 snap install ubuntu-image --classic
 
 # install build-deps for ubuntu-core-initramfs
@@ -44,7 +42,7 @@ echo 'test ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # get the model
 # TODO: should this be a variant to test multiple grades i.e. signed and secured?
-curl -o ubuntu-core-20-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-20-amd64-dangerous.model
+curl -o ubuntu-core-22-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-22-amd64-dangerous.model
 
 # build the debian package here of ubuntu-core-initramfs
 (
@@ -60,10 +58,10 @@ curl -o ubuntu-core-20-amd64-dangerous.model https://raw.githubusercontent.com/s
 apt install -yqq "$SETUPDIR"/ubuntu-core-initramfs*.deb
 
 # now download snap dependencies 
-# TODO:UC20: when should some of these things start tracking stable ?
-snap download pc-kernel --channel=20/$SNAP_BRANCH --basename=upstream-pc-kernel
-snap download pc --channel=20/$SNAP_BRANCH --basename=upstream-pc-gadget
-snap download core20 --channel=$SNAP_BRANCH --basename=upstream-core20
+# TODO:UC22: when should some of these things start tracking stable ?
+snap download pc-kernel --channel=22/$SNAP_BRANCH --basename=upstream-pc-kernel
+snap download pc --channel=22/$SNAP_BRANCH --basename=upstream-pc-gadget
+snap download core22 --channel=$SNAP_BRANCH --basename=upstream-core22
 
 # note that we currently use snap-bootstrap from the snapd deb package, but we 
 # could instead copy a potentially more up-to-date version out of the snapd snap
@@ -208,14 +206,14 @@ sbsign --key "$SNAKE_OIL_DIR/PkKek-1-snakeoil.key" --cert "$SNAKE_OIL_DIR/PkKek-
 snap pack --filename=pc-gadget.snap "$gadgetdir"
 rm -rf "$gadgetdir"
 
-# finally build the uc20 image
+# finally build the uc22 image
 ubuntu-image snap \
     -i 8G \
-    --snap upstream-core20.snap \
+    --snap upstream-core22.snap \
     --snap snapd.snap \
     --snap pc-kernel.snap \
     --snap pc-gadget.snap \
-    ubuntu-core-20-amd64-dangerous.model
+    ubuntu-core-22-amd64-dangerous.model
 
 # setup some data we will inject into ubuntu-seed partition of the image above
 # that snapd.spread-tests-run-mode-tweaks.service will ingest

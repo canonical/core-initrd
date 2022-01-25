@@ -51,15 +51,15 @@ go install .
 ```
 sudo apt update && sudo apt install -y qemu-kvm autopkgtest
 ```
-2. Create a suitable ubuntu test image (focal) in the following directory where spread locates images. Note that the location is different when using spread installed through snap.
+2. Create a suitable ubuntu test image (jammy) in the following directory where spread locates images. Note that the location is different when using spread installed through snap.
 ```
 mkdir -p ~/.spread/qemu # This location is different if you installed spread from snap
 cd ~/.spread/qemu
-autopkgtest-buildvm-ubuntu-cloud -r focal
+autopkgtest-buildvm-ubuntu-cloud -r jammy
 ```
 3. Rename the newly built image as the name will not match what spread is expecting
 ```
-mv autopkgtest-focal-amd64.img ubuntu-20.04-64.img
+mv autopkgtest-jammy-amd64.img ubuntu-22.04-64.img
 ```
 4. Now you are ready to run spread tests with the qemu backend
 ```
@@ -79,12 +79,12 @@ and yq (needed for yaml manipulation), download the newest image and import it i
 ```
 sudo snap install lxd --channel=latest/stable
 sudo snap install yq --channel=latest/stable
-curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd-img.tar.gz
-lxc image import lxd-initrd-img.tar.gz --alias ucspread
-lxc image show ucspread > temp.profile
-yq e '.properties.aliases = "ucspread,amd64"' -i ./temp.profile
+curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd22-img.tar.gz
+lxc image import lxd-initrd-img.tar.gz --alias ucspread22
+lxc image show ucspread22 > temp.profile
+yq e '.properties.aliases = "ucspread22,amd64"' -i ./temp.profile
 yq e '.properties.remote = "images"' -i ./temp.profile
-cat ./temp.profile | lxc image edit ucspread
+cat ./temp.profile | lxc image edit ucspread22
 rm ./temp.profile ./lxd-initrd-img.tar.gz
 ```
 2. Import the LXD coreinitrd test profile. Make sure your working directory is the root of this repository.
