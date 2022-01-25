@@ -20,10 +20,7 @@ apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
 # should we instead install beta/edge snapd here and point ubuntu-image to this
 # version of snapd?
 snap install snapd
-
-# install some dependencies
-# TODO:UC20: when should we start using candidate / stable ubuntu-image?
-snap install ubuntu-image --edge --classic
+snap install ubuntu-image --classic
 
 # install build-deps for ubuntu-core-initramfs
 (
@@ -56,7 +53,7 @@ curl -o ubuntu-core-20-amd64-dangerous.model https://raw.githubusercontent.com/s
     cp ../*.deb "$SETUPDIR"
 )
 
-# install ubuntu-core-initramfs here so the repack-kernel.sh uses the version of
+# install ubuntu-core-initramfs here so the repack-kernel uses the version of
 # ubuntu-core-initramfs we built here
 apt install -yqq "$SETUPDIR"/ubuntu-core-initramfs*.deb
 
@@ -184,17 +181,17 @@ rm -r $snapddir
 
 # extract the kernel snap, including extracting the initrd from the kernel.efi
 kerneldir=/tmp/kernel-workdir
-"$TESTSLIB/repack-kernel.sh" extract upstream-pc-kernel.snap $kerneldir
+"$EXTTESTSLIB/repack-kernel.sh" extract upstream-pc-kernel.snap $kerneldir
 
 # copy the skeleton from our installed ubuntu-core-initramfs into the initrd 
 # skeleton for the kernel snap
 cp -ar /usr/lib/ubuntu-core-initramfs/main/* "$kerneldir/skeleton/main"
 
 # repack the initrd into the kernel.efi
-"$TESTSLIB/repack-kernel.sh" prepare $kerneldir
+"$EXTTESTSLIB/repack-kernel.sh" prepare $kerneldir
 
 # repack the kernel snap itself
-"$TESTSLIB/repack-kernel.sh" pack $kerneldir --filename=pc-kernel.snap
+"$EXTTESTSLIB/repack-kernel.sh" pack $kerneldir --filename=pc-kernel.snap
 rm -rf $kerneldir
 
 # penultimately, re-pack the gadget snap with snakeoil signed shim
