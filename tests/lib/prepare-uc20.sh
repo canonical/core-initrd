@@ -181,17 +181,17 @@ rm -r $snapddir
 
 # extract the kernel snap, including extracting the initrd from the kernel.efi
 kerneldir=/tmp/kernel-workdir
-"$EXTTESTSLIB/repack-kernel.sh" extract upstream-pc-kernel.snap $kerneldir
+"$EXTTESTSLIB/repack-kernel" extract upstream-pc-kernel.snap $kerneldir
 
 # copy the skeleton from our installed ubuntu-core-initramfs into the initrd 
 # skeleton for the kernel snap
 cp -ar /usr/lib/ubuntu-core-initramfs/main/* "$kerneldir/skeleton/main"
 
 # repack the initrd into the kernel.efi
-"$EXTTESTSLIB/repack-kernel.sh" prepare $kerneldir
+"$EXTTESTSLIB/repack-kernel" prepare $kerneldir
 
 # repack the kernel snap itself
-"$EXTTESTSLIB/repack-kernel.sh" pack $kerneldir --filename=pc-kernel.snap
+"$EXTTESTSLIB/repack-kernel" pack $kerneldir --filename=pc-kernel.snap
 rm -rf $kerneldir
 
 # penultimately, re-pack the gadget snap with snakeoil signed shim
