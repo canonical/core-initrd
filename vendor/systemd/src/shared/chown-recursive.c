@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -124,7 +124,7 @@ int path_chown_recursive(
         if (fd < 0)
                 return -errno;
 
-        if (!uid_is_valid(uid) && !gid_is_valid(gid) && (mask & 07777) == 07777)
+        if (!uid_is_valid(uid) && !gid_is_valid(gid) && FLAGS_SET(mask, 07777))
                 return 0; /* nothing to do */
 
         if (fstat(fd, &st) < 0)
@@ -150,7 +150,7 @@ int fd_chown_recursive(
         struct stat st;
 
         /* Note that the slightly different order of fstat() and the checks here and in
-         * path_chown_recursive(). That's because when we open the dirctory ourselves we can specify
+         * path_chown_recursive(). That's because when we open the directory ourselves we can specify
          * O_DIRECTORY and we always want to ensure we are operating on a directory before deciding whether
          * the operation is otherwise redundant. */
 
@@ -160,7 +160,7 @@ int fd_chown_recursive(
         if (!S_ISDIR(st.st_mode))
                 return -ENOTDIR;
 
-        if (!uid_is_valid(uid) && !gid_is_valid(gid) && (mask & 07777) == 07777)
+        if (!uid_is_valid(uid) && !gid_is_valid(gid) && FLAGS_SET(mask, 07777))
                 return 0; /* nothing to do */
 
         /* Shortcut, as above */

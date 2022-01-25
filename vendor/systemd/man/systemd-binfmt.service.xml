@@ -2,7 +2,7 @@
 <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 <refentry id="systemd-binfmt.service" conditional='ENABLE_BINFMT'
     xmlns:xi="http://www.w3.org/2001/XInclude">
 
@@ -41,6 +41,14 @@
 
   <refsect1><title>Options</title>
     <variablelist>
+
+      <varlistentry>
+        <term><option>--unregister</option></term>
+        <listitem><para>If passed, instead of registering configured binary formats in the kernel, the
+        reverse operation is executed: all currently registered binary formats are unregistered from the
+        kernel.</para></listitem>
+      </varlistentry>
+
       <xi:include href="standard-options.xml" xpointer="cat-config" />
       <xi:include href="standard-options.xml" xpointer="no-pager" />
       <xi:include href="standard-options.xml" xpointer="help" />

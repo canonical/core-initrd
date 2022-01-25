@@ -1,8 +1,7 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "format-util.h"
 #include "fs-util.h"
-#include "group-record.h"
 #include "process-util.h"
 #include "rlimit-util.h"
 #include "strv.h"
@@ -16,7 +15,7 @@ const char *user_record_state_color(const char *state) {
                 return ansi_grey();
         else if (streq(state, "active"))
                 return ansi_highlight_green();
-        else if (streq(state, "locked"))
+        else if (STR_IN_SET(state, "locked", "dirty"))
                  return ansi_highlight_yellow();
 
         return NULL;
@@ -46,6 +45,10 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
         if (hr->last_change_usec != USEC_INFINITY) {
                 char buf[FORMAT_TIMESTAMP_MAX];
                 printf(" Last Change: %s\n", format_timestamp(buf, sizeof(buf), hr->last_change_usec));
+
+                if (hr->last_change_usec > now(CLOCK_REALTIME))
+                        printf("              %sModification time lies in the future, system clock wrong?%s\n",
+                               ansi_highlight_yellow(), ansi_normal());
         }
 
         if (hr->last_password_change_usec != USEC_INFINITY &&
@@ -56,10 +59,6 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
 
         r = user_record_test_blocked(hr);
         switch (r) {
-
-        case -ESTALE:
-                printf("    Login OK: %sno%s (last change time is in the future)\n", ansi_highlight_red(), ansi_normal());
-                break;
 
         case -ENOLCK:
                 printf("    Login OK: %sno%s (record is locked)\n", ansi_highlight_red(), ansi_normal());
@@ -73,10 +72,11 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
                 printf("    Login OK: %sno%s (record not valid anymore))\n", ansi_highlight_red(), ansi_normal());
                 break;
 
+        case -ESTALE:
         default: {
                 usec_t y;
 
-                if (r < 0) {
+                if (r < 0 && r != -ESTALE) {
                         errno = -r;
                         printf("    Login OK: %sno%s (%m)\n", ansi_highlight_red(), ansi_normal());
                         break;
@@ -122,6 +122,10 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
 
         case -EROFS:
                 printf(" Password OK: %schange not permitted%s\n", ansi_highlight_yellow(), ansi_normal());
+                break;
+
+        case -ESTALE:
+                printf(" Password OK: %slast password change in future%s\n", ansi_highlight_yellow(), ansi_normal());
                 break;
 
         default:
@@ -279,7 +283,7 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
                 printf(" Access Mode: 0%03oo\n", user_record_access_mode(hr));
 
         if (storage == USER_LUKS) {
-                printf("LUKS Discard: %s\n", yes_no(user_record_luks_discard(hr)));
+                printf("LUKS Discard: online=%s offline=%s\n", yes_no(user_record_luks_discard(hr)), yes_no(user_record_luks_offline_discard(hr)));
 
                 if (!sd_id128_is_null(hr->luks_uuid))
                         printf("   LUKS UUID: " SD_ID128_FORMAT_STR "\n", SD_ID128_FORMAT_VAL(hr->luks_uuid));
@@ -340,12 +344,48 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
 
         if (hr->disk_usage != UINT64_MAX) {
                 char buf[FORMAT_BYTES_MAX];
-                printf("  Disk Usage: %s\n", format_bytes(buf, sizeof(buf), hr->disk_usage));
+
+                if (hr->disk_size != UINT64_MAX) {
+                        unsigned permille;
+
+                        permille = (unsigned) DIV_ROUND_UP(hr->disk_usage * 1000U, hr->disk_size); /* Round up! */
+                        printf("  Disk Usage: %s (= %u.%01u%%)\n",
+                               format_bytes(buf, sizeof(buf), hr->disk_usage),
+                               permille / 10, permille % 10);
+                } else
+                        printf("  Disk Usage: %s\n", format_bytes(buf, sizeof(buf), hr->disk_usage));
         }
 
         if (hr->disk_free != UINT64_MAX) {
                 char buf[FORMAT_BYTES_MAX];
-                printf("   Disk Free: %s\n", format_bytes(buf, sizeof(buf), hr->disk_free));
+
+                if (hr->disk_size != UINT64_MAX) {
+                        const char *color_on, *color_off;
+                        unsigned permille;
+
+                        permille = (unsigned) ((hr->disk_free * 1000U) / hr->disk_size); /* Round down! */
+
+                        /* Color the output red or yellow if we are below 10% resp. 25% free. Because 10% and
+                         * 25% can be a lot of space still, let's additionally make some absolute
+                         * restrictions: 1G and 2G */
+                        if (permille <= 100U &&
+                            hr->disk_free < 1024U*1024U*1024U /* 1G */) {
+                                color_on = ansi_highlight_red();
+                                color_off = ansi_normal();
+                        } else if (permille <= 250U &&
+                                   hr->disk_free < 2U*1024U*1024U*1024U /* 2G */) {
+                                color_on = ansi_highlight_yellow();
+                                color_off = ansi_normal();
+                        } else
+                                color_on = color_off = "";
+
+                        printf("   Disk Free: %s%s (= %u.%01u%%)%s\n",
+                               color_on,
+                               format_bytes(buf, sizeof(buf), hr->disk_free),
+                               permille / 10, permille % 10,
+                               color_off);
+                } else
+                        printf("   Disk Free: %s\n", format_bytes(buf, sizeof(buf), hr->disk_free));
         }
 
         if (hr->disk_floor != UINT64_MAX) {
@@ -436,9 +476,15 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
 
                 STRV_FOREACH(i, hr->pkcs11_token_uri)
                         printf(i == hr->pkcs11_token_uri ?
-                               "  Sec. Token: %s\n" :
+                               "PKCS11 Token: %s\n" :
                                "              %s\n", *i);
         }
+
+        if (hr->n_fido2_hmac_credential > 0)
+                printf(" FIDO2 Token: %zu\n", hr->n_fido2_hmac_credential);
+
+        if (!strv_isempty(hr->recovery_key_type))
+                printf("Recovery Key: %zu\n", strv_length(hr->recovery_key_type));
 
         k = strv_length(hr->hashed_password);
         if (k == 0)
@@ -463,4 +509,76 @@ void user_record_show(UserRecord *hr, bool show_full_group_info) {
 
         if (hr->service)
                 printf("     Service: %s\n", hr->service);
+}
+
+void group_record_show(GroupRecord *gr, bool show_full_user_info) {
+        int r;
+
+        printf("  Group name: %s\n",
+               group_record_group_name_and_realm(gr));
+
+        printf(" Disposition: %s\n", user_disposition_to_string(group_record_disposition(gr)));
+
+        if (gr->last_change_usec != USEC_INFINITY) {
+                char buf[FORMAT_TIMESTAMP_MAX];
+                printf(" Last Change: %s\n", format_timestamp(buf, sizeof(buf), gr->last_change_usec));
+        }
+
+        if (gid_is_valid(gr->gid))
+                printf("         GID: " GID_FMT "\n", gr->gid);
+
+        if (show_full_user_info) {
+                _cleanup_(userdb_iterator_freep) UserDBIterator *iterator = NULL;
+
+                r = membershipdb_by_group(gr->group_name, 0, &iterator);
+                if (r < 0) {
+                        errno = -r;
+                        printf("     Members: (can't acquire: %m)");
+                } else {
+                        const char *prefix = "     Members:";
+
+                        for (;;) {
+                                _cleanup_free_ char *user = NULL;
+
+                                r = membershipdb_iterator_get(iterator, &user, NULL);
+                                if (r == -ESRCH)
+                                        break;
+                                if (r < 0) {
+                                        errno = -r;
+                                        printf("%s (can't iterate: %m\n", prefix);
+                                        break;
+                                }
+
+                                printf("%s %s\n", prefix, user);
+                                prefix = "             ";
+                        }
+                }
+        } else {
+                const char *prefix = "     Members:";
+                char **i;
+
+                STRV_FOREACH(i, gr->members) {
+                        printf("%s %s\n", prefix, *i);
+                        prefix = "             ";
+                }
+        }
+
+        if (!strv_isempty(gr->administrators)) {
+                const char *prefix = "      Admins:";
+                char **i;
+
+                STRV_FOREACH(i, gr->administrators) {
+                        printf("%s %s\n", prefix, *i);
+                        prefix = "             ";
+                }
+        }
+
+        if (gr->description && !streq(gr->description, gr->group_name))
+                printf(" Description: %s\n", gr->description);
+
+        if (!strv_isempty(gr->hashed_password))
+                printf("   Passwords: %zu\n", strv_length(gr->hashed_password));
+
+        if (gr->service)
+                printf("     Service: %s\n", gr->service);
 }

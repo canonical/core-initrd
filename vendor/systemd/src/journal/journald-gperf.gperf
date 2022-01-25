@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 %{
 #if __GNUC__ >= 7
 _Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
@@ -22,6 +23,7 @@ Journal.Storage,            config_parse_storage,    0, offsetof(Server, storage
 Journal.Compress,           config_parse_compress,   0, offsetof(Server, compress)
 Journal.Seal,               config_parse_bool,       0, offsetof(Server, seal)
 Journal.ReadKMsg,           config_parse_bool,       0, offsetof(Server, read_kmsg)
+Journal.Audit,              config_parse_tristate,   0, offsetof(Server, set_audit)
 Journal.SyncIntervalSec,    config_parse_sec,        0, offsetof(Server, sync_interval_usec)
 # The following is a legacy name for compatibility
 Journal.RateLimitInterval,  config_parse_sec,        0, offsetof(Server, ratelimit_interval)

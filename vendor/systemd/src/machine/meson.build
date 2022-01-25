@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 systemd_machined_sources = files('''
         machined.c
@@ -6,14 +6,16 @@ systemd_machined_sources = files('''
 '''.split())
 
 libmachine_core_sources = files('''
-        machine.c
-        machine.h
-        machined-dbus.c
-        machined-core.c
-        machine-dbus.c
-        machine-dbus.h
         image-dbus.c
         image-dbus.h
+        machine-dbus.c
+        machine-dbus.h
+        machine.c
+        machine.h
+        machined-core.c
+        machined-dbus.c
+        machined-varlink.c
+        machined-varlink.h
         operation.c
         operation.h
 '''.split())
@@ -37,6 +39,5 @@ tests += [
         [['src/machine/test-machine-tables.c'],
          [libmachine_core,
           libshared],
-         [threads],
-         'ENABLE_MACHINED'],
+         [threads]],
 ]

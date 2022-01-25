@@ -3,7 +3,7 @@
         "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 
 <!--
-  SPDX-License-Identifier: LGPL-2.1+
+  SPDX-License-Identifier: LGPL-2.1-or-later
 
   This file is part of systemd.
 
@@ -131,6 +131,17 @@
         <action id="org.freedesktop.network1.revert-dns">
                 <description gettext-domain="systemd">Revert DNS settings</description>
                 <message gettext-domain="systemd">Authentication is required to reset DNS settings.</message>
+                <defaults>
+                        <allow_any>auth_admin</allow_any>
+                        <allow_inactive>auth_admin</allow_inactive>
+                        <allow_active>auth_admin_keep</allow_active>
+                </defaults>
+                <annotate key="org.freedesktop.policykit.owner">unix-user:systemd-network</annotate>
+        </action>
+
+        <action id="org.freedesktop.network1.forcerenew">
+                <description gettext-domain="systemd">DHCP server sends force renew message</description>
+                <message gettext-domain="systemd">Authentication is required to send force renew message.</message>
                 <defaults>
                         <allow_any>auth_admin</allow_any>
                         <allow_inactive>auth_admin</allow_inactive>

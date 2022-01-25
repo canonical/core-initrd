@@ -2,7 +2,7 @@
 <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 <refentry id="systemd-sysv-generator" conditional="HAVE_SYSV_COMPAT">
 
   <refentryinfo>
@@ -43,7 +43,7 @@
     <literal>$named</literal>, <literal>$portmap</literal>,
     <literal>$time</literal> are supported and will be turned into
     dependencies on specific native systemd targets.  See
-    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+    <citerefentry><refentrytitle>systemd.special</refentrytitle><manvolnum>7</manvolnum></citerefentry>
     for more details.</para>
 
     <para>SysV runlevels have corresponding systemd targets

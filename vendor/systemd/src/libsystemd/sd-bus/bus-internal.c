@@ -1,8 +1,9 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "bus-internal.h"
 #include "bus-message.h"
+#include "escape.h"
 #include "hexdecoct.h"
 #include "string-util.h"
 
@@ -91,8 +92,13 @@ bool interface_name_is_valid(const char *p) {
                                 (!dot && *q >= '0' && *q <= '9') ||
                                 *q == '_';
 
-                        if (!good)
+                        if (!good) {
+                                if (DEBUG_LOGGING) {
+                                        _cleanup_free_ char *iface = cescape(p);
+                                        log_debug("The interface %s is invalid as it contains special character", strnull(iface));
+                                }
                                 return false;
+                        }
 
                         dot = false;
                 }
@@ -314,13 +320,9 @@ char *bus_address_escape(const char *v) {
 int bus_maybe_reply_error(sd_bus_message *m, int r, sd_bus_error *error) {
         assert(m);
 
-        if (r < 0) {
+        if (sd_bus_error_is_set(error) || r < 0) {
                 if (m->header->type == SD_BUS_MESSAGE_METHOD_CALL)
                         sd_bus_reply_method_errno(m, r, error);
-
-        } else if (sd_bus_error_is_set(error)) {
-                if (m->header->type == SD_BUS_MESSAGE_METHOD_CALL)
-                        sd_bus_reply_method_error(m, error);
         } else
                 return r;
 

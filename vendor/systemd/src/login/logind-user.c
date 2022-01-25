@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <unistd.h>
@@ -19,11 +19,12 @@
 #include "label.h"
 #include "limits-util.h"
 #include "logind-dbus.h"
-#include "logind-user.h"
 #include "logind-user-dbus.h"
+#include "logind-user.h"
 #include "mkdir.h"
 #include "parse-util.h"
 #include "path-util.h"
+#include "percent-util.h"
 #include "rm-rf.h"
 #include "serialize.h"
 #include "special.h"
@@ -475,7 +476,7 @@ int user_start(User *u) {
         return 0;
 }
 
-static void user_stop_service(User *u) {
+static void user_stop_service(User *u, bool force) {
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         int r;
 
@@ -487,7 +488,7 @@ static void user_stop_service(User *u) {
 
         u->service_job = mfree(u->service_job);
 
-        r = manager_stop_unit(u->manager, u->service, &error, &u->service_job);
+        r = manager_stop_unit(u->manager, u->service, force ? "replace" : "fail", &error, &u->service_job);
         if (r < 0)
                 log_warning_errno(r, "Failed to stop user service '%s', ignoring: %s", u->service, bus_error_message(&error, r));
 }
@@ -518,7 +519,7 @@ int user_stop(User *u, bool force) {
                         r = k;
         }
 
-        user_stop_service(u);
+        user_stop_service(u, force);
 
         u->stopping = true;
 
@@ -907,9 +908,9 @@ int config_parse_tmpfs_size(
         assert(data);
 
         /* First, try to parse as percentage */
-        r = parse_permille(rvalue);
-        if (r > 0 && r < 1000)
-                *sz = physical_memory_scale(r, 1000U);
+        r = parse_permyriad(rvalue);
+        if (r > 0)
+                *sz = physical_memory_scale(r, 10000U);
         else {
                 uint64_t k;
 
@@ -919,7 +920,7 @@ int config_parse_tmpfs_size(
                 if (r >= 0 && (k <= 0 || (uint64_t) (size_t) k != k))
                         r = -ERANGE;
                 if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r, "Failed to parse size value '%s', ignoring: %m", rvalue);
+                        log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to parse size value '%s', ignoring: %m", rvalue);
                         return 0;
                 }
 

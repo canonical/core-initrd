@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include "macro.h"
@@ -169,3 +169,18 @@
 
 #define LIST_IS_EMPTY(head)                                             \
         (!(head))
+
+/* Join two lists tail to head: a->b, c->d to a->b->c->d and de-initialise second list */
+#define LIST_JOIN(name,a,b)                                             \
+        do {                                                            \
+                assert(b);                                              \
+                if (!(a))                                               \
+                        (a) = (b);                                      \
+                else {                                                  \
+                        typeof(*(a)) *_head = (b), *_tail;              \
+                        LIST_FIND_TAIL(name, (a), _tail);               \
+                        _tail->name##_next = _head;                     \
+                        _head->name##_prev = _tail;                     \
+                }                                                       \
+                (b) = NULL;                                             \
+        } while (false)

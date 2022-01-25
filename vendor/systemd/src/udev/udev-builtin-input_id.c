@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0+ */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * expose input properties via udev
  *
@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <linux/limits.h>
 
@@ -35,7 +34,7 @@ struct range {
         unsigned end;
 };
 
-/* key code ranges above BTN_MISC (start is inclusive, stop is exclusive)*/
+/* key code ranges above BTN_MISC (start is inclusive, stop is exclusive) */
 static const struct range high_key_blocks[] = {
         { KEY_OK, BTN_DPAD_UP },
         { KEY_ALS_TOGGLE, BTN_TRIGGER_HAPPY }
@@ -83,6 +82,7 @@ static void get_cap_mask(sd_device *pdev, const char* attr,
         unsigned i;
         char* word;
         unsigned long val;
+        int r;
 
         if (sd_device_get_sysattr_value(pdev, attr, &v) < 0)
                 v = "";
@@ -93,16 +93,20 @@ static void get_cap_mask(sd_device *pdev, const char* attr,
         memzero(bitmask, bitmask_size);
         i = 0;
         while ((word = strrchr(text, ' ')) != NULL) {
-                val = strtoul(word+1, NULL, 16);
-                if (i < bitmask_size / sizeof(unsigned long))
+                r = safe_atolu_full(word+1, 16, &val);
+                if (r < 0)
+                        log_device_debug_errno(pdev, r, "Ignoring %s block which failed to parse: %m", attr);
+                else if (i < bitmask_size / sizeof(unsigned long))
                         bitmask[i] = val;
                 else
                         log_device_debug(pdev, "Ignoring %s block %lX which is larger than maximum size", attr, val);
                 *word = '\0';
                 ++i;
         }
-        val = strtoul (text, NULL, 16);
-        if (i < bitmask_size / sizeof(unsigned long))
+        r = safe_atolu_full(text, 16, &val);
+        if (r < 0)
+                log_device_debug_errno(pdev, r, "Ignoring %s block which failed to parse: %m", attr);
+        else if (i < bitmask_size / sizeof(unsigned long))
                 bitmask[i] = val;
         else
                 log_device_debug(pdev, "Ignoring %s block %lX which is larger than maximum size", attr, val);
@@ -154,17 +158,20 @@ static bool test_pointers(sd_device *dev,
         bool has_rel_coordinates = false;
         bool has_mt_coordinates = false;
         bool has_joystick_axes_or_buttons = false;
+        bool has_pad_buttons = false;
         bool is_direct = false;
         bool has_touch = false;
         bool has_3d_coordinates = false;
         bool has_keys = false;
-        bool stylus_or_pen = false;
+        bool has_stylus = false;
+        bool has_pen = false;
         bool finger_but_no_pen = false;
         bool has_mouse_button = false;
         bool is_mouse = false;
         bool is_touchpad = false;
         bool is_touchscreen = false;
         bool is_tablet = false;
+        bool is_tablet_pad = false;
         bool is_joystick = false;
         bool is_accelerometer = false;
         bool is_pointing_stick = false;
@@ -183,7 +190,8 @@ static bool test_pointers(sd_device *dev,
         }
 
         is_pointing_stick = test_bit(INPUT_PROP_POINTING_STICK, bitmask_props);
-        stylus_or_pen = test_bit(BTN_STYLUS, bitmask_key) || test_bit(BTN_TOOL_PEN, bitmask_key);
+        has_stylus = test_bit(BTN_STYLUS, bitmask_key);
+        has_pen = test_bit(BTN_TOOL_PEN, bitmask_key);
         finger_but_no_pen = test_bit(BTN_TOOL_FINGER, bitmask_key) && !test_bit(BTN_TOOL_PEN, bitmask_key);
         for (button = BTN_MOUSE; button < BTN_JOYSTICK && !has_mouse_button; button++)
                 has_mouse_button = test_bit(button, bitmask_key);
@@ -195,6 +203,7 @@ static bool test_pointers(sd_device *dev,
                 has_mt_coordinates = false;
         is_direct = test_bit(INPUT_PROP_DIRECT, bitmask_props);
         has_touch = test_bit(BTN_TOUCH, bitmask_key);
+        has_pad_buttons = test_bit(BTN_0, bitmask_key) && has_stylus && !has_pen;
 
         /* joysticks don't necessarily have buttons; e. g.
          * rudders/pedals are joystick-like, but buttonless; they have
@@ -216,7 +225,7 @@ static bool test_pointers(sd_device *dev,
                 has_joystick_axes_or_buttons = test_bit(axis, bitmask_abs);
 
         if (has_abs_coordinates) {
-                if (stylus_or_pen)
+                if (has_stylus || has_pen)
                         is_tablet = true;
                 else if (finger_but_no_pen && !is_direct)
                         is_touchpad = true;
@@ -228,18 +237,20 @@ static bool test_pointers(sd_device *dev,
                         is_touchscreen = true;
                 else if (has_joystick_axes_or_buttons)
                         is_joystick = true;
-        } else if (has_joystick_axes_or_buttons) {
+        } else if (has_joystick_axes_or_buttons)
                 is_joystick = true;
-        }
 
         if (has_mt_coordinates) {
-                if (stylus_or_pen)
+                if (has_stylus || has_pen)
                         is_tablet = true;
                 else if (finger_but_no_pen && !is_direct)
                         is_touchpad = true;
                 else if (has_touch || is_direct)
                         is_touchscreen = true;
         }
+
+        if (is_tablet && has_pad_buttons)
+                is_tablet_pad = true;
 
         if (!is_tablet && !is_touchpad && !is_joystick &&
             has_mouse_button &&
@@ -263,6 +274,8 @@ static bool test_pointers(sd_device *dev,
                 udev_builtin_add_property(dev, test, "ID_INPUT_JOYSTICK", "1");
         if (is_tablet)
                 udev_builtin_add_property(dev, test, "ID_INPUT_TABLET", "1");
+        if (is_tablet_pad)
+                udev_builtin_add_property(dev, test, "ID_INPUT_TABLET_PAD", "1");
 
         return is_tablet || is_mouse || is_touchpad || is_touchscreen || is_joystick || is_pointing_stick;
 }

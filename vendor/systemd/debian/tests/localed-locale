@@ -9,15 +9,14 @@ else
     LOCALE_CONF=/etc/default/locale
 fi
 
-if ! ORIG_LOC=`grep -v '^#' $LOCALE_CONF 2>/dev/null`; then
-    # set up for a minimal unconfigured system
-    if [ -e /etc/locale.gen ]; then
-        echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-    fi
-    locale-gen en_US.UTF-8
-    ORIG_LOC='LANG="en_US.UTF-8"'
-    echo "$ORIG_LOC" > $LOCALE_CONF
+if [ -f "$LOCALE_CONF" ]; then
+    cp "$LOCALE_CONF" "${LOCALE_CONF}.orig"
 fi
+
+# ensure tested locale exist
+mv /etc/locale.gen /etc/locale.gen.orig
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+locale-gen en_US.UTF-8
 
 if ! [ -e /etc/default/keyboard ]; then
     /bin/echo -e 'XKBMODEL=us\nXKBLAYOUT=pc105' > /etc/default/keyboard
@@ -32,11 +31,33 @@ sync
 assert_eq "`cat $LOCALE_CONF`" "LANG=C
 LC_CTYPE=en_US.UTF-8"
 
-! [ -f /etc/locale.conf ]
+if [ -z "$TEST_UPSTREAM" ]; then
+    ! [ -f /etc/locale.conf ]
+fi
 
 STATUS=`localectl`
 assert_in "System Locale: LANG=C" "$STATUS"
 assert_in "LC_CTYPE=en_US.UTF-8" "$STATUS"
 
+# test if localed auto-runs locale-gen
+
+# ensure tested locale does not exist
+assert_rc 1 validlocale de_DE.UTF-8 2>&1
+
+# change locale
+assert_eq "`localectl --no-pager set-locale de_DE.UTF-8 2>&1`" ""
+sync
+assert_eq "`cat $LOCALE_CONF`" "LANG=de_DE.UTF-8
+LC_CTYPE=en_US.UTF-8"
+
+# ensure tested locale exists and works now
+assert_rc 0 validlocale de_DE.UTF-8 2>&1
+
 # reset locale to original
-echo "$ORIG_LOC" > $LOCALE_CONF
+if [ -f "${LOCALE_CONF}.orig" ]; then
+    mv "${LOCALE_CONF}.orig" "$LOCALE_CONF"
+else
+    rm "$LOCALE_CONF"
+fi
+mv /etc/locale.gen.orig /etc/locale.gen
+locale-gen

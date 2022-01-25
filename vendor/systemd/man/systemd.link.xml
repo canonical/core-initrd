@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="systemd.link">
   <refentryinfo>
@@ -27,28 +27,36 @@
     <title>Description</title>
 
     <para>A plain ini-style text file that encodes configuration for matching network devices, used by
-    <citerefentry><refentrytitle>systemd-udev</refentrytitle><manvolnum>8</manvolnum></citerefentry> and in
+    <citerefentry><refentrytitle>systemd-udevd</refentrytitle><manvolnum>8</manvolnum></citerefentry> and in
     particular its <command>net_setup_link</command> builtin. See
-    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>5</manvolnum></citerefentry> for a
+    <citerefentry><refentrytitle>systemd.syntax</refentrytitle><manvolnum>7</manvolnum></citerefentry> for a
     general description of the syntax.</para>
 
-    <para>The link files are read from the files located in the system
-    network directory <filename>/usr/lib/systemd/network</filename>,
-    the volatile runtime network directory
-    <filename>/run/systemd/network</filename>, and the local
-    administration network directory
-    <filename>/etc/systemd/network</filename>. Link files must have
-    the extension <filename>.link</filename>; other extensions are
-    ignored. All link files are collectively sorted and processed in
-    lexical order, regardless of the directories in which they live.
-    However, files with identical filenames replace each other. Files
-    in <filename>/etc</filename> have the highest priority, files in
-    <filename>/run</filename> take precedence over files with the same
-    name in <filename>/usr/lib</filename>. This can be used to
-    override a system-supplied link file with a local file if needed.
-    As a special case, an empty file (file size 0) or symlink with the
-    same name pointing to <filename>/dev/null</filename> disables the
-    configuration file entirely (it is "masked").</para>
+    <para>The link files are read from the files located in the system network directory
+    <filename>/usr/lib/systemd/network</filename>, the volatile runtime network directory
+    <filename>/run/systemd/network</filename>, and the local administration network directory
+    <filename>/etc/systemd/network</filename>. Link files must have the extension
+    <filename>.link</filename>; other extensions are ignored. All link files are collectively sorted
+    and processed in lexical order, regardless of the directories in which they live. However, files
+    with identical filenames replace each other. Files in <filename>/etc/</filename> have the highest
+    priority, files in <filename>/run/</filename> take precedence over files with the same name in
+    <filename>/usr/lib/</filename>. This can be used to override a system-supplied link file with a
+    local file if needed. As a special case, an empty file (file size 0) or symlink with the same name
+    pointing to <filename>/dev/null</filename> disables the configuration file entirely (it is
+    "masked").</para>
+
+    <para>Along with the link file <filename>foo.link</filename>, a "drop-in" directory
+    <filename>foo.link.d/</filename> may exist. All files with the suffix <literal>.conf</literal>
+    from this directory will be merged in the alphanumeric order and parsed after the main file itself
+    has been parsed. This is useful to alter or add configuration settings, without having to modify
+    the main configuration file. Each drop-in file must have appropriate section headers.</para>
+
+    <para>In addition to <filename>/etc/systemd/network</filename>, drop-in <literal>.d</literal>
+    directories can be placed in <filename>/usr/lib/systemd/network</filename> or
+    <filename>/run/systemd/network</filename> directories. Drop-in files in <filename>/etc/</filename>
+    take precedence over those in <filename>/run/</filename> which in turn take precedence over those
+    in <filename>/usr/lib/</filename>. Drop-in files under any of these directories take precedence
+    over the main link file wherever located.</para>
 
     <para>The link file contains a [Match] section, which determines if a given link file may be applied to a
     given device, as well as a [Link] section specifying how the device should be configured. The first (in
@@ -64,8 +72,8 @@
     <title>[Match] Section Options</title>
 
     <para>A link file is said to match a device if all matches specified by the
-    <literal>[Match]</literal> section are satisfied. When a link file does not contain valid settings
-    in <literal>[Match]</literal> section, then the file will match all devices and
+    [Match] section are satisfied. When a link file does not contain valid settings
+    in [Match] section, then the file will match all devices and
     <command>systemd-udevd</command> warns about that. Hint: to avoid the warning and to make it clear
     that all interfaces shall be matched, add the following:
     <programlisting>OriginalName=*</programlisting>
@@ -125,7 +133,10 @@
         <term><varname>Type=</varname></term>
         <listitem>
           <para>A whitespace-separated list of shell-style globs matching the device type, as exposed by
-          <command>networkctl status</command>. If the list is prefixed with a "!", the test is inverted.
+          <command>networkctl list</command>. If the list is prefixed with a "!", the test is inverted.
+          Some valid values are <literal>ether</literal>, <literal>loopback</literal>, <literal>wlan</literal>, <literal>wwan</literal>.
+          Valid types are named either from the udev <literal>DEVTYPE</literal> attribute, or
+          <literal>ARPHRD_</literal> macros in <filename>linux/if_arp.h</filename>, so this is not comprehensive.
           </para>
         </listitem>
       </varlistentry>
@@ -133,7 +144,7 @@
       <varlistentry id='property'>
         <term><varname>Property=</varname></term>
         <listitem>
-          <para>A whitespace-separated list of udev property name with its value after a equal
+          <para>A whitespace-separated list of udev property names with their values after equals sign
           (<literal>=</literal>). If multiple properties are specified, the test results are ANDed.
           If the list is prefixed with a "!", the test is inverted. If a value contains white
           spaces, then please quote whole key and value pair. If a value contains quotation, then
@@ -214,6 +225,18 @@
           </para>
         </listitem>
       </varlistentry>
+
+      <varlistentry id='firmware'>
+        <term><varname>Firmware=</varname></term>
+        <listitem>
+          <para>Checks whether the system is running on a machine with the specified firmware. See
+          <varname>ConditionFirmware=</varname> in
+          <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+          for details. When prefixed with an exclamation mark (<literal>!</literal>), the result is negated.
+          If an empty string is assigned, then previously assigned value is cleared.
+          </para>
+        </listitem>
+      </varlistentry>
     </variablelist>
 
   </refsect1>
@@ -273,18 +296,21 @@
             <varlistentry>
               <term><option>none</option></term>
               <listitem>
-                <para>Keeps the MAC address assigned by the kernel.</para>
+                <para>Keeps the MAC address assigned by the kernel. Or use the MAC address specified in
+                <varname>MACAddress=</varname>.</para>
               </listitem>
             </varlistentry>
           </variablelist>
+
+          <para>An empty string assignment is equivalent to setting <literal>none</literal>.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
         <term><varname>MACAddress=</varname></term>
         <listitem>
-          <para>The MAC address to use, if no
-          <varname>MACAddressPolicy=</varname>
-          is specified.</para>
+          <para>The interface MAC address to use. For this setting to take effect,
+          <varname>MACAddressPolicy=</varname> must either be unset, empty, or <literal>none</literal>.
+          </para>
         </listitem>
       </varlistentry>
       <varlistentry>
@@ -407,10 +433,31 @@
         </listitem>
       </varlistentry>
       <varlistentry>
+        <term><varname>TransmitQueues=</varname></term>
+        <listitem>
+          <para>Specifies the device's number of transmit queues. An integer in the range 1…4096.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>ReceiveQueues=</varname></term>
+        <listitem>
+          <para>Specifies the device's number of receive queues. An integer in the range 1…4096.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TransmitQueueLength=</varname></term>
+        <listitem>
+          <para>Specifies the transmit queue length of the device in number of packets. An unsigned integer
+          in the range 0…4294967294. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
         <term><varname>MTUBytes=</varname></term>
         <listitem>
           <para>The maximum transmission unit in bytes to set for the
-          device. The usual suffixes K, M, G, are supported and are
+          device. The usual suffixes K, M, G are supported and are
           understood to the base of 1024.</para>
         </listitem>
       </varlistentry>
@@ -418,7 +465,7 @@
         <term><varname>BitsPerSecond=</varname></term>
         <listitem>
           <para>The speed to set for the device, the value is rounded
-          down to the nearest Mbps. The usual suffixes K, M, G, are
+          down to the nearest Mbps. The usual suffixes K, M, G are
           supported and are understood to the base of 1000.</para>
         </listitem>
       </varlistentry>
@@ -445,8 +492,9 @@
       <varlistentry>
         <term><varname>WakeOnLan=</varname></term>
         <listitem>
-          <para>The Wake-on-LAN policy to set for the device. The
-          supported values are:</para>
+          <para>The Wake-on-LAN policy to set for the device. Takes the special value
+          <literal>off</literal> which disables Wake-on-LAN, or space separated list of the following
+          words:</para>
 
           <variablelist>
             <varlistentry>
@@ -493,15 +541,11 @@
                 </para>
               </listitem>
             </varlistentry>
-            <varlistentry>
-              <term><option>off</option></term>
-              <listitem>
-                <para>Never wake.</para>
-              </listitem>
-            </varlistentry>
           </variablelist>
 
-          <para>Defaults to <option>off</option>.</para>
+          <para>Defaults to unset, and the device's default will be used. This setting can be specified
+          multiple times. If an empty string is assigned, then the all previous assignments are
+          cleared.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
@@ -618,49 +662,49 @@
       <varlistentry>
         <term><varname>ReceiveChecksumOffload=</varname></term>
         <listitem>
-          <para>Takes a boolean. If set to true, the hardware offload for checksumming of ingress
+          <para>Takes a boolean. If set to true, hardware offload for checksumming of ingress
           network packets is enabled. When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
         <term><varname>TransmitChecksumOffload=</varname></term>
         <listitem>
-          <para>Takes a boolean. If set to true, the hardware offload for checksumming of egress
+          <para>Takes a boolean. If set to true, hardware offload for checksumming of egress
           network packets is enabled. When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
         <term><varname>TCPSegmentationOffload=</varname></term>
         <listitem>
-          <para>Takes a boolean. If set to true, the TCP Segmentation Offload (TSO) is enabled.
+          <para>Takes a boolean. If set to true, TCP Segmentation Offload (TSO) is enabled.
           When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
        <varlistentry>
       <term><varname>TCP6SegmentationOffload=</varname></term>
         <listitem>
-          <para>Takes a boolean. If set to true, the TCP6 Segmentation Offload (tx-tcp6-segmentation) is enabled.
+          <para>Takes a boolean. If set to true, TCP6 Segmentation Offload (tx-tcp6-segmentation) is enabled.
           When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
         <term><varname>GenericSegmentationOffload=</varname></term>
         <listitem>
-          <para>Takes a boolean. If set to true, the Generic Segmentation Offload (GSO) is enabled.
+          <para>Takes a boolean. If set to true, Generic Segmentation Offload (GSO) is enabled.
           When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
         <term><varname>GenericReceiveOffload=</varname></term>
         <listitem>
-          <para>Takes a boolean. If set to true, the Generic Receive Offload (GRO) is enabled.
+          <para>Takes a boolean. If set to true, Generic Receive Offload (GRO) is enabled.
           When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
         <term><varname>LargeReceiveOffload=</varname></term>
         <listitem>
-          <para>Takes a boolean. If set to true, the Large Receive Offload (LRO) is enabled.
+          <para>Takes a boolean. If set to true, Large Receive Offload (LRO) is enabled.
           When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
@@ -691,13 +735,69 @@
       <varlistentry>
         <term><varname>RxBufferSize=</varname></term>
         <listitem>
-          <para>Takes a integer. Specifies the NIC receive ring buffer size. When unset, the kernel's default will be used.</para>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC receive buffer.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxMiniBufferSize=</varname></term>
+        <listitem>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC mini receive buffer.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxJumboBufferSize=</varname></term>
+        <listitem>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC jumbo receive buffer.
+          When unset, the kernel's default will be used.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
         <term><varname>TxBufferSize=</varname></term>
         <listitem>
-          <para>Takes a integer. Specifies the NIC transmit ring buffer size. When unset, the kernel's default will be used.</para>
+          <para>Takes an integer. Specifies the maximum number of pending packets in the NIC transmit buffer.
+          When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>RxFlowControl=</varname></term>
+        <listitem>
+          <para>Takes a boolean. When set, enables receive flow control, also known as the ethernet
+          receive PAUSE message (generate and send ethernet PAUSE frames). When unset, the kernel's
+          default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TxFlowControl=</varname></term>
+        <listitem>
+          <para>Takes a boolean. When set, enables transmit flow control, also known as the ethernet
+          transmit PAUSE message (respond to received ethernet PAUSE frames). When unset, the kernel's
+          default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>AutoNegotiationFlowControl=</varname></term>
+        <listitem>
+          <para>Takes a boolean. When set, auto negotiation enables the interface to exchange state
+          advertisements with the connected peer so that the two devices can agree on the ethernet
+          PAUSE configuration. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>GenericSegmentOffloadMaxBytes=</varname></term>
+        <listitem>
+          <para>Specifies the maximum size of a Generic Segment Offload (GSO) packet the
+          device should accept. The usual suffixes K, M, G are supported and are
+          understood to the base of 1024. An unsigned integer in the range 1…65536.
+          Defaults to unset.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>GenericSegmentOffloadMaxSegments=</varname></term>
+        <listitem>
+          <para>Specifies the maximum number of Generic Segment Offload (GSO) segments the device should
+          accept. An unsigned integer in the range 1…65535. Defaults to unset.</para>
         </listitem>
       </varlistentry>
 

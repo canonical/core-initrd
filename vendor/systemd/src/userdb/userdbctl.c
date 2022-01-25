@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <getopt.h>
 #include <utmp.h>
@@ -8,9 +8,9 @@
 #include "fd-util.h"
 #include "format-table.h"
 #include "format-util.h"
-#include "group-record-show.h"
 #include "main-func.h"
 #include "pager.h"
+#include "parse-argument.h"
 #include "parse-util.h"
 #include "pretty-print.h"
 #include "socket-util.h"
@@ -26,7 +26,7 @@ static enum {
         OUTPUT_TABLE,
         OUTPUT_FRIENDLY,
         OUTPUT_JSON,
-        _OUTPUT_INVALID = -1
+        _OUTPUT_INVALID = -EINVAL,
 } arg_output = _OUTPUT_INVALID;
 
 static PagerFlags arg_pager_flags = 0;
@@ -85,7 +85,7 @@ static int show_user(UserRecord *ur, Table *table) {
                                 TABLE_STRING, user_record_shell(ur),
                                 TABLE_INT, (int) user_record_disposition(ur));
                 if (r < 0)
-                        return log_error_errno(r, "Failed to add row to table: %m");
+                        return table_log_add_error(r);
 
                 break;
 
@@ -112,8 +112,8 @@ static int display_user(int argc, char *argv[], void *userdata) {
                 (void) table_set_align_percent(table, table_get_cell(table, 0, 2), 100);
                 (void) table_set_align_percent(table, table_get_cell(table, 0, 3), 100);
                 (void) table_set_empty_string(table, "-");
-                (void) table_set_sort(table, (size_t) 7, (size_t) 2, (size_t) -1);
-                (void) table_set_display(table, (size_t) 0, (size_t) 1, (size_t) 2, (size_t) 3, (size_t) 4, (size_t) 5, (size_t) 6, (size_t) -1);
+                (void) table_set_sort(table, (size_t) 7, (size_t) 2);
+                (void) table_set_display(table, (size_t) 0, (size_t) 1, (size_t) 2, (size_t) 3, (size_t) 4, (size_t) 5, (size_t) 6);
         }
 
         if (argc > 1) {
@@ -180,7 +180,7 @@ static int display_user(int argc, char *argv[], void *userdata) {
         if (table) {
                 r = table_print(table, NULL);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to show table: %m");
+                        return table_log_print_error(r);
         }
 
         return ret;
@@ -232,14 +232,15 @@ static int show_group(GroupRecord *gr, Table *table) {
                                 TABLE_STRING, gr->group_name,
                                 TABLE_STRING, user_disposition_to_string(group_record_disposition(gr)),
                                 TABLE_GID, gr->gid,
+                                TABLE_STRING, gr->description,
                                 TABLE_INT, (int) group_record_disposition(gr));
                 if (r < 0)
-                        return log_error_errno(r, "Failed to add row to table: %m");
+                        return table_log_add_error(r);
 
                 break;
 
         default:
-                assert_not_reached("Unexpected disply mode");
+                assert_not_reached("Unexpected display mode");
         }
 
         return 0;
@@ -255,13 +256,14 @@ static int display_group(int argc, char *argv[], void *userdata) {
                 arg_output = argc > 1 ? OUTPUT_FRIENDLY : OUTPUT_TABLE;
 
         if (arg_output == OUTPUT_TABLE) {
-                table = table_new("name", "disposition", "gid", "disposition-numeric");
+                table = table_new("name", "disposition", "gid", "description", "disposition-numeric");
                 if (!table)
                         return log_oom();
 
                 (void) table_set_align_percent(table, table_get_cell(table, 0, 2), 100);
-                (void) table_set_sort(table, (size_t) 3, (size_t) 2, (size_t) -1);
-                (void) table_set_display(table, (size_t) 0, (size_t) 1, (size_t) 2, (size_t) -1);
+                (void) table_set_empty_string(table, "-");
+                (void) table_set_sort(table, (size_t) 3, (size_t) 2);
+                (void) table_set_display(table, (size_t) 0, (size_t) 1, (size_t) 2, (size_t) 3);
         }
 
         if (argc > 1) {
@@ -330,7 +332,7 @@ static int display_group(int argc, char *argv[], void *userdata) {
         if (table) {
                 r = table_print(table, NULL);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to show table: %m");
+                        return table_log_print_error(r);
         }
 
         return ret;
@@ -377,7 +379,7 @@ static int show_membership(const char *user, const char *group, Table *table) {
                                 TABLE_STRING, user,
                                 TABLE_STRING, group);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to add row to table: %m");
+                        return table_log_add_error(r);
 
                 break;
 
@@ -400,7 +402,7 @@ static int display_memberships(int argc, char *argv[], void *userdata) {
                 if (!table)
                         return log_oom();
 
-                (void) table_set_sort(table, (size_t) 0, (size_t) 1, (size_t) -1);
+                (void) table_set_sort(table, (size_t) 0, (size_t) 1);
         }
 
         if (argc > 1) {
@@ -463,7 +465,7 @@ static int display_memberships(int argc, char *argv[], void *userdata) {
         if (table) {
                 r = table_print(table, NULL);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to show table: %m");
+                        return table_log_print_error(r);
         }
 
         return ret;
@@ -489,7 +491,7 @@ static int display_services(int argc, char *argv[], void *userdata) {
         if (!t)
                 return log_oom();
 
-        (void) table_set_sort(t, (size_t) 0, (size_t) -1);
+        (void) table_set_sort(t, (size_t) 0);
 
         FOREACH_DIRENT(de, d, return -errno) {
                 _cleanup_free_ char *j = NULL, *no = NULL;
@@ -521,7 +523,7 @@ static int display_services(int argc, char *argv[], void *userdata) {
                                    TABLE_STRING, no ?: "yes",
                                    TABLE_SET_COLOR, no ? ansi_highlight_red() : ansi_highlight_green());
                 if (r < 0)
-                        return log_error_errno(r, "Failed to add table row: %m");
+                        return table_log_add_error(r);
         }
 
         if (table_get_rows(t) <= 0) {
@@ -541,16 +543,15 @@ static int ssh_authorized_keys(int argc, char *argv[], void *userdata) {
         _cleanup_(user_record_unrefp) UserRecord *ur = NULL;
         int r;
 
-        if (!valid_user_group_name(argv[1]))
-                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Invalid user name '%s'.", argv[1]);
-
         r = userdb_by_name(argv[1], arg_userdb_flags, &ur);
         if (r == -ESRCH)
-                log_error_errno(r, "User %s does not exist.", argv[1]);
+                return log_error_errno(r, "User %s does not exist.", argv[1]);
         else if (r == -EHOSTDOWN)
-                log_error_errno(r, "Selected user database service is not available for this request.");
+                return log_error_errno(r, "Selected user database service is not available for this request.");
+        else if (r == -EINVAL)
+                return log_error_errno(r, "Failed to find user %s: %m (Invalid user name?)", argv[1]);
         else if (r < 0)
-                log_error_errno(r, "Failed to find user %s: %m", argv[1]);
+                return log_error_errno(r, "Failed to find user %s: %m", argv[1]);
 
         if (strv_isempty(ur->ssh_authorized_keys))
                 log_debug("User record for %s has no public SSH keys.", argv[1]);
@@ -582,29 +583,31 @@ static int help(int argc, char *argv[], void *userdata) {
         printf("%s [OPTIONS...] COMMAND ...\n\n"
                "%sShow user and group information.%s\n"
                "\nCommands:\n"
-               "  user [USER…]                Inspect user\n"
-               "  group [GROUP…]              Inspect group\n"
-               "  users-in-group [GROUP…]     Show users that are members of specified group(s)\n"
-               "  groups-of-user [USER…]      Show groups the specified user(s) is a member of\n"
-               "  services                    Show enabled database services\n"
+               "  user [USER…]               Inspect user\n"
+               "  group [GROUP…]             Inspect group\n"
+               "  users-in-group [GROUP…]    Show users that are members of specified group(s)\n"
+               "  groups-of-user [USER…]     Show groups the specified user(s) is a member of\n"
+               "  services                   Show enabled database services\n"
                "\nOptions:\n"
-               "  -h --help                   Show this help\n"
-               "     --version                Show package version\n"
-               "     --no-pager               Do not pipe output into a pager\n"
-               "     --no-legend              Do not show the headers and footers\n"
-               "     --output=MODE            Select output mode (classic, friendly, table, json)\n"
-               "  -j                          Equivalent to --output=json\n"
+               "  -h --help                  Show this help\n"
+               "     --version               Show package version\n"
+               "     --no-pager              Do not pipe output into a pager\n"
+               "     --no-legend             Do not show the headers and footers\n"
+               "     --output=MODE           Select output mode (classic, friendly, table, json)\n"
+               "  -j                         Equivalent to --output=json\n"
                "  -s --service=SERVICE[:SERVICE…]\n"
-               "                              Query the specified service\n"
-               "     --with-nss=BOOL          Control whether to include glibc NSS data\n"
-               "  -N                          Disable inclusion of glibc NSS data and disable synthesizing\n"
-               "                              (Same as --with-nss=no --synthesize=no)\n"
-               "     --synthesize=BOOL        Synthesize root/nobody user\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , ansi_highlight(), ansi_normal()
-               , link
-        );
+               "                             Query the specified service\n"
+               "     --with-nss=BOOL         Control whether to include glibc NSS data\n"
+               "  -N                         Do not synthesize or include glibc NSS data\n"
+               "                             (Same as --synthesize=no --with-nss=no)\n"
+               "     --synthesize=BOOL       Synthesize root/nobody user\n"
+               "     --with-dropin=BOOL      Control whether to include drop-in records\n"
+               "     --with-varlink=BOOL     Control whether to talk to services at all\n"
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               ansi_highlight(),
+               ansi_normal(),
+               link);
 
         return 0;
 }
@@ -617,18 +620,22 @@ static int parse_argv(int argc, char *argv[]) {
                 ARG_NO_LEGEND,
                 ARG_OUTPUT,
                 ARG_WITH_NSS,
+                ARG_WITH_DROPIN,
+                ARG_WITH_VARLINK,
                 ARG_SYNTHESIZE,
         };
 
         static const struct option options[] = {
-                { "help",       no_argument,       NULL, 'h'            },
-                { "version",    no_argument,       NULL, ARG_VERSION    },
-                { "no-pager",   no_argument,       NULL, ARG_NO_PAGER   },
-                { "no-legend",  no_argument,       NULL, ARG_NO_LEGEND  },
-                { "output",     required_argument, NULL, ARG_OUTPUT     },
-                { "service",    required_argument, NULL, 's'            },
-                { "with-nss",   required_argument, NULL, ARG_WITH_NSS   },
-                { "synthesize", required_argument, NULL, ARG_SYNTHESIZE },
+                { "help",         no_argument,       NULL, 'h'             },
+                { "version",      no_argument,       NULL, ARG_VERSION     },
+                { "no-pager",     no_argument,       NULL, ARG_NO_PAGER    },
+                { "no-legend",    no_argument,       NULL, ARG_NO_LEGEND   },
+                { "output",       required_argument, NULL, ARG_OUTPUT      },
+                { "service",      required_argument, NULL, 's'             },
+                { "with-nss",     required_argument, NULL, ARG_WITH_NSS    },
+                { "with-dropin",  required_argument, NULL, ARG_WITH_DROPIN },
+                { "with-varlink", required_argument, NULL, ARG_WITH_VARLINK },
+                { "synthesize",   required_argument, NULL, ARG_SYNTHESIZE  },
                 {}
         };
 
@@ -686,7 +693,8 @@ static int parse_argv(int argc, char *argv[]) {
                         else if (streq(optarg, "help")) {
                                 puts("classic\n"
                                      "friendly\n"
-                                     "json");
+                                     "json\n"
+                                     "table");
                                 return 0;
                         } else
                                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Invalid --output= mode: %s", optarg);
@@ -715,21 +723,37 @@ static int parse_argv(int argc, char *argv[]) {
                         break;
 
                 case 'N':
-                        arg_userdb_flags |= USERDB_AVOID_NSS|USERDB_DONT_SYNTHESIZE;
+                        arg_userdb_flags |= USERDB_EXCLUDE_NSS|USERDB_DONT_SYNTHESIZE;
                         break;
 
                 case ARG_WITH_NSS:
-                        r = parse_boolean(optarg);
+                        r = parse_boolean_argument("--with-nss=", optarg, NULL);
                         if (r < 0)
-                                return log_error_errno(r, "Failed to parse --with-nss= parameter: %s", optarg);
+                                return r;
 
-                        SET_FLAG(arg_userdb_flags, USERDB_AVOID_NSS, !r);
+                        SET_FLAG(arg_userdb_flags, USERDB_EXCLUDE_NSS, !r);
+                        break;
+
+                case ARG_WITH_DROPIN:
+                        r = parse_boolean_argument("--with-dropin=", optarg, NULL);
+                        if (r < 0)
+                                return r;
+
+                        SET_FLAG(arg_userdb_flags, USERDB_EXCLUDE_DROPIN, !r);
+                        break;
+
+                case ARG_WITH_VARLINK:
+                        r = parse_boolean_argument("--with-varlink=", optarg, NULL);
+                        if (r < 0)
+                                return r;
+
+                        SET_FLAG(arg_userdb_flags, USERDB_EXCLUDE_VARLINK, !r);
                         break;
 
                 case ARG_SYNTHESIZE:
-                        r = parse_boolean(optarg);
+                        r = parse_boolean_argument("--synthesize=", optarg, NULL);
                         if (r < 0)
-                                return log_error_errno(r, "Failed to parse --synthesize= parameter: %s", optarg);
+                                return r;
 
                         SET_FLAG(arg_userdb_flags, USERDB_DONT_SYNTHESIZE, !r);
                         break;
@@ -762,9 +786,7 @@ static int run(int argc, char *argv[]) {
 
         int r;
 
-        log_show_color(true);
-        log_parse_environment();
-        log_open();
+        log_setup();
 
         r = parse_argv(argc, argv);
         if (r <= 0)
@@ -781,10 +803,8 @@ static int run(int argc, char *argv[]) {
                         return log_error_errno(r, "Failed to set $SYSTEMD_ONLY_USERDB: %m");
 
                 log_info("Enabled services: %s", e);
-        } else {
-                if (unsetenv("SYSTEMD_ONLY_USERDB") < 0)
-                        return log_error_errno(r, "Failed to unset $SYSTEMD_ONLY_USERDB: %m");
-        }
+        } else
+                assert_se(unsetenv("SYSTEMD_ONLY_USERDB") == 0);
 
         return dispatch_verb(argc, argv, verbs, NULL);
 }

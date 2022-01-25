@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "dirent-util.h"
 #include "fd-util.h"
@@ -28,7 +28,7 @@ int home_prepare_cifs(
                 char **pw;
                 int r;
 
-                r = home_unshare_and_mount(NULL, NULL, false);
+                r = home_unshare_and_mount(NULL, NULL, false, user_record_mount_flags(h));
                 if (r < 0)
                         return r;
 
@@ -58,8 +58,8 @@ int home_prepare_cifs(
 
                         f = safe_fclose(f);
 
-                        if (asprintf(&options, "credentials=%s,uid=" UID_FMT ",forceuid,gid=" UID_FMT ",forcegid,file_mode=0%3o,dir_mode=0%3o",
-                                     p, h->uid, h->uid, h->access_mode, h->access_mode) < 0)
+                        if (asprintf(&options, "credentials=%s,uid=" UID_FMT ",forceuid,gid=" GID_FMT ",forcegid,file_mode=0%3o,dir_mode=0%3o",
+                                     p, h->uid, user_record_gid(h), user_record_access_mode(h), user_record_access_mode(h)) < 0)
                                 return log_oom();
 
                         r = safe_fork("(mount)", FORK_RESET_SIGNALS|FORK_RLIMIT_NOFILE_SAFE|FORK_DEATHSIG|FORK_LOG|FORK_STDOUT_TO_STDERR, &mount_pid);
@@ -71,7 +71,7 @@ int home_prepare_cifs(
                                       h->cifs_service, "/run/systemd/user-home-mount",
                                       "-o", options, NULL);
 
-                                log_error_errno(errno, "Failed to execute fsck: %m");
+                                log_error_errno(errno, "Failed to execute mount: %m");
                                 _exit(EXIT_FAILURE);
                         }
 
@@ -86,7 +86,8 @@ int home_prepare_cifs(
                 }
 
                 if (!mounted)
-                        return log_error_errno(ENOKEY, "Failed to mount home directory with supplied password.");
+                        return log_error_errno(SYNTHETIC_ERRNO(ENOKEY),
+                                               "Failed to mount home directory with supplied password.");
 
                 setup->root_fd = open("/run/systemd/user-home-mount", O_RDONLY|O_CLOEXEC|O_DIRECTORY|O_NOFOLLOW);
         }
@@ -98,7 +99,7 @@ int home_prepare_cifs(
 
 int home_activate_cifs(
                 UserRecord *h,
-                char ***pkcs11_decrypted_passwords,
+                PasswordCache *cache,
                 UserRecord **ret_home) {
 
         _cleanup_(home_setup_undo) HomeSetup setup = HOME_SETUP_INIT;
@@ -120,7 +121,7 @@ int home_activate_cifs(
         if (r < 0)
                 return r;
 
-        r = home_refresh(h, &setup, NULL, pkcs11_decrypted_passwords, NULL, &new_home);
+        r = home_refresh(h, &setup, NULL, cache, NULL, &new_home);
         if (r < 0)
                 return r;
 
@@ -142,7 +143,8 @@ int home_create_cifs(UserRecord *h, UserRecord **ret_home) {
         _cleanup_(home_setup_undo) HomeSetup setup = HOME_SETUP_INIT;
         _cleanup_(user_record_unrefp) UserRecord *new_home = NULL;
         _cleanup_(closedirp) DIR *d = NULL;
-        int r, copy;
+        _cleanup_close_ int copy = -1;
+        int r;
 
         assert(h);
         assert(user_record_storage(h) == USER_CIFS);
@@ -166,11 +168,9 @@ int home_create_cifs(UserRecord *h, UserRecord **ret_home) {
         if (copy < 0)
                 return -errno;
 
-        d = fdopendir(copy);
-        if (!d) {
-                safe_close(copy);
+        d = take_fdopendir(&copy);
+        if (!d)
                 return -errno;
-        }
 
         errno = 0;
         if (readdir_no_dot(d))
@@ -186,7 +186,7 @@ int home_create_cifs(UserRecord *h, UserRecord **ret_home) {
         if (r < 0)
                 return r;
 
-        r = user_record_clone(h, USER_RECORD_LOAD_MASK_SECRET, &new_home);
+        r = user_record_clone(h, USER_RECORD_LOAD_MASK_SECRET|USER_RECORD_PERMISSIVE, &new_home);
         if (r < 0)
                 return log_error_errno(r, "Failed to clone record: %m");
 

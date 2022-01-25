@@ -11,23 +11,23 @@ Drop it from tmpfiles.d/legacy.conf to not clobber the permissions.
 
 Closes: #751392
 ---
- src/core/mount-setup.c | 2 ++
- tmpfiles.d/legacy.conf | 1 -
+ src/shared/mount-setup.c | 2 ++
+ tmpfiles.d/legacy.conf   | 1 -
  2 files changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/src/core/mount-setup.c b/src/core/mount-setup.c
-index 5dfcb61..d528a4c 100644
---- a/src/core/mount-setup.c
-+++ b/src/core/mount-setup.c
-@@ -84,6 +84,8 @@ static const MountPoint mount_table[] = {
+diff --git a/src/shared/mount-setup.c b/src/shared/mount-setup.c
+index ef3527e..ebea7a2 100644
+--- a/src/shared/mount-setup.c
++++ b/src/shared/mount-setup.c
+@@ -86,6 +86,8 @@ static const MountPoint mount_table[] = {
  #endif
-         { "tmpfs",       "/run",                      "tmpfs",      "mode=755",                MS_NOSUID|MS_NODEV|MS_STRICTATIME,
+         { "tmpfs",       "/run",                      "tmpfs",      "mode=755" TMPFS_LIMITS_RUN,               MS_NOSUID|MS_NODEV|MS_STRICTATIME,
            NULL,          MNT_FATAL|MNT_IN_CONTAINER },
-+        { "tmpfs",       "/run/lock",                 "tmpfs",      "mode=1777,size=5242880",  MS_NOSUID|MS_NODEV|MS_NOEXEC,
++        { "tmpfs",       "/run/lock",                 "tmpfs",      "mode=1777,size=5242880",                  MS_NOSUID|MS_NOEXEC|MS_NODEV,
 +          NULL,          MNT_FATAL|MNT_IN_CONTAINER },
-         { "cgroup2",     "/sys/fs/cgroup",            "cgroup2",    "nsdelegate",              MS_NOSUID|MS_NOEXEC|MS_NODEV,
+         { "cgroup2",     "/sys/fs/cgroup",            "cgroup2",    "nsdelegate,memory_recursiveprot",         MS_NOSUID|MS_NOEXEC|MS_NODEV,
            cg_is_unified_wanted, MNT_IN_CONTAINER|MNT_CHECK_WRITABLE },
-         { "cgroup2",     "/sys/fs/cgroup",            "cgroup2",    NULL,                      MS_NOSUID|MS_NOEXEC|MS_NODEV,
+         { "cgroup2",     "/sys/fs/cgroup",            "cgroup2",    "nsdelegate",                              MS_NOSUID|MS_NOEXEC|MS_NODEV,
 diff --git a/tmpfiles.d/legacy.conf b/tmpfiles.d/legacy.conf
 index 62e2ae0..ea5e735 100644
 --- a/tmpfiles.d/legacy.conf

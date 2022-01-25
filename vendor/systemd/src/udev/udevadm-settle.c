@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0+ */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * Copyright © 2009 Canonical Ltd.
  * Copyright © 2009 Scott James Remnant <scott@netsplit.com>
@@ -14,12 +14,16 @@
 
 #include "sd-bus.h"
 #include "sd-login.h"
+#include "sd-messages.h"
 
-#include "libudev-util.h"
+#include "bus-util.h"
+#include "fd-util.h"
+#include "io-util.h"
 #include "string-util.h"
 #include "strv.h"
 #include "time-util.h"
 #include "udev-ctrl.h"
+#include "udev-util.h"
 #include "udevadm.h"
 #include "unit-def.h"
 #include "util.h"
@@ -34,8 +38,8 @@ static int help(void) {
                "  -h --help                 Show this help\n"
                "  -V --version              Show package version\n"
                "  -t --timeout=SEC          Maximum time to wait for events\n"
-               "  -E --exit-if-exists=FILE  Stop waiting if file exists\n"
-               , program_invocation_short_name);
+               "  -E --exit-if-exists=FILE  Stop waiting if file exists\n",
+               program_invocation_short_name);
 
         return 0;
 }
@@ -86,62 +90,76 @@ static int parse_argv(int argc, char *argv[]) {
 
 static int emit_deprecation_warning(void) {
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
-        _cleanup_free_ char *unit = NULL, *unit_path = NULL;
-        _cleanup_strv_free_ char **a = NULL, **b = NULL;
+        _cleanup_strv_free_ char **a = NULL;
+        _cleanup_free_ char *unit = NULL;
         int r;
 
         r = sd_pid_get_unit(0, &unit);
-        if (r < 0 || !streq(unit, "systemd-udev-settle.service"))
+        if (r < 0) {
+                log_debug_errno(r, "Failed to determine unit we run in, ignoring: %m");
+                return 0;
+        }
+
+        if (!streq(unit, "systemd-udev-settle.service"))
                 return 0;
 
-        log_notice("systemd-udev-settle.service is deprecated.");
-
-        r = sd_bus_open_system(&bus);
+        r = bus_connect_system_systemd(&bus);
         if (r < 0)
-                return log_debug_errno(r, "Failed to open system bus, skipping dependency queries: %m");
+                log_debug_errno(r, "Failed to open connection to systemd, skipping dependency queries: %m");
+        else {
+                _cleanup_strv_free_ char **b = NULL;
+                _cleanup_free_ char *unit_path = NULL;
 
-        unit_path = unit_dbus_path_from_name("systemd-udev-settle.service");
-        if (!unit_path)
-                return -ENOMEM;
+                unit_path = unit_dbus_path_from_name("systemd-udev-settle.service");
+                if (!unit_path)
+                        return -ENOMEM;
 
-        (void) sd_bus_get_property_strv(
-                        bus,
-                        "org.freedesktop.systemd1",
-                        unit_path,
-                        "org.freedesktop.systemd1.Unit",
-                        "WantedBy",
-                        NULL,
-                        &a);
+                (void) sd_bus_get_property_strv(
+                                bus,
+                                "org.freedesktop.systemd1",
+                                unit_path,
+                                "org.freedesktop.systemd1.Unit",
+                                "WantedBy",
+                                NULL,
+                                &a);
 
-        (void) sd_bus_get_property_strv(
-                        bus,
-                        "org.freedesktop.systemd1",
-                        unit_path,
-                        "org.freedesktop.systemd1.Unit",
-                        "RequiredBy",
-                        NULL,
-                        &b);
+                (void) sd_bus_get_property_strv(
+                                bus,
+                                "org.freedesktop.systemd1",
+                                unit_path,
+                                "org.freedesktop.systemd1.Unit",
+                                "RequiredBy",
+                                NULL,
+                                &b);
 
-        r = strv_extend_strv(&a, b, true);
-        if (r < 0)
-                return r;
+                r = strv_extend_strv(&a, b, true);
+                if (r < 0)
+                        return r;
+        }
 
-        if (!strv_isempty(a)) {
+        if (strv_isempty(a))
+                /* Print a simple message if we cannot determine the dependencies */
+                log_notice("systemd-udev-settle.service is deprecated.");
+        else {
+                /* Print a longer, structured message if we can acquire the dependencies (this should be the
+                 * common case). This is hooked up with a catalog entry and everything. */
                 _cleanup_free_ char *t = NULL;
 
                 t = strv_join(a, ", ");
                 if (!t)
                         return -ENOMEM;
 
-                log_notice("Hint: please fix %s not to pull it in.", t);
+                log_struct(LOG_NOTICE,
+                           "MESSAGE=systemd-udev-settle.service is deprecated. Please fix %s not to pull it in.", t,
+                           "OFFENDING_UNITS=%s", t,
+                           "MESSAGE_ID=" SD_MESSAGE_SYSTEMD_UDEV_SETTLE_DEPRECATED_STR);
         }
 
         return 0;
 }
 
 int settle_main(int argc, char *argv[], void *userdata) {
-        _cleanup_(udev_queue_unrefp) struct udev_queue *queue = NULL;
-        struct pollfd pfd;
+        _cleanup_close_ int fd = -1;
         usec_t deadline;
         int r;
 
@@ -173,20 +191,11 @@ int settle_main(int argc, char *argv[], void *userdata) {
                 }
         }
 
-        queue = udev_queue_new(NULL);
-        if (!queue)
-                return log_error_errno(errno, "Failed to get udev queue: %m");
-
-        r = udev_queue_get_fd(queue);
-        if (r < 0) {
-                log_debug_errno(r, "Queue is empty, nothing to watch.");
+        fd = udev_queue_init();
+        if (fd < 0) {
+                log_debug_errno(fd, "Queue is empty, nothing to watch: %m");
                 return 0;
         }
-
-        pfd = (struct pollfd) {
-                .events = POLLIN,
-                .fd = r,
-        };
 
         (void) emit_deprecation_warning();
 
@@ -195,15 +204,21 @@ int settle_main(int argc, char *argv[], void *userdata) {
                         return 0;
 
                 /* exit if queue is empty */
-                if (udev_queue_get_queue_is_empty(queue))
+                r = udev_queue_is_empty();
+                if (r < 0)
+                        return log_error_errno(r, "Failed to check queue is empty: %m");
+                if (r > 0)
                         return 0;
 
                 if (now(CLOCK_MONOTONIC) >= deadline)
                         return -ETIMEDOUT;
 
                 /* wake up when queue becomes empty */
-                if (poll(&pfd, 1, MSEC_PER_SEC) > 0 && pfd.revents & POLLIN) {
-                        r = udev_queue_flush(queue);
+                r = fd_wait_for_event(fd, POLLIN, MSEC_PER_SEC);
+                if (r < 0)
+                        return r;
+                if (r & POLLIN) {
+                        r = flush_fd(fd);
                         if (r < 0)
                                 return log_error_errno(r, "Failed to flush queue: %m");
                 }

@@ -4,4 +4,3 @@
 # to automatically update the kernel by writing at the correct partition
 # (independently of the hardware revision).
 ACTION!="remove", KERNEL=="mmcblk[0-9]p[0-9]", ENV{PARTNAME}=="?*", SYMLINK+="disk/by-partlabel/$env{PARTNAME}"
-

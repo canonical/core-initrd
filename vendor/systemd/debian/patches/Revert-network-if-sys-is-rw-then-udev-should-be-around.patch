@@ -8,60 +8,40 @@ This reverts commit 96d7083c5499b264ecebd6a30a92e0e8fda14cd5.
 
 LP: #1857123
 ---
- src/network/networkd-link.c | 12 ++++++------
- 1 file changed, 6 insertions(+), 6 deletions(-)
+ src/network/networkd-link.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
-index 9b34f00..fafd102 100644
+index 20675f2..bd791e2 100644
 --- a/src/network/networkd-link.c
 +++ b/src/network/networkd-link.c
-@@ -37,7 +37,6 @@
- #include "qdisc.h"
+@@ -56,7 +56,6 @@
+ #include "networkd-wifi.h"
  #include "set.h"
  #include "socket-util.h"
 -#include "stat-util.h"
  #include "stdio-util.h"
  #include "string-table.h"
  #include "strv.h"
-@@ -45,6 +44,7 @@
+@@ -64,6 +63,7 @@
  #include "tmpfile-util.h"
  #include "udev-util.h"
  #include "util.h"
 +#include "virt.h"
  #include "vrf.h"
  
- uint32_t link_get_vrf_table(Link *link) {
-@@ -3512,8 +3512,8 @@ int link_add(Manager *m, sd_netlink_message *message, Link **ret) {
-         if (r < 0)
-                 return r;
+ bool link_ipv4ll_enabled(Link *link) {
+@@ -1433,11 +1433,11 @@ static int link_check_initialized(Link *link) {
  
--        if (path_is_read_only_fs("/sys") <= 0) {
--                /* udev should be around */
-+        if (detect_container() <= 0) {
-+                /* not in a container, udev will be around */
-                 sprintf(ifindex_str, "n%d", link->ifindex);
-                 r = sd_device_new_from_device_id(&device, ifindex_str);
-                 if (r < 0) {
-@@ -3523,7 +3523,7 @@ int link_add(Manager *m, sd_netlink_message *message, Link **ret) {
+         assert(link);
  
-                 r = sd_device_get_is_initialized(device);
-                 if (r < 0) {
--                        log_link_warning_errno(link, r, "Could not determine whether the device is initialized: %m");
-+                        log_link_warning_errno(link, r, "Could not determine whether the device is initialized or not: %m");
-                         goto failed;
-                 }
-                 if (r == 0) {
-@@ -3534,11 +3534,11 @@ int link_add(Manager *m, sd_netlink_message *message, Link **ret) {
+-        if (path_is_read_only_fs("/sys") > 0)
++        if (detect_container() > 0)
+                 /* no udev */
+                 return link_initialized_and_synced(link);
  
-                 r = device_is_renaming(device);
-                 if (r < 0) {
--                        log_link_warning_errno(link, r, "Failed to determine the device is being renamed: %m");
-+                        log_link_warning_errno(link, r, "Failed to determine the device is renamed or not: %m");
-                         goto failed;
-                 }
-                 if (r > 0) {
--                        log_link_debug(link, "Interface is being renamed, pending initialization.");
-+                        log_link_debug(link, "Interface is under renaming, pending initialization.");
-                         return 0;
-                 }
- 
+-        /* udev should be around */
++        /* not in a container, udev will be around */
+         r = sd_device_new_from_ifindex(&device, link->ifindex);
+         if (r < 0) {
+                 log_link_debug_errno(link, r, "Could not find device, waiting for device initialization: %m");

@@ -12,6 +12,8 @@
 .config.args
 .gdb_history
 .deps/
+.mypy_cache/
+__pycache__/
 /*.gcda
 /*.gcno
 /*.tar.bz2
@@ -33,5 +35,7 @@
 /.mkosi-*
 /mkosi.builddir/
 /mkosi.output/
+/mkosi.default
+mkosi.default.d/*
+!mkosi.default.d/10-systemd.conf
 /tags
-__pycache__/

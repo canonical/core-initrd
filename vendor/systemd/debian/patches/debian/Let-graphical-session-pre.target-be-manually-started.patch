@@ -11,7 +11,7 @@ Bug-Ubuntu: https://launchpad.net/bugs/1615341
  1 file changed, 1 deletion(-)
 
 diff --git a/units/user/graphical-session-pre.target b/units/user/graphical-session-pre.target
-index 3adfc5a..c4e1001 100644
+index 4b9e3dc..dffaf85 100644
 --- a/units/user/graphical-session-pre.target
 +++ b/units/user/graphical-session-pre.target
 @@ -12,5 +12,4 @@ Description=Session services which should run early before the graphical session

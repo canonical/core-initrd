@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <linux/if.h>
 #include <unistd.h>
@@ -15,6 +15,7 @@
 #include "resolved-link.h"
 #include "resolved-llmnr.h"
 #include "resolved-mdns.h"
+#include "socket-netlink.h"
 #include "string-util.h"
 #include "strv.h"
 #include "tmpfile-util.h"
@@ -25,10 +26,6 @@ int link_new(Manager *m, Link **ret, int ifindex) {
 
         assert(m);
         assert(ifindex > 0);
-
-        r = hashmap_ensure_allocated(&m->links, NULL);
-        if (r < 0)
-                return r;
 
         l = new(Link, 1);
         if (!l)
@@ -47,7 +44,7 @@ int link_new(Manager *m, Link **ret, int ifindex) {
         if (asprintf(&l->state_file, "/run/systemd/resolve/netif/%i", ifindex) < 0)
                 return -ENOMEM;
 
-        r = hashmap_put(m->links, INT_TO_PTR(ifindex), l);
+        r = hashmap_ensure_put(&m->links, NULL, INT_TO_PTR(ifindex), l);
         if (r < 0)
                 return r;
 
@@ -55,7 +52,7 @@ int link_new(Manager *m, Link **ret, int ifindex) {
 
         if (ret)
                 *ret = l;
-        l = NULL;
+        TAKE_PTR(l);
 
         return 0;
 }
@@ -251,25 +248,35 @@ int link_process_rtnl(Link *l, sd_netlink_message *m) {
         return 0;
 }
 
-static int link_update_dns_server_one(Link *l, const char *name) {
+static int link_update_dns_server_one(Link *l, const char *str) {
+        _cleanup_free_ char *name = NULL;
+        int family, ifindex, r;
         union in_addr_union a;
         DnsServer *s;
-        int family, r;
+        uint16_t port;
 
         assert(l);
-        assert(name);
+        assert(str);
 
-        r = in_addr_from_string_auto(name, &family, &a);
+        r = in_addr_port_ifindex_name_from_string_auto(str, &family, &a, &port, &ifindex, &name);
         if (r < 0)
                 return r;
 
-        s = dns_server_find(l->dns_servers, family, &a, 0);
+        if (ifindex != 0 && ifindex != l->ifindex)
+                return -EINVAL;
+
+        /* By default, the port number is determined with the transaction feature level.
+         * See dns_transaction_port() and dns_server_port(). */
+        if (IN_SET(port, 53, 853))
+                port = 0;
+
+        s = dns_server_find(l->dns_servers, family, &a, port, 0, name);
         if (s) {
                 dns_server_move_back_and_unmark(s);
                 return 0;
         }
 
-        return dns_server_new(l->manager, NULL, DNS_SERVER_LINK, l, family, &a, 0, NULL);
+        return dns_server_new(l->manager, NULL, DNS_SERVER_LINK, l, family, &a, port, 0, name);
 }
 
 static int link_update_dns_servers(Link *l) {
@@ -330,25 +337,20 @@ static int link_update_llmnr_support(Link *l) {
 
         assert(l);
 
+        l->llmnr_support = RESOLVE_SUPPORT_YES; /* yes, yes, we set it twice which is ugly */
+
         r = sd_network_link_get_llmnr(l->ifindex, &b);
-        if (r == -ENODATA) {
-                r = 0;
-                goto clear;
-        }
+        if (r == -ENODATA)
+                return 0;
         if (r < 0)
-                goto clear;
+                return r;
 
-        l->llmnr_support = resolve_support_from_string(b);
-        if (l->llmnr_support < 0) {
-                r = -EINVAL;
-                goto clear;
-        }
+        r = resolve_support_from_string(b);
+        if (r < 0)
+                return r;
 
+        l->llmnr_support = r;
         return 0;
-
-clear:
-        l->llmnr_support = RESOLVE_SUPPORT_YES;
-        return r;
 }
 
 static int link_update_mdns_support(Link *l) {
@@ -357,25 +359,20 @@ static int link_update_mdns_support(Link *l) {
 
         assert(l);
 
-        r = sd_network_link_get_mdns(l->ifindex, &b);
-        if (r == -ENODATA) {
-                r = 0;
-                goto clear;
-        }
-        if (r < 0)
-                goto clear;
-
-        l->mdns_support = resolve_support_from_string(b);
-        if (l->mdns_support < 0) {
-                r = -EINVAL;
-                goto clear;
-        }
-
-        return 0;
-
-clear:
         l->mdns_support = RESOLVE_SUPPORT_NO;
-        return r;
+
+        r = sd_network_link_get_mdns(l->ifindex, &b);
+        if (r == -ENODATA)
+                return 0;
+        if (r < 0)
+                return r;
+
+        r = resolve_support_from_string(b);
+        if (r < 0)
+                return r;
+
+        l->mdns_support = r;
+        return 0;
 }
 
 void link_set_dns_over_tls_mode(Link *l, DnsOverTlsMode mode) {
@@ -397,25 +394,20 @@ static int link_update_dns_over_tls_mode(Link *l) {
 
         assert(l);
 
-        r = sd_network_link_get_dns_over_tls(l->ifindex, &b);
-        if (r == -ENODATA) {
-                r = 0;
-                goto clear;
-        }
-        if (r < 0)
-                goto clear;
-
-        l->dns_over_tls_mode = dns_over_tls_mode_from_string(b);
-        if (l->dns_over_tls_mode < 0) {
-                r = -EINVAL;
-                goto clear;
-        }
-
-        return 0;
-
-clear:
         l->dns_over_tls_mode = _DNS_OVER_TLS_MODE_INVALID;
-        return r;
+
+        r = sd_network_link_get_dns_over_tls(l->ifindex, &b);
+        if (r == -ENODATA)
+                return 0;
+        if (r < 0)
+                return r;
+
+        r = dns_over_tls_mode_from_string(b);
+        if (r < 0)
+                return r;
+
+        l->dns_over_tls_mode = r;
+        return 0;
 }
 
 void link_set_dnssec_mode(Link *l, DnssecMode mode) {
@@ -451,27 +443,20 @@ static int link_update_dnssec_mode(Link *l) {
 
         assert(l);
 
+        l->dnssec_mode = _DNSSEC_MODE_INVALID;
+
         r = sd_network_link_get_dnssec(l->ifindex, &m);
-        if (r == -ENODATA) {
-                r = 0;
-                goto clear;
-        }
+        if (r == -ENODATA)
+                return 0;
         if (r < 0)
-                goto clear;
+                return r;
 
         mode = dnssec_mode_from_string(m);
-        if (mode < 0) {
-                r = -EINVAL;
-                goto clear;
-        }
+        if (mode < 0)
+                return mode;
 
         link_set_dnssec_mode(l, mode);
-
         return 0;
-
-clear:
-        l->dnssec_mode = _DNSSEC_MODE_INVALID;
-        return r;
 }
 
 static int link_update_dnssec_negative_trust_anchors(Link *l) {
@@ -481,30 +466,24 @@ static int link_update_dnssec_negative_trust_anchors(Link *l) {
 
         assert(l);
 
+        l->dnssec_negative_trust_anchors = set_free_free(l->dnssec_negative_trust_anchors);
+
         r = sd_network_link_get_dnssec_negative_trust_anchors(l->ifindex, &ntas);
-        if (r == -ENODATA) {
-                r = 0;
-                goto clear;
-        }
+        if (r == -ENODATA)
+                return r;
         if (r < 0)
-                goto clear;
+                return r;
 
         ns = set_new(&dns_name_hash_ops);
         if (!ns)
                 return -ENOMEM;
 
-        r = set_put_strdupv(ns, ntas);
+        r = set_put_strdupv(&ns, ntas);
         if (r < 0)
                 return r;
 
-        set_free_free(l->dnssec_negative_trust_anchors);
         l->dnssec_negative_trust_anchors = TAKE_PTR(ns);
-
         return 0;
-
-clear:
-        l->dnssec_negative_trust_anchors = set_free_free(l->dnssec_negative_trust_anchors);
-        return r;
 }
 
 static int link_update_search_domain_one(Link *l, const char *name, bool route_only) {
@@ -652,7 +631,9 @@ int link_update(Link *l) {
         assert(l);
 
         link_read_settings(l);
-        link_load_user(l);
+        r = link_load_user(l);
+        if (r < 0)
+                return r;
 
         if (l->llmnr_support != RESOLVE_SUPPORT_NO) {
                 r = manager_llmnr_start(l->manager);
@@ -716,6 +697,12 @@ LinkAddress *link_find_address(Link *l, int family, const union in_addr_union *i
 
         assert(l);
 
+        if (!IN_SET(family, AF_INET, AF_INET6))
+                return NULL;
+
+        if (!in_addr)
+                return NULL;
+
         LIST_FOREACH(addresses, a, l->addresses)
                 if (a->family == family && in_addr_equal(family, &a->in_addr, in_addr))
                         return a;
@@ -730,7 +717,7 @@ DnsServer* link_set_dns_server(Link *l, DnsServer *s) {
                 return s;
 
         if (s)
-                log_debug("Switching to DNS server %s for interface %s.", dns_server_string(s), l->ifname);
+                log_debug("Switching to DNS server %s for interface %s.", strna(dns_server_string_full(s)), l->ifname);
 
         dns_server_unref(l->current_dns_server);
         l->current_dns_server = dns_server_ref(s);
@@ -750,19 +737,27 @@ DnsServer *link_get_dns_server(Link *l) {
         return l->current_dns_server;
 }
 
-void link_next_dns_server(Link *l) {
+void link_next_dns_server(Link *l, DnsServer *if_current) {
         assert(l);
 
+        /* If the current server of the transaction is specified, and we already are at a different one,
+         * don't do anything */
+        if (if_current && l->current_dns_server != if_current)
+                return;
+
+        /* If currently have no DNS server, then don't do anything, we'll pick it lazily the next time a DNS
+         * server is needed. */
         if (!l->current_dns_server)
                 return;
 
-        /* Change to the next one, but make sure to follow the linked
-         * list only if this server is actually still linked. */
+        /* Change to the next one, but make sure to follow the linked list only if this server is actually
+         * still linked. */
         if (l->current_dns_server->linked && l->current_dns_server->servers_next) {
                 link_set_dns_server(l, l->current_dns_server->servers_next);
                 return;
         }
 
+        /* Pick the first one again, after we reached the end */
         link_set_dns_server(l, l->dns_servers);
 }
 
@@ -805,14 +800,17 @@ int link_address_new(Link *l, LinkAddress **ret, int family, const union in_addr
         assert(l);
         assert(in_addr);
 
-        a = new0(LinkAddress, 1);
+        a = new(LinkAddress, 1);
         if (!a)
                 return -ENOMEM;
 
-        a->family = family;
-        a->in_addr = *in_addr;
+        *a = (LinkAddress) {
+                .family = family,
+                .in_addr = *in_addr,
+                .link = l,
+                .prefixlen = UCHAR_MAX,
+        };
 
-        a->link = l;
         LIST_PREPEND(addresses, l->addresses, a);
         l->n_addresses++;
 
@@ -1103,6 +1101,7 @@ fail:
 
 int link_address_update_rtnl(LinkAddress *a, sd_netlink_message *m) {
         int r;
+
         assert(a);
         assert(m);
 
@@ -1110,7 +1109,8 @@ int link_address_update_rtnl(LinkAddress *a, sd_netlink_message *m) {
         if (r < 0)
                 return r;
 
-        sd_rtnl_message_addr_get_scope(m, &a->scope);
+        (void) sd_rtnl_message_addr_get_prefixlen(m, &a->prefixlen);
+        (void) sd_rtnl_message_addr_get_scope(m, &a->scope);
 
         link_allocate_scopes(a->link);
         link_add_rrs(a->link, false);
@@ -1207,7 +1207,7 @@ int link_save_user(Link *l) {
                         if (server != l->dns_servers)
                                 fputc(' ', f);
 
-                        v = dns_server_string(server);
+                        v = dns_server_string_full(server);
                         if (!v) {
                                 r = -ENOMEM;
                                 goto fail;
@@ -1237,11 +1237,10 @@ int link_save_user(Link *l) {
 
         if (!set_isempty(l->dnssec_negative_trust_anchors)) {
                 bool space = false;
-                Iterator i;
                 char *nta;
 
                 fputs("NTAS=", f);
-                SET_FOREACH(nta, l->dnssec_negative_trust_anchors, i) {
+                SET_FOREACH(nta, l->dnssec_negative_trust_anchors) {
 
                         if (space)
                                 fputc(' ', f);
@@ -1392,4 +1391,27 @@ void link_remove_user(Link *l) {
         assert(l->state_file);
 
         (void) unlink(l->state_file);
+}
+
+bool link_negative_trust_anchor_lookup(Link *l, const char *name) {
+        int r;
+
+        assert(l);
+        assert(name);
+
+        /* Checks whether the specified domain (or any of its parent domains) are listed as per-link NTA. */
+
+        for (;;) {
+                if (set_contains(l->dnssec_negative_trust_anchors, name))
+                        return true;
+
+                /* And now, let's look at the parent, and check that too */
+                r = dns_name_parent(&name);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        break;
+        }
+
+        return false;
 }

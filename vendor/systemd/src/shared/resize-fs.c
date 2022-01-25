@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <linux/btrfs.h>
 #include <linux/magic.h>
@@ -15,7 +15,6 @@
 
 int resize_fs(int fd, uint64_t sz, uint64_t *ret_size) {
         struct statfs sfs;
-        int r;
 
         assert(fd >= 0);
 
@@ -54,8 +53,7 @@ int resize_fs(int fd, uint64_t sz, uint64_t *ret_size) {
 
                 sz -= sz % sfs.f_bsize;
 
-                r = snprintf(args.name, sizeof(args.name), "%" PRIu64, sz);
-                assert((size_t) r < sizeof(args.name));
+                xsprintf(args.name, "%" PRIu64, sz);
 
                 if (ioctl(fd, BTRFS_IOC_RESIZE, &args) < 0)
                         return -errno;

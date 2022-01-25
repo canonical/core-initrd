@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <dirent.h>
 #include <errno.h>
@@ -82,12 +82,12 @@ static int show_cgroup_one_by_path(
                 bool more,
                 OutputFlags flags) {
 
-        char *fn;
-        _cleanup_fclose_ FILE *f = NULL;
-        size_t n = 0, n_allocated = 0;
         _cleanup_free_ pid_t *pids = NULL;
+        _cleanup_fclose_ FILE *f = NULL;
         _cleanup_free_ char *p = NULL;
+        size_t n = 0;
         pid_t pid;
+        char *fn;
         int r;
 
         r = cg_mangle_path(path, &p);
@@ -104,10 +104,9 @@ static int show_cgroup_one_by_path(
                 if (!(flags & OUTPUT_KERNEL_THREADS) && is_kernel_thread(pid) > 0)
                         continue;
 
-                if (!GREEDY_REALLOC(pids, n_allocated, n + 1))
+                if (!GREEDY_REALLOC(pids, n + 1))
                         return -ENOMEM;
 
-                assert(n < n_allocated);
                 pids[n++] = pid;
         }
 
@@ -371,7 +370,7 @@ int show_cgroup_get_path_and_warn(
 
                 r = bus_connect_transport_systemd(BUS_TRANSPORT_LOCAL, NULL, false, &bus);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to create bus connection: %m");
+                        return bus_log_connect_error(r);
 
                 r = show_cgroup_get_unit_path_and_warn(bus, unit, &root);
                 if (r < 0)

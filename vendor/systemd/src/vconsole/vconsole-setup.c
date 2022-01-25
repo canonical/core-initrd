@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /***
   Copyright © 2016 Michal Soltys <soltys@ziu.info>
 ***/
@@ -146,7 +146,7 @@ static int keyboard_load_and_wait(const char *vc, const char *map, const char *m
         args[i++] = NULL;
 
         if (DEBUG_LOGGING) {
-                _cleanup_free_ char *cmd;
+                _cleanup_free_ char *cmd = NULL;
 
                 cmd = strv_join((char**) args, " ");
                 log_debug("Executing \"%s\"...", strnull(cmd));
@@ -189,7 +189,7 @@ static int font_load_and_wait(const char *vc, const char *font, const char *map,
         args[i++] = NULL;
 
         if (DEBUG_LOGGING) {
-                _cleanup_free_ char *cmd;
+                _cleanup_free_ char *cmd = NULL;
 
                 cmd = strv_join((char**) args, " ");
                 log_debug("Executing \"%s\"...", strnull(cmd));
@@ -226,6 +226,7 @@ static void setup_remaining_vcs(int src_fd, unsigned src_idx, bool utf8) {
         _cleanup_free_ struct unipair* unipairs = NULL;
         _cleanup_free_ void *fontbuf = NULL;
         unsigned i;
+        int log_level;
         int r;
 
         unipairs = new(struct unipair, USHRT_MAX);
@@ -234,11 +235,20 @@ static void setup_remaining_vcs(int src_fd, unsigned src_idx, bool utf8) {
                 return;
         }
 
+        log_level = LOG_WARNING;
+
         /* get metadata of the current font (width, height, count) */
         r = ioctl(src_fd, KDFONTOP, &cfo);
-        if (r < 0)
-                log_warning_errno(errno, "KD_FONT_OP_GET failed while trying to get the font metadata: %m");
-        else {
+        if (r < 0) {
+                /* We might be called to operate on the dummy console (to setup keymap
+                 * mainly) when fbcon deferred takeover is used for example. In such case,
+                 * setting font is not supported and is expected to fail. */
+                if (errno == ENOSYS)
+                        log_level = LOG_DEBUG;
+
+                log_full_errno(log_level, errno,
+                               "KD_FONT_OP_GET failed while trying to get the font metadata: %m");
+        } else {
                 /* verify parameter sanity first */
                 if (cfo.width > 32 || cfo.height > 32 || cfo.charcount > 512)
                         log_warning("Invalid font metadata - width: %u (max 32), height: %u (max 32), count: %u (max 512)",
@@ -273,7 +283,7 @@ static void setup_remaining_vcs(int src_fd, unsigned src_idx, bool utf8) {
         }
 
         if (cfo.op != KD_FONT_OP_SET)
-                log_warning("Fonts will not be copied to remaining consoles");
+                log_full(log_level, "Fonts will not be copied to remaining consoles");
 
         for (i = 1; i <= 63; i++) {
                 char ttyname[sizeof("/dev/tty63")];
@@ -420,7 +430,7 @@ int main(int argc, char **argv) {
         unsigned idx = 0;
         int r;
 
-        log_setup_service();
+        log_setup();
 
         umask(0022);
 

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <sys/wait.h>
@@ -316,7 +316,7 @@ static void test_raw_clone(void) {
 
         errno = 0;
         assert_se(raw_clone(CLONE_FS|CLONE_NEWNS) == -1);
-        assert_se(errno == EINVAL);
+        assert_se(errno == EINVAL || ERRNO_IS_PRIVILEGE(errno)); /* Certain container environments prohibit namespaces to us, don't fail in that case */
 }
 
 static void test_physical_memory(void) {
@@ -410,6 +410,98 @@ static void test_system_tasks_max_scale(void) {
         assert_se(system_tasks_max_scale(UINT64_MAX/4, UINT64_MAX) == UINT64_MAX);
 }
 
+static void test_foreach_pointer(void) {
+        int a, b, c, *i;
+        size_t k = 0;
+
+        log_info("/* %s */", __func__);
+
+        FOREACH_POINTER(i, &a, &b, &c) {
+                switch (k) {
+
+                case 0:
+                        assert_se(i == &a);
+                        break;
+
+                case 1:
+                        assert_se(i == &b);
+                        break;
+
+                case 2:
+                        assert_se(i == &c);
+                        break;
+
+                default:
+                        assert_not_reached("unexpected index");
+                        break;
+                }
+
+                k++;
+        }
+
+        assert(k == 3);
+
+        FOREACH_POINTER(i, &b) {
+                assert(k == 3);
+                assert(i == &b);
+                k = 4;
+        }
+
+        assert(k == 4);
+
+        FOREACH_POINTER(i, NULL, &c, NULL, &b, NULL, &a, NULL) {
+                switch (k) {
+
+                case 4:
+                        assert_se(i == NULL);
+                        break;
+
+                case 5:
+                        assert_se(i == &c);
+                        break;
+
+                case 6:
+                        assert_se(i == NULL);
+                        break;
+
+                case 7:
+                        assert_se(i == &b);
+                        break;
+
+                case 8:
+                        assert_se(i == NULL);
+                        break;
+
+                case 9:
+                        assert_se(i == &a);
+                        break;
+
+                case 10:
+                        assert_se(i == NULL);
+                        break;
+
+                default:
+                        assert_not_reached("unexpected index");
+                        break;
+                }
+
+                k++;
+        }
+
+        assert(k == 11);
+}
+
+static void test_ptr_to_int(void) {
+        log_info("/* %s */", __func__);
+
+        /* Primary reason to have this test is to validate that pointers are large enough to hold entire int range */
+        assert_se(PTR_TO_INT(INT_TO_PTR(0)) == 0);
+        assert_se(PTR_TO_INT(INT_TO_PTR(1)) == 1);
+        assert_se(PTR_TO_INT(INT_TO_PTR(-1)) == -1);
+        assert_se(PTR_TO_INT(INT_TO_PTR(INT_MAX)) == INT_MAX);
+        assert_se(PTR_TO_INT(INT_TO_PTR(INT_MIN)) == INT_MIN);
+}
+
 int main(int argc, char *argv[]) {
         test_setup_logging(LOG_INFO);
 
@@ -428,6 +520,8 @@ int main(int argc, char *argv[]) {
         test_physical_memory_scale();
         test_system_tasks_max();
         test_system_tasks_max_scale();
+        test_foreach_pointer();
+        test_ptr_to_int();
 
         return 0;
 }

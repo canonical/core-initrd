@@ -1,5 +1,5 @@
 # resolvectl(1) completion                                  -*- shell-script -*-
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # This file is part of systemd.
 #
@@ -48,6 +48,7 @@ _resolvectl() {
         [DNSSEC]='dnssec'
         [DNSOVERTLS]='dnsovertls'
         [STANDALONE]='statistics reset-statistics flush-caches reset-server-features'
+        [LOG_LEVEL]='log-level'
     )
     local -A ARGS=(
         [FAMILY]='tcp udp sctp'
@@ -86,7 +87,7 @@ _resolvectl() {
         fi
     done
 
-    if [[ -z $verb ]]; then
+    if [[ -z ${verb-} ]]; then
         comps="${VERBS[*]}"
 
     elif __contains_word "$verb" ${VERBS[STANDALONE]} ${VERBS[DOMAIN]}; then
@@ -94,6 +95,9 @@ _resolvectl() {
 
     elif __contains_word "$verb" ${VERBS[STATUS]}; then
         comps="$interfaces"
+
+    elif __contains_word "$verb" ${VERBS[LOG_LEVEL]}; then
+        comps='debug info notice warning err crit alert emerg'
 
     elif __contains_word "$verb" ${VERBS[FAMILY]}; then
         for ((i++; i < COMP_CWORD; i++)); do

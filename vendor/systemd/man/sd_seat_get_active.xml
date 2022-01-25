@@ -1,7 +1,7 @@
 <?xml version='1.0'?> <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="sd_seat_get_active" conditional='HAVE_PAM'
           xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -19,7 +19,6 @@
   <refnamediv>
     <refname>sd_seat_get_active</refname>
     <refname>sd_seat_get_sessions</refname>
-    <refname>sd_seat_can_multi_session</refname>
     <refname>sd_seat_can_tty</refname>
     <refname>sd_seat_can_graphical</refname>
     <refpurpose>Determine state of a specific seat</refpurpose>
@@ -39,14 +38,9 @@
       <funcprototype>
         <funcdef>int <function>sd_seat_get_sessions</function></funcdef>
         <paramdef>const char *<parameter>seat</parameter></paramdef>
-        <paramdef>char ***<parameter>sessions</parameter></paramdef>
-        <paramdef>uid_t **<parameter>uid</parameter></paramdef>
-        <paramdef>unsigned int *<parameter>n_uids</parameter></paramdef>
-      </funcprototype>
-
-      <funcprototype>
-        <funcdef>int <function>sd_seat_can_multi_session</function></funcdef>
-        <paramdef>const char *<parameter>seat</parameter></paramdef>
+        <paramdef>char ***<parameter>ret_sessions</parameter></paramdef>
+        <paramdef>uid_t **<parameter>ret_uids</parameter></paramdef>
+        <paramdef>unsigned int *<parameter>ret_n_uids</parameter></paramdef>
       </funcprototype>
 
       <funcprototype>
@@ -74,26 +68,16 @@
     <citerefentry project='man-pages'><refentrytitle>free</refentrytitle><manvolnum>3</manvolnum></citerefentry>
     call after use.</para>
 
-    <para><function>sd_seat_get_sessions()</function> may be used to
-    determine all sessions on the specified seat. Returns two arrays,
-    one (<constant>NULL</constant> terminated) with the session
-    identifiers of the sessions and one with the user identifiers of
-    the Unix users the sessions belong to. An additional parameter may
-    be used to return the number of entries in the latter array. This
-    value is the same the return value, if the latter is nonnegative.
-    The two arrays and the last parameter may be passed as
-    <constant>NULL</constant> in case these values need not to be
-    determined. The arrays and the strings referenced by them need to
-    be freed with the libc
-    <citerefentry project='man-pages'><refentrytitle>free</refentrytitle><manvolnum>3</manvolnum></citerefentry>
-    call after use. Note that instead of an empty array
-    <constant>NULL</constant> may be returned and should be considered
-    equivalent to an empty array.</para>
-
-    <para><function>sd_seat_can_multi_session()</function> may be used
-    to determine whether a specific seat is capable of multi-session,
-    i.e. allows multiple login sessions in parallel (with only one
-    being active at a time).</para>
+    <para><function>sd_seat_get_sessions()</function> may be used to determine all sessions on the specified
+    seat. Returns two arrays, one (<constant>NULL</constant> terminated) with the session identifiers of the
+    sessions and one with the user identifiers of the Unix users the sessions belong to. An additional
+    parameter may be used to return the number of entries in the latter array. This value is the same as the
+    return value if the return value is nonnegative. The output parameters may be passed as
+    <constant>NULL</constant> in case these output values are not needed. The arrays and the strings
+    referenced by them need to be freed with the libc <citerefentry
+    project='man-pages'><refentrytitle>free</refentrytitle><manvolnum>3</manvolnum></citerefentry> call after
+    use. Note that instead of an empty array <constant>NULL</constant> may be returned and should be
+    considered equivalent to an empty array.</para>
 
     <para><function>sd_seat_can_tty()</function> may be used to
     determine whether a specific seat provides TTY functionality, i.e.
@@ -114,8 +98,8 @@
 
     <para> On success, <function>sd_seat_get_active()</function> returns 0 or a positive integer. On success,
     <function>sd_seat_get_sessions()</function> returns the number of entries in the session identifier
-    array. If the test succeeds, <function>sd_seat_can_multi_session</function>,
-    <function>sd_seat_can_tty</function> and <function>sd_seat_can_graphical</function> return a positive
+    array. If the test succeeds,
+    <function>sd_seat_can_tty()</function> and <function>sd_seat_can_graphical()</function> return a positive
     integer, if it fails 0. On failure, these calls return a negative errno-style error code.</para>
 
     <refsect2>
@@ -156,6 +140,14 @@
   </refsect1>
 
   <xi:include href="libsystemd-pkgconfig.xml" />
+
+  <refsect1>
+    <title>History</title>
+
+    <para>In the past, <function>sd_seat_can_multi_session()</function> was used to check whether the seat
+    supports multiple sessions. All seats support that now, so that function has been deprecated and always
+    returns true.</para>
+  </refsect1>
 
   <refsect1>
     <title>See Also</title>

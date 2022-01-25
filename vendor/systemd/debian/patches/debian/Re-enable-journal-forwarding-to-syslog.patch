@@ -17,10 +17,10 @@ conf.d snippet.
  3 files changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/man/journald.conf.xml b/man/journald.conf.xml
-index e24c420..6e52098 100644
+index 4b0dd90..ed7e428 100644
 --- a/man/journald.conf.xml
 +++ b/man/journald.conf.xml
-@@ -338,7 +338,7 @@
+@@ -353,7 +353,7 @@
          traditional syslog daemon, to the kernel log buffer (kmsg), to the system console, or sent as wall
          messages to all logged-in users.  These options take boolean arguments. If forwarding to syslog is
          enabled but nothing reads messages from the socket, forwarding to syslog has no effect. By default,
@@ -30,10 +30,10 @@ index e24c420..6e52098 100644
          <literal>systemd.journald.forward_to_kmsg</literal>,
          <literal>systemd.journald.forward_to_console</literal>, and
 diff --git a/src/journal/journald-server.c b/src/journal/journald-server.c
-index 489730d..5b8b145 100644
+index 2d1d9e6..2c1c7ac 100644
 --- a/src/journal/journald-server.c
 +++ b/src/journal/journald-server.c
-@@ -2216,6 +2216,7 @@ int server_init(Server *s, const char *namespace) {
+@@ -2210,6 +2210,7 @@ int server_init(Server *s, const char *namespace) {
                  .ratelimit_interval = DEFAULT_RATE_LIMIT_INTERVAL,
                  .ratelimit_burst = DEFAULT_RATE_LIMIT_BURST,
  
@@ -42,10 +42,10 @@ index 489730d..5b8b145 100644
  
                  .max_file_usec = DEFAULT_MAX_FILE_USEC,
 diff --git a/src/journal/journald.conf b/src/journal/journald.conf
-index 2f1c661..8951d9e 100644
+index 5a60a9d..64f4d4b 100644
 --- a/src/journal/journald.conf
 +++ b/src/journal/journald.conf
-@@ -29,7 +29,7 @@
+@@ -32,7 +32,7 @@
  #RuntimeMaxFiles=100
  #MaxRetentionSec=
  #MaxFileSec=1month

@@ -1,4 +1,6 @@
 [Match]
+Name=bareudp99
+Name=batadv99
 Name=ipvlan99
 Name=ipvtap99
 Name=macvlan99
@@ -14,6 +16,7 @@ Name=ifb99
 Name=ipiptun99
 Name=nlmon99
 Name=xfrm99
+Name=vxlan98
 Name=hogehogehogehogehogehoge
 
 [Network]

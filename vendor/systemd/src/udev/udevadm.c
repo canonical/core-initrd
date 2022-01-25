@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0+ */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <errno.h>
 #include <getopt.h>
@@ -8,12 +8,14 @@
 #include "alloc-util.h"
 #include "main-func.h"
 #include "pretty-print.h"
+#include "process-util.h"
 #include "selinux-util.h"
 #include "string-util.h"
-#include "udevadm.h"
 #include "udev-util.h"
-#include "verbs.h"
+#include "udevadm.h"
+#include "udevd.h"
 #include "util.h"
+#include "verbs.h"
 
 static int help(void) {
         static const char *const short_descriptions[][2] = {
@@ -36,8 +38,8 @@ static int help(void) {
 
         printf("%s [--help] [--version] [--debug] COMMAND [COMMAND OPTIONS]\n\n"
                "Send control commands or test the device manager.\n\n"
-               "Commands:\n"
-               , program_invocation_short_name);
+               "Commands:\n",
+               program_invocation_short_name);
 
         for (i = 0; i < ELEMENTSOF(short_descriptions); i++)
                 printf("  %-12s  %s\n", short_descriptions[i][0], short_descriptions[i][1]);
@@ -110,6 +112,9 @@ static int udevadm_main(int argc, char *argv[]) {
 static int run(int argc, char *argv[]) {
         int r;
 
+        if (invoked_as(argv, "udevd"))
+                return run_udevd(argc, argv);
+
         udev_parse_config();
         log_parse_environment();
         log_open();
@@ -118,9 +123,10 @@ static int run(int argc, char *argv[]) {
         if (r <= 0)
                 return r;
 
-        log_set_max_level_realm(LOG_REALM_SYSTEMD, log_get_max_level());
+        r = mac_selinux_init();
+        if (r < 0)
+                return r;
 
-        mac_selinux_init();
         return udevadm_main(argc, argv);
 }
 

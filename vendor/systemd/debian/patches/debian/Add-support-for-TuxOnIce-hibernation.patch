@@ -12,10 +12,10 @@ Forwarded: http://lists.freedesktop.org/archives/systemd-devel/2014-April/018960
  1 file changed, 6 insertions(+)
 
 diff --git a/src/shared/sleep-config.c b/src/shared/sleep-config.c
-index e63ef0f..ab1cf9e 100644
+index 8ec3d09..e82757c 100644
 --- a/src/shared/sleep-config.c
 +++ b/src/shared/sleep-config.c
-@@ -455,6 +455,12 @@ static bool enough_swap_for_hibernation(void) {
+@@ -476,6 +476,12 @@ static bool enough_swap_for_hibernation(void) {
          if (getenv_bool("SYSTEMD_BYPASS_HIBERNATION_MEMORY_CHECK") > 0)
                  return true;
  

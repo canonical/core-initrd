@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <ctype.h>
 #include <net/if.h>
@@ -14,9 +14,12 @@
 #include "dirent-util.h"
 #include "fd-util.h"
 #include "fileio.h"
+#include "format-util.h"
 #include "fs-util.h"
 #include "hashmap.h"
+#include "id128-util.h"
 #include "macro.h"
+#include "netlink-util.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "set.h"
@@ -26,6 +29,7 @@
 #include "string-util.h"
 #include "strv.h"
 #include "strxcpyx.h"
+#include "user-util.h"
 #include "util.h"
 
 int device_new_aux(sd_device **ret) {
@@ -40,10 +44,10 @@ int device_new_aux(sd_device **ret) {
         *device = (sd_device) {
                 .n_ref = 1,
                 .watch_handle = -1,
-                .devmode = (mode_t) -1,
-                .devuid = (uid_t) -1,
-                .devgid = (gid_t) -1,
-                .action = _DEVICE_ACTION_INVALID,
+                .devmode = MODE_INVALID,
+                .devuid = UID_INVALID,
+                .devgid = GID_INVALID,
+                .action = _SD_DEVICE_ACTION_INVALID,
         };
 
         *ret = device;
@@ -61,62 +65,63 @@ static sd_device *device_free(sd_device *device) {
         free(device->subsystem);
         free(device->driver_subsystem);
         free(device->driver);
-        free(device->id_filename);
+        free(device->device_id);
         free(device->properties_strv);
         free(device->properties_nulstr);
 
-        ordered_hashmap_free_free_free(device->properties);
-        ordered_hashmap_free_free_free(device->properties_db);
-        hashmap_free_free_free(device->sysattr_values);
-        set_free_free(device->sysattrs);
-        set_free_free(device->tags);
-        set_free_free(device->devlinks);
+        ordered_hashmap_free(device->properties);
+        ordered_hashmap_free(device->properties_db);
+        hashmap_free(device->sysattr_values);
+        set_free(device->sysattrs);
+        set_free(device->all_tags);
+        set_free(device->current_tags);
+        set_free(device->devlinks);
 
         return mfree(device);
 }
 
 DEFINE_PUBLIC_TRIVIAL_REF_UNREF_FUNC(sd_device, sd_device, device_free);
 
-int device_add_property_aux(sd_device *device, const char *_key, const char *_value, bool db) {
+int device_add_property_aux(sd_device *device, const char *key, const char *value, bool db) {
         OrderedHashmap **properties;
 
         assert(device);
-        assert(_key);
+        assert(key);
 
         if (db)
                 properties = &device->properties_db;
         else
                 properties = &device->properties;
 
-        if (_value) {
-                _cleanup_free_ char *key = NULL, *value = NULL, *old_key = NULL, *old_value = NULL;
+        if (value) {
+                _cleanup_free_ char *new_key = NULL, *new_value = NULL, *old_key = NULL, *old_value = NULL;
                 int r;
 
-                r = ordered_hashmap_ensure_allocated(properties, &string_hash_ops);
+                r = ordered_hashmap_ensure_allocated(properties, &string_hash_ops_free_free);
                 if (r < 0)
                         return r;
 
-                key = strdup(_key);
-                if (!key)
+                new_key = strdup(key);
+                if (!new_key)
                         return -ENOMEM;
 
-                value = strdup(_value);
-                if (!value)
+                new_value = strdup(value);
+                if (!new_value)
                         return -ENOMEM;
 
                 old_value = ordered_hashmap_get2(*properties, key, (void**) &old_key);
 
-                r = ordered_hashmap_replace(*properties, key, value);
+                /* ordered_hashmap_replace() does not fail when the hashmap already has the entry. */
+                r = ordered_hashmap_replace(*properties, new_key, new_value);
                 if (r < 0)
                         return r;
 
-                key = NULL;
-                value = NULL;
+                TAKE_PTR(new_key);
+                TAKE_PTR(new_value);
         } else {
-                _cleanup_free_ char *key = NULL;
-                _cleanup_free_ char *value = NULL;
+                _cleanup_free_ char *old_key = NULL, *old_value = NULL;
 
-                value = ordered_hashmap_remove2(*properties, _key, (void**) &key);
+                old_value = ordered_hashmap_remove2(*properties, key, (void**) &old_key);
         }
 
         if (!db) {
@@ -125,10 +130,6 @@ int device_add_property_aux(sd_device *device, const char *_key, const char *_va
         }
 
         return 0;
-}
-
-int device_add_property_internal(sd_device *device, const char *key, const char *value) {
-        return device_add_property_aux(device, key, value, false);
 }
 
 int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
@@ -172,7 +173,7 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
                                 return -ENOMEM;
 
                         free_and_replace(syspath, new_syspath);
-                        path_simplify(syspath, false);
+                        path_simplify(syspath);
                 }
 
                 if (path_startswith(syspath,  "/sys/devices/")) {
@@ -180,13 +181,12 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
 
                         /* all 'devices' require an 'uevent' file */
                         path = strjoina(syspath, "/uevent");
-                        r = access(path, F_OK);
-                        if (r < 0) {
+                        if (access(path, F_OK) < 0) {
                                 if (errno == ENOENT)
                                         /* this is not a valid device */
                                         return -ENODEV;
 
-                                return log_debug_errno(errno, "sd-device: %s does not have an uevent file: %m", syspath);
+                                return log_debug_errno(errno, "sd-device: cannot access uevent file for %s: %m", syspath);
                         }
                 } else {
                         /* everything else just needs to be a directory */
@@ -201,7 +201,7 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
 
         devpath = syspath + STRLEN("/sys");
 
-        if (devpath[0] == '\0')
+        if (devpath[0] != '/')
                 /* '/sys' alone is not a valid device path */
                 return -ENODEV;
 
@@ -234,8 +234,7 @@ _public_ int sd_device_new_from_syspath(sd_device **ret, const char *syspath) {
 }
 
 _public_ int sd_device_new_from_devnum(sd_device **ret, char type, dev_t devnum) {
-        char *syspath;
-        char id[DECIMAL_STR_MAX(unsigned) * 2 + 1];
+        char id[DECIMAL_STR_MAX(unsigned) * 2 + 1], *syspath;
 
         assert_return(ret, -EINVAL);
         assert_return(IN_SET(type, 'b', 'c'), -EINVAL);
@@ -248,96 +247,185 @@ _public_ int sd_device_new_from_devnum(sd_device **ret, char type, dev_t devnum)
         return sd_device_new_from_syspath(ret, syspath);
 }
 
-_public_ int sd_device_new_from_subsystem_sysname(sd_device **ret, const char *subsystem, const char *sysname) {
-        char *name, *syspath;
-        size_t len = 0;
+static int device_new_from_main_ifname(sd_device **ret, const char *ifname) {
+        const char *syspath;
+
+        assert(ret);
+        assert(ifname);
+
+        syspath = strjoina("/sys/class/net/", ifname);
+        return sd_device_new_from_syspath(ret, syspath);
+}
+
+_public_ int sd_device_new_from_ifname(sd_device **ret, const char *ifname) {
+        _cleanup_free_ char *main_name = NULL;
+        int r;
 
         assert_return(ret, -EINVAL);
-        assert_return(subsystem, -EINVAL);
-        assert_return(sysname, -EINVAL);
+        assert_return(ifname, -EINVAL);
+
+        r = parse_ifindex(ifname);
+        if (r > 0)
+                return sd_device_new_from_ifindex(ret, r);
+
+        if (ifname_valid(ifname)) {
+                r = device_new_from_main_ifname(ret, ifname);
+                if (r >= 0)
+                        return r;
+        }
+
+        r = rtnl_resolve_link_alternative_name(NULL, ifname, &main_name);
+        if (r < 0)
+                return r;
+
+        return device_new_from_main_ifname(ret, main_name);
+}
+
+_public_ int sd_device_new_from_ifindex(sd_device **ret, int ifindex) {
+        char ifname[IF_NAMESIZE + 1];
+
+        assert_return(ret, -EINVAL);
+        assert_return(ifindex > 0, -EINVAL);
+
+        if (!format_ifname(ifindex, ifname))
+                return -ENODEV;
+
+        return device_new_from_main_ifname(ret, ifname);
+}
+
+static int device_strjoin_new(
+                const char *a,
+                const char *b,
+                const char *c,
+                const char *d,
+                sd_device **ret) {
+
+        const char *p;
+        int r;
+
+        p = strjoina(a, b, c, d);
+        if (access(p, F_OK) < 0)
+                return IN_SET(errno, ENOENT, ENAMETOOLONG) ? 0 : -errno; /* If this sysfs is too long then it doesn't exist either */
+
+        r = sd_device_new_from_syspath(ret, p);
+        if (r < 0)
+                return r;
+
+        return 1;
+}
+
+_public_ int sd_device_new_from_subsystem_sysname(
+                sd_device **ret,
+                const char *subsystem,
+                const char *sysname) {
+
+        const char *s;
+        char *name;
+        int r;
+
+        assert_return(ret, -EINVAL);
+        assert_return(path_is_normalized(subsystem), -EINVAL);
+        assert_return(path_is_normalized(sysname), -EINVAL);
 
         if (streq(subsystem, "subsystem")) {
-                syspath = strjoina("/sys/subsystem/", sysname);
-                if (access(syspath, F_OK) >= 0)
-                        return sd_device_new_from_syspath(ret, syspath);
 
-                syspath = strjoina("/sys/bus/", sysname);
-                if (access(syspath, F_OK) >= 0)
-                        return sd_device_new_from_syspath(ret, syspath);
+                FOREACH_STRING(s, "/sys/subsystem/", "/sys/bus/", "/sys/class/") {
+                        r = device_strjoin_new(s, sysname, NULL, NULL, ret);
+                        if (r < 0)
+                                return r;
+                        if (r > 0)
+                                return 0;
+                }
 
-                syspath = strjoina("/sys/class/", sysname);
-                if (access(syspath, F_OK) >= 0)
-                        return sd_device_new_from_syspath(ret, syspath);
         } else  if (streq(subsystem, "module")) {
-                syspath = strjoina("/sys/module/", sysname);
-                if (access(syspath, F_OK) >= 0)
-                        return sd_device_new_from_syspath(ret, syspath);
+
+                r = device_strjoin_new("/sys/module/", sysname, NULL, NULL, ret);
+                if (r < 0)
+                        return r;
+                if (r > 0)
+                        return 0;
+
         } else if (streq(subsystem, "drivers")) {
-                char subsys[PATH_MAX];
-                char *driver;
+                const char *sep;
 
-                strscpy(subsys, sizeof(subsys), sysname);
-                driver = strchr(subsys, ':');
-                if (driver) {
-                        driver[0] = '\0';
-                        driver++;
+                sep = strchr(sysname, ':');
+                if (sep && sep[1] != '\0') { /* Require ":" and something non-empty after that. */
+                        const char *subsys;
 
-                        syspath = strjoina("/sys/subsystem/", subsys, "/drivers/", driver);
-                        if (access(syspath, F_OK) >= 0)
-                                return sd_device_new_from_syspath(ret, syspath);
+                        subsys = memdupa_suffix0(sysname, sep - sysname);
+                        sep++;
 
-                        syspath = strjoina("/sys/bus/", subsys, "/drivers/", driver);
-                        if (access(syspath, F_OK) >= 0)
-                                return sd_device_new_from_syspath(ret, syspath);
+                        FOREACH_STRING(s, "/sys/subsystem/", "/sys/bus/") {
+                                r = device_strjoin_new(s, subsys, "/drivers/", sep, ret);
+                                if (r < 0)
+                                        return r;
+                                if (r > 0)
+                                        return 0;
+                        }
                 }
         }
 
         /* translate sysname back to sysfs filename */
         name = strdupa(sysname);
-        while (name[len] != '\0') {
-                if (name[len] == '/')
-                        name[len] = '!';
+        for (size_t i = 0; name[i]; i++)
+                if (name[i] == '/')
+                        name[i] = '!';
 
-                len++;
+        FOREACH_STRING(s, "/sys/subsystem/", "/sys/bus/") {
+                r = device_strjoin_new(s, subsystem, "/devices/", name, ret);
+                if (r < 0)
+                        return r;
+                if (r > 0)
+                        return 0;
         }
 
-        syspath = strjoina("/sys/subsystem/", subsystem, "/devices/", name);
-        if (access(syspath, F_OK) >= 0)
-                return sd_device_new_from_syspath(ret, syspath);
+        r = device_strjoin_new("/sys/class/", subsystem, "/", name, ret);
+        if (r < 0)
+                return r;
+        if (r > 0)
+                return 0;
 
-        syspath = strjoina("/sys/bus/", subsystem, "/devices/", name);
-        if (access(syspath, F_OK) >= 0)
-                return sd_device_new_from_syspath(ret, syspath);
-
-        syspath = strjoina("/sys/class/", subsystem, "/", name);
-        if (access(syspath, F_OK) >= 0)
-                return sd_device_new_from_syspath(ret, syspath);
-
-        syspath = strjoina("/sys/firmware/", subsystem, "/", sysname);
-        if (access(syspath, F_OK) >= 0)
-                return sd_device_new_from_syspath(ret, syspath);
+        r = device_strjoin_new("/sys/firmware/", subsystem, "/", sysname, ret);
+        if (r < 0)
+                return r;
+        if (r > 0)
+                return 0;
 
         return -ENODEV;
 }
 
-int device_set_devtype(sd_device *device, const char *_devtype) {
-        _cleanup_free_ char *devtype = NULL;
+_public_ int sd_device_new_from_stat_rdev(sd_device **ret, const struct stat *st) {
+        char type;
+
+        assert_return(ret, -EINVAL);
+        assert_return(st, -EINVAL);
+
+        if (S_ISBLK(st->st_mode))
+                type = 'b';
+        else if (S_ISCHR(st->st_mode))
+                type = 'c';
+        else
+                return -ENOTTY;
+
+        return sd_device_new_from_devnum(ret, type, st->st_rdev);
+}
+
+int device_set_devtype(sd_device *device, const char *devtype) {
+        _cleanup_free_ char *t = NULL;
         int r;
 
         assert(device);
-        assert(_devtype);
+        assert(devtype);
 
-        devtype = strdup(_devtype);
-        if (!devtype)
+        t = strdup(devtype);
+        if (!t)
                 return -ENOMEM;
 
-        r = device_add_property_internal(device, "DEVTYPE", devtype);
+        r = device_add_property_internal(device, "DEVTYPE", t);
         if (r < 0)
                 return r;
 
-        free_and_replace(device->devtype, devtype);
-
-        return 0;
+        return free_and_replace(device->devtype, t);
 }
 
 int device_set_ifindex(sd_device *device, const char *name) {
@@ -359,30 +447,25 @@ int device_set_ifindex(sd_device *device, const char *name) {
         return 0;
 }
 
-int device_set_devname(sd_device *device, const char *_devname) {
-        _cleanup_free_ char *devname = NULL;
+int device_set_devname(sd_device *device, const char *devname) {
+        _cleanup_free_ char *t = NULL;
         int r;
 
         assert(device);
-        assert(_devname);
+        assert(devname);
 
-        if (_devname[0] != '/') {
-                r = asprintf(&devname, "/dev/%s", _devname);
-                if (r < 0)
-                        return -ENOMEM;
-        } else {
-                devname = strdup(_devname);
-                if (!devname)
-                        return -ENOMEM;
-        }
+        if (devname[0] != '/')
+                t = strjoin("/dev/", devname);
+        else
+                t = strdup(devname);
+        if (!t)
+                return -ENOMEM;
 
-        r = device_add_property_internal(device, "DEVNAME", devname);
+        r = device_add_property_internal(device, "DEVNAME", t);
         if (r < 0)
                 return r;
 
-        free_and_replace(device->devname, devname);
-
-        return 0;
+        return free_and_replace(device->devname, t);
 }
 
 int device_set_devmode(sd_device *device, const char *_devmode) {
@@ -409,7 +492,7 @@ int device_set_devmode(sd_device *device, const char *_devmode) {
 }
 
 int device_set_devnum(sd_device *device, const char *major, const char *minor) {
-        unsigned maj = 0, min = 0;
+        unsigned maj, min = 0;
         int r;
 
         assert(device);
@@ -418,7 +501,7 @@ int device_set_devnum(sd_device *device, const char *major, const char *minor) {
         r = safe_atou(major, &maj);
         if (r < 0)
                 return r;
-        if (!maj)
+        if (maj == 0)
                 return 0;
 
         if (minor) {
@@ -485,7 +568,6 @@ int device_read_uevent_file(sd_device *device) {
         const char *syspath, *key = NULL, *value = NULL, *major = NULL, *minor = NULL;
         char *path;
         size_t uevent_len;
-        unsigned i;
         int r;
 
         enum {
@@ -505,23 +587,18 @@ int device_read_uevent_file(sd_device *device) {
         if (r < 0)
                 return r;
 
+        device->uevent_loaded = true;
+
         path = strjoina(syspath, "/uevent");
 
-        r = read_full_file(path, &uevent, &uevent_len);
-        if (r == -EACCES) {
-                /* empty uevent files may be write-only */
-                device->uevent_loaded = true;
-                return 0;
-        }
-        if (r == -ENOENT)
-                /* some devices may not have uevent files, see set_syspath() */
+        r = read_full_virtual_file(path, &uevent, &uevent_len);
+        if (IN_SET(r, -EACCES, -ENOENT))
+                /* The uevent files may be write-only, or the device may not have uevent file. */
                 return 0;
         if (r < 0)
                 return log_device_debug_errno(device, r, "sd-device: Failed to read uevent file '%s': %m", path);
 
-        device->uevent_loaded = true;
-
-        for (i = 0; i < uevent_len; i++)
+        for (size_t i = 0; i < uevent_len; i++)
                 switch (state) {
                 case PRE_KEY:
                         if (!strchr(NEWLINE, uevent[i])) {
@@ -614,52 +691,25 @@ _public_ int sd_device_new_from_device_id(sd_device **ret, const char *id) {
         }
 
         case 'n': {
-                _cleanup_(sd_device_unrefp) sd_device *device = NULL;
-                _cleanup_close_ int sk = -1;
-                struct ifreq ifr = {};
                 int ifindex;
 
-                r = ifr.ifr_ifindex = parse_ifindex(&id[1]);
-                if (r < 0)
-                        return r;
+                ifindex = parse_ifindex(id + 1);
+                if (ifindex < 0)
+                        return ifindex;
 
-                sk = socket_ioctl_fd();
-                if (sk < 0)
-                        return sk;
-
-                r = ioctl(sk, SIOCGIFNAME, &ifr);
-                if (r < 0)
-                        return -errno;
-
-                r = sd_device_new_from_subsystem_sysname(&device, "net", ifr.ifr_name);
-                if (r < 0)
-                        return r;
-
-                r = sd_device_get_ifindex(device, &ifindex);
-                if (r < 0)
-                        return r;
-
-                /* this is racey, so we might end up with the wrong device */
-                if (ifr.ifr_ifindex != ifindex)
-                        return -ENODEV;
-
-                *ret = TAKE_PTR(device);
-                return 0;
+                return sd_device_new_from_ifindex(ret, ifindex);
         }
 
         case '+': {
-                char subsys[PATH_MAX];
-                char *sysname;
+                const char *subsys, *sep;
 
-                (void) strscpy(subsys, sizeof(subsys), id + 1);
-                sysname = strchr(subsys, ':');
-                if (!sysname)
+                sep = strchr(id + 1, ':');
+                if (!sep || sep - id - 1 > NAME_MAX)
                         return -EINVAL;
 
-                sysname[0] = '\0';
-                sysname++;
+                subsys = memdupa_suffix0(id + 1, sep - id - 1);
 
-                return sd_device_new_from_subsystem_sysname(ret, subsys, sysname);
+                return sd_device_new_from_subsystem_sysname(ret, subsys, sep + 1);
         }
 
         default:
@@ -669,11 +719,11 @@ _public_ int sd_device_new_from_device_id(sd_device **ret, const char *id) {
 
 _public_ int sd_device_get_syspath(sd_device *device, const char **ret) {
         assert_return(device, -EINVAL);
-        assert_return(ret, -EINVAL);
 
         assert(path_startswith(device->syspath, "/sys/"));
 
-        *ret = device->syspath;
+        if (ret)
+                *ret = device->syspath;
 
         return 0;
 }
@@ -700,7 +750,7 @@ static int device_new_from_child(sd_device **ret, sd_device *child) {
 
                 pos = strrchr(subdir, '/');
                 if (!pos || pos < subdir + 2)
-                        break;
+                        return -ENODEV;
 
                 *pos = '\0';
 
@@ -710,13 +760,9 @@ static int device_new_from_child(sd_device **ret, sd_device *child) {
 
                 return 0;
         }
-
-        return -ENODEV;
 }
 
 _public_ int sd_device_get_parent(sd_device *child, sd_device **ret) {
-
-        assert_return(ret, -EINVAL);
         assert_return(child, -EINVAL);
 
         if (!child->parent_set) {
@@ -728,38 +774,59 @@ _public_ int sd_device_get_parent(sd_device *child, sd_device **ret) {
         if (!child->parent)
                 return -ENOENT;
 
-        *ret = child->parent;
+        if (ret)
+                *ret = child->parent;
         return 0;
 }
 
-int device_set_subsystem(sd_device *device, const char *_subsystem) {
-        _cleanup_free_ char *subsystem = NULL;
+int device_set_subsystem(sd_device *device, const char *subsystem) {
+        _cleanup_free_ char *s = NULL;
         int r;
 
         assert(device);
-        assert(_subsystem);
 
-        subsystem = strdup(_subsystem);
-        if (!subsystem)
-                return -ENOMEM;
+        if (subsystem) {
+                s = strdup(subsystem);
+                if (!s)
+                        return -ENOMEM;
+        }
 
-        r = device_add_property_internal(device, "SUBSYSTEM", subsystem);
+        r = device_add_property_internal(device, "SUBSYSTEM", s);
         if (r < 0)
                 return r;
 
         device->subsystem_set = true;
-        return free_and_replace(device->subsystem, subsystem);
+        return free_and_replace(device->subsystem, s);
 }
 
-static int device_set_drivers_subsystem(sd_device *device, const char *_subsystem) {
+int device_set_drivers_subsystem(sd_device *device) {
         _cleanup_free_ char *subsystem = NULL;
+        const char *syspath, *drivers, *p;
         int r;
 
         assert(device);
-        assert(_subsystem);
-        assert(*_subsystem);
 
-        subsystem = strdup(_subsystem);
+        r = sd_device_get_syspath(device, &syspath);
+        if (r < 0)
+                return r;
+
+        drivers = strstr(syspath, "/drivers/");
+        if (!drivers)
+                return -EINVAL;
+
+        for (p = drivers - 1; p >= syspath; p--)
+                if (*p == '/')
+                        break;
+
+        if (p <= syspath)
+                /* syspath does not start with /sys/ ?? */
+                return -EINVAL;
+        p++;
+        if (p >= drivers)
+                /* refuse duplicated slashes */
+                return -EINVAL;
+
+        subsystem = strndup(p, drivers - p);
         if (!subsystem)
                 return -ENOMEM;
 
@@ -771,67 +838,53 @@ static int device_set_drivers_subsystem(sd_device *device, const char *_subsyste
 }
 
 _public_ int sd_device_get_subsystem(sd_device *device, const char **ret) {
-        const char *syspath, *drivers = NULL;
         int r;
 
-        assert_return(ret, -EINVAL);
         assert_return(device, -EINVAL);
-
-        r = sd_device_get_syspath(device, &syspath);
-        if (r < 0)
-                return r;
 
         if (!device->subsystem_set) {
                 _cleanup_free_ char *subsystem = NULL;
+                const char *syspath;
                 char *path;
+
+                r = sd_device_get_syspath(device, &syspath);
+                if (r < 0)
+                        return r;
 
                 /* read 'subsystem' link */
                 path = strjoina(syspath, "/subsystem");
                 r = readlink_value(path, &subsystem);
-                if (r >= 0)
+                if (r < 0 && r != -ENOENT)
+                        return log_device_debug_errno(device, r,
+                                                      "sd-device: Failed to read subsystem for %s: %m",
+                                                      device->devpath);
+
+                if (subsystem)
                         r = device_set_subsystem(device, subsystem);
                 /* use implicit names */
                 else if (path_startswith(device->devpath, "/module/"))
                         r = device_set_subsystem(device, "module");
-                else if (!(drivers = strstr(syspath, "/drivers/")) &&
-                         PATH_STARTSWITH_SET(device->devpath, "/subsystem/",
+                else if (strstr(syspath, "/drivers/"))
+                        r = device_set_drivers_subsystem(device);
+                else if (PATH_STARTSWITH_SET(device->devpath, "/subsystem/",
                                                               "/class/",
                                                               "/bus/"))
                         r = device_set_subsystem(device, "subsystem");
-                if (r < 0 && r != -ENOENT)
-                        return log_device_debug_errno(device, r, "sd-device: Failed to set subsystem for %s: %m", device->devpath);
-
-                device->subsystem_set = true;
-        } else if (!device->driver_subsystem_set)
-                drivers = strstr(syspath, "/drivers/");
-
-        if (!device->driver_subsystem_set) {
-                if (drivers) {
-                        _cleanup_free_ char *subpath = NULL;
-
-                        subpath = strndup(syspath, drivers - syspath);
-                        if (!subpath)
-                                r = -ENOMEM;
-                        else {
-                                const char *subsys;
-
-                                subsys = strrchr(subpath, '/');
-                                if (!subsys)
-                                        r = -EINVAL;
-                                else
-                                        r = device_set_drivers_subsystem(device, subsys + 1);
-                        }
-                        if (r < 0 && r != -ENOENT)
-                                return log_device_debug_errno(device, r, "sd-device: Failed to set subsystem for driver %s: %m", device->devpath);
+                else {
+                        device->subsystem_set = true;
+                        r = 0;
                 }
-
-                device->driver_subsystem_set = true;
+                if (r < 0)
+                        return log_device_debug_errno(device, r,
+                                                      "sd-device: Failed to set subsystem for %s: %m",
+                                                      device->devpath);
         }
 
         if (!device->subsystem)
                 return -ENOENT;
 
-        *ret = device->subsystem;
+        if (ret)
+                *ret = device->subsystem;
         return 0;
 }
 
@@ -863,10 +916,11 @@ _public_ int sd_device_get_parent_with_subsystem_devtype(sd_device *child, const
         r = sd_device_get_parent(child, &parent);
         while (r >= 0) {
                 const char *parent_subsystem = NULL;
-                const char *parent_devtype = NULL;
 
                 (void) sd_device_get_subsystem(parent, &parent_subsystem);
                 if (streq_ptr(parent_subsystem, subsystem)) {
+                        const char *parent_devtype = NULL;
+
                         if (!devtype)
                                 break;
 
@@ -880,7 +934,8 @@ _public_ int sd_device_get_parent_with_subsystem_devtype(sd_device *child, const
         if (r < 0)
                 return r;
 
-        *ret = parent;
+        if (ret)
+                *ret = parent;
         return 0;
 }
 
@@ -902,28 +957,28 @@ _public_ int sd_device_get_devnum(sd_device *device, dev_t *devnum) {
         return 0;
 }
 
-int device_set_driver(sd_device *device, const char *_driver) {
-        _cleanup_free_ char *driver = NULL;
+int device_set_driver(sd_device *device, const char *driver) {
+        _cleanup_free_ char *d = NULL;
         int r;
 
         assert(device);
-        assert(_driver);
 
-        driver = strdup(_driver);
-        if (!driver)
-                return -ENOMEM;
+        if (driver) {
+                d = strdup(driver);
+                if (!d)
+                        return -ENOMEM;
+        }
 
-        r = device_add_property_internal(device, "DRIVER", driver);
+        r = device_add_property_internal(device, "DRIVER", d);
         if (r < 0)
                 return r;
 
         device->driver_set = true;
-        return free_and_replace(device->driver, driver);
+        return free_and_replace(device->driver, d);
 }
 
 _public_ int sd_device_get_driver(sd_device *device, const char **ret) {
         assert_return(device, -EINVAL);
-        assert_return(ret, -EINVAL);
 
         if (!device->driver_set) {
                 _cleanup_free_ char *driver = NULL;
@@ -937,31 +992,32 @@ _public_ int sd_device_get_driver(sd_device *device, const char **ret) {
 
                 path = strjoina(syspath, "/driver");
                 r = readlink_value(path, &driver);
-                if (r >= 0) {
-                        r = device_set_driver(device, driver);
-                        if (r < 0)
-                                return log_device_debug_errno(device, r, "sd-device: Failed to set driver for %s: %m", device->devpath);
-                } else if (r == -ENOENT)
-                        device->driver_set = true;
-                else
-                        return log_device_debug_errno(device, r, "sd-device: Failed to set driver for %s: %m", device->devpath);
+                if (r < 0 && r != -ENOENT)
+                        return log_device_debug_errno(device, r,
+                                                      "sd-device: readlink(\"%s\") failed: %m", path);
+
+                r = device_set_driver(device, driver);
+                if (r < 0)
+                        return log_device_debug_errno(device, r,
+                                                      "sd-device: Failed to set driver \"%s\": %m", driver);
         }
 
         if (!device->driver)
                 return -ENOENT;
 
-        *ret = device->driver;
+        if (ret)
+                *ret = device->driver;
         return 0;
 }
 
 _public_ int sd_device_get_devpath(sd_device *device, const char **devpath) {
         assert_return(device, -EINVAL);
-        assert_return(devpath, -EINVAL);
 
         assert(device->devpath);
         assert(device->devpath[0] == '/');
 
-        *devpath = device->devpath;
+        if (devpath)
+                *devpath = device->devpath;
         return 0;
 }
 
@@ -969,7 +1025,6 @@ _public_ int sd_device_get_devname(sd_device *device, const char **devname) {
         int r;
 
         assert_return(device, -EINVAL);
-        assert_return(devname, -EINVAL);
 
         r = device_read_uevent_file(device);
         if (r < 0)
@@ -980,11 +1035,12 @@ _public_ int sd_device_get_devname(sd_device *device, const char **devname) {
 
         assert(path_startswith(device->devname, "/dev/"));
 
-        *devname = device->devname;
+        if (devname)
+                *devname = device->devname;
         return 0;
 }
 
-static int device_set_sysname(sd_device *device) {
+static int device_set_sysname_and_sysnum(sd_device *device) {
         _cleanup_free_ char *sysname = NULL;
         const char *sysnum = NULL;
         const char *pos;
@@ -1021,7 +1077,6 @@ static int device_set_sysname(sd_device *device) {
         if (len == 0)
                 sysnum = NULL;
 
-        device->sysname_set = true;
         device->sysnum = sysnum;
         return free_and_replace(device->sysname, sysname);
 }
@@ -1030,17 +1085,15 @@ _public_ int sd_device_get_sysname(sd_device *device, const char **ret) {
         int r;
 
         assert_return(device, -EINVAL);
-        assert_return(ret, -EINVAL);
 
-        if (!device->sysname_set) {
-                r = device_set_sysname(device);
+        if (!device->sysname) {
+                r = device_set_sysname_and_sysnum(device);
                 if (r < 0)
                         return r;
         }
 
-        assert_return(device->sysname, -ENOENT);
-
-        *ret = device->sysname;
+        if (ret)
+                *ret = device->sysname;
         return 0;
 }
 
@@ -1048,10 +1101,9 @@ _public_ int sd_device_get_sysnum(sd_device *device, const char **ret) {
         int r;
 
         assert_return(device, -EINVAL);
-        assert_return(ret, -EINVAL);
 
-        if (!device->sysname_set) {
-                r = device_set_sysname(device);
+        if (!device->sysname) {
+                r = device_set_sysname_and_sysnum(device);
                 if (r < 0)
                         return r;
         }
@@ -1059,7 +1111,32 @@ _public_ int sd_device_get_sysnum(sd_device *device, const char **ret) {
         if (!device->sysnum)
                 return -ENOENT;
 
-        *ret = device->sysnum;
+        if (ret)
+                *ret = device->sysnum;
+        return 0;
+}
+
+_public_ int sd_device_get_action(sd_device *device, sd_device_action_t *ret) {
+        assert_return(device, -EINVAL);
+
+        if (device->action < 0)
+                return -ENOENT;
+
+        if (ret)
+                *ret = device->action;
+
+        return 0;
+}
+
+_public_ int sd_device_get_seqnum(sd_device *device, uint64_t *ret) {
+        assert_return(device, -EINVAL);
+
+        if (device->seqnum == 0)
+                return -ENOENT;
+
+        if (ret)
+                *ret = device->seqnum;
+
         return 0;
 }
 
@@ -1069,8 +1146,8 @@ static bool is_valid_tag(const char *tag) {
         return !strchr(tag, ':') && !strchr(tag, ' ');
 }
 
-int device_add_tag(sd_device *device, const char *tag) {
-        int r;
+int device_add_tag(sd_device *device, const char *tag, bool both) {
+        int r, added;
 
         assert(device);
         assert(tag);
@@ -1078,13 +1155,21 @@ int device_add_tag(sd_device *device, const char *tag) {
         if (!is_valid_tag(tag))
                 return -EINVAL;
 
-        r = set_ensure_allocated(&device->tags, &string_hash_ops);
-        if (r < 0)
-                return r;
+        /* Definitely add to the "all" list of tags (i.e. the sticky list) */
+        added = set_put_strdup(&device->all_tags, tag);
+        if (added < 0)
+                return added;
 
-        r = set_put_strdup(device->tags, tag);
-        if (r < 0)
-                return r;
+        /* And optionally, also add it to the current list of tags */
+        if (both) {
+                r = set_put_strdup(&device->current_tags, tag);
+                if (r < 0) {
+                        if (added > 0)
+                                (void) set_remove(device->all_tags, tag);
+
+                        return r;
+                }
+        }
 
         device->tags_generation++;
         device->property_tags_outdated = true;
@@ -1098,11 +1183,7 @@ int device_add_devlink(sd_device *device, const char *devlink) {
         assert(device);
         assert(devlink);
 
-        r = set_ensure_allocated(&device->devlinks, &string_hash_ops);
-        if (r < 0)
-                return r;
-
-        r = set_put_strdup(device->devlinks, devlink);
+        r = set_put_strdup(&device->devlinks, devlink);
         if (r < 0)
                 return r;
 
@@ -1166,8 +1247,9 @@ static int handle_db_line(sd_device *device, char key, const char *value) {
         assert(value);
 
         switch (key) {
-        case 'G':
-                r = device_add_tag(device, value);
+        case 'G': /* Any tag */
+        case 'Q': /* Current tag */
+                r = device_add_tag(device, value, key == 'Q');
                 if (r < 0)
                         return r;
 
@@ -1205,7 +1287,13 @@ static int handle_db_line(sd_device *device, char key, const char *value) {
 
                 break;
         case 'W':
-                r = safe_atoi(value, &device->watch_handle);
+                /* Deprecated. Previously, watch handle is both saved in database and /run/udev/watch.
+                 * However, the handle saved in database may not be updated when the handle is updated
+                 * or removed. Moreover, it is not necessary to store the handle within the database,
+                 * as its value becomes meaningless when udevd is restarted. */
+                break;
+        case 'V':
+                r = safe_atou(value, &device->database_version);
                 if (r < 0)
                         return r;
 
@@ -1217,11 +1305,11 @@ static int handle_db_line(sd_device *device, char key, const char *value) {
         return 0;
 }
 
-int device_get_id_filename(sd_device *device, const char **ret) {
+int device_get_device_id(sd_device *device, const char **ret) {
         assert(device);
         assert(ret);
 
-        if (!device->id_filename) {
+        if (!device->device_id) {
                 _cleanup_free_ char *id = NULL;
                 const char *subsystem;
                 dev_t devnum;
@@ -1258,30 +1346,30 @@ int device_get_id_filename(sd_device *device, const char **ret) {
                         if (!subsystem)
                                 return -EINVAL;
 
-                        if (streq(subsystem, "drivers")) {
+                        if (streq(subsystem, "drivers"))
                                 /* the 'drivers' pseudo-subsystem is special, and needs the real subsystem
                                  * encoded as well */
-                                r = asprintf(&id, "+drivers:%s:%s", device->driver_subsystem, sysname);
-                                if (r < 0)
-                                        return -ENOMEM;
-                        } else {
-                                r = asprintf(&id, "+%s:%s", subsystem, sysname);
-                                if (r < 0)
-                                        return -ENOMEM;
-                        }
+                                id = strjoin("+drivers:", device->driver_subsystem, ":", sysname);
+                        else
+                                id = strjoin("+", subsystem, ":", sysname);
+                        if (!id)
+                                return -ENOMEM;
                 }
 
-                device->id_filename = TAKE_PTR(id);
+                if (!filename_is_valid(id))
+                        return -EINVAL;
+
+                device->device_id = TAKE_PTR(id);
         }
 
-        *ret = device->id_filename;
+        *ret = device->device_id;
         return 0;
 }
 
 int device_read_db_internal_filename(sd_device *device, const char *filename) {
         _cleanup_free_ char *db = NULL;
         const char *value;
-        size_t db_len, i;
+        size_t db_len;
         char key;
         int r;
 
@@ -1309,7 +1397,7 @@ int device_read_db_internal_filename(sd_device *device, const char *filename) {
 
         device->db_loaded = true;
 
-        for (i = 0; i < db_len; i++) {
+        for (size_t i = 0; i < db_len; i++) {
                 switch (state) {
                 case PRE_KEY:
                         if (!strchr(NEWLINE, db[i])) {
@@ -1347,7 +1435,8 @@ int device_read_db_internal_filename(sd_device *device, const char *filename) {
                                 db[i] = '\0';
                                 r = handle_db_line(device, key, value);
                                 if (r < 0)
-                                        log_device_debug_errno(device, r, "sd-device: Failed to handle db entry '%c:%s', ignoring: %m", key, value);
+                                        log_device_debug_errno(device, r, "sd-device: Failed to handle db entry '%c:%s', ignoring: %m",
+                                                               key, value);
 
                                 state = PRE_KEY;
                         }
@@ -1370,7 +1459,7 @@ int device_read_db_internal(sd_device *device, bool force) {
         if (device->db_loaded || (!force && device->sealed))
                 return 0;
 
-        r = device_get_id_filename(device, &id);
+        r = device_get_device_id(device, &id);
         if (r < 0)
                 return r;
 
@@ -1391,12 +1480,10 @@ _public_ int sd_device_get_is_initialized(sd_device *device) {
         return device->is_initialized;
 }
 
-_public_ int sd_device_get_usec_since_initialized(sd_device *device, uint64_t *usec) {
-        usec_t now_ts;
+_public_ int sd_device_get_usec_initialized(sd_device *device, uint64_t *ret) {
         int r;
 
         assert_return(device, -EINVAL);
-        assert_return(usec, -EINVAL);
 
         r = device_read_db(device);
         if (r < 0)
@@ -1405,15 +1492,38 @@ _public_ int sd_device_get_usec_since_initialized(sd_device *device, uint64_t *u
         if (!device->is_initialized)
                 return -EBUSY;
 
-        if (!device->usec_initialized)
+        if (device->usec_initialized == 0)
                 return -ENODATA;
 
-        now_ts = now(clock_boottime_or_monotonic());
+        if (ret)
+                *ret = device->usec_initialized;
+
+        return 0;
+}
+
+_public_ int sd_device_get_usec_since_initialized(sd_device *device, uint64_t *usec) {
+        usec_t now_ts;
+        int r;
+
+        assert_return(device, -EINVAL);
+
+        r = device_read_db(device);
+        if (r < 0)
+                return r;
+
+        if (!device->is_initialized)
+                return -EBUSY;
+
+        if (device->usec_initialized == 0)
+                return -ENODATA;
+
+        now_ts = now(CLOCK_MONOTONIC);
 
         if (now_ts < device->usec_initialized)
                 return -EIO;
 
-        *usec = now_ts - device->usec_initialized;
+        if (usec)
+                *usec = now_ts - device->usec_initialized;
         return 0;
 }
 
@@ -1424,10 +1534,10 @@ _public_ const char *sd_device_get_tag_first(sd_device *device) {
 
         (void) device_read_db(device);
 
-        device->tags_iterator_generation = device->tags_generation;
-        device->tags_iterator = ITERATOR_FIRST;
+        device->all_tags_iterator_generation = device->tags_generation;
+        device->all_tags_iterator = ITERATOR_FIRST;
 
-        (void) set_iterate(device->tags, &device->tags_iterator, &v);
+        (void) set_iterate(device->all_tags, &device->all_tags_iterator, &v);
         return v;
 }
 
@@ -1438,10 +1548,56 @@ _public_ const char *sd_device_get_tag_next(sd_device *device) {
 
         (void) device_read_db(device);
 
-        if (device->tags_iterator_generation != device->tags_generation)
+        if (device->all_tags_iterator_generation != device->tags_generation)
                 return NULL;
 
-        (void) set_iterate(device->tags, &device->tags_iterator, &v);
+        (void) set_iterate(device->all_tags, &device->all_tags_iterator, &v);
+        return v;
+}
+
+static bool device_database_supports_current_tags(sd_device *device) {
+        assert(device);
+
+        (void) device_read_db(device);
+
+        /* The current tags (saved in Q field) feature is implemented in database version 1.
+         * If the database version is 0, then the tags (NOT current tags, saved in G field) are not
+         * sticky. Thus, we can safely bypass the operations for the current tags (Q) to tags (G). */
+
+        return device->database_version >= 1;
+}
+
+_public_ const char *sd_device_get_current_tag_first(sd_device *device) {
+        void *v;
+
+        assert_return(device, NULL);
+
+        if (!device_database_supports_current_tags(device))
+                return sd_device_get_tag_first(device);
+
+        (void) device_read_db(device);
+
+        device->current_tags_iterator_generation = device->tags_generation;
+        device->current_tags_iterator = ITERATOR_FIRST;
+
+        (void) set_iterate(device->current_tags, &device->current_tags_iterator, &v);
+        return v;
+}
+
+_public_ const char *sd_device_get_current_tag_next(sd_device *device) {
+        void *v;
+
+        assert_return(device, NULL);
+
+        if (!device_database_supports_current_tags(device))
+                return sd_device_get_tag_next(device);
+
+        (void) device_read_db(device);
+
+        if (device->current_tags_iterator_generation != device->tags_generation)
+                return NULL;
+
+        (void) set_iterate(device->current_tags, &device->current_tags_iterator, &v);
         return v;
 }
 
@@ -1488,49 +1644,43 @@ int device_properties_prepare(sd_device *device) {
 
         if (device->property_devlinks_outdated) {
                 _cleanup_free_ char *devlinks = NULL;
-                size_t devlinks_allocated = 0, devlinks_len = 0;
-                const char *devlink;
 
-                for (devlink = sd_device_get_devlink_first(device); devlink; devlink = sd_device_get_devlink_next(device)) {
-                        char *e;
-
-                        if (!GREEDY_REALLOC(devlinks, devlinks_allocated, devlinks_len + strlen(devlink) + 2))
-                                return -ENOMEM;
-                        if (devlinks_len > 0)
-                                stpcpy(devlinks + devlinks_len++, " ");
-                        e = stpcpy(devlinks + devlinks_len, devlink);
-                        devlinks_len = e - devlinks;
-                }
-
-                r = device_add_property_internal(device, "DEVLINKS", devlinks);
+                r = set_strjoin(device->devlinks, " ", false, &devlinks);
                 if (r < 0)
                         return r;
+
+                if (!isempty(devlinks)) {
+                        r = device_add_property_internal(device, "DEVLINKS", devlinks);
+                        if (r < 0)
+                                return r;
+                }
 
                 device->property_devlinks_outdated = false;
         }
 
         if (device->property_tags_outdated) {
                 _cleanup_free_ char *tags = NULL;
-                size_t tags_allocated = 0, tags_len = 0;
-                const char *tag;
 
-                if (!GREEDY_REALLOC(tags, tags_allocated, 2))
-                        return -ENOMEM;
-                stpcpy(tags, ":");
-                tags_len++;
-
-                for (tag = sd_device_get_tag_first(device); tag; tag = sd_device_get_tag_next(device)) {
-                        char *e;
-
-                        if (!GREEDY_REALLOC(tags, tags_allocated, tags_len + strlen(tag) + 2))
-                                return -ENOMEM;
-                        e = stpcpy(stpcpy(tags + tags_len, tag), ":");
-                        tags_len = e - tags;
-                }
-
-                r = device_add_property_internal(device, "TAGS", tags);
+                r = set_strjoin(device->all_tags, ":", true, &tags);
                 if (r < 0)
                         return r;
+
+                if (!isempty(tags)) {
+                        r = device_add_property_internal(device, "TAGS", tags);
+                        if (r < 0)
+                                return r;
+                }
+
+                tags = mfree(tags);
+                r = set_strjoin(device->current_tags, ":", true, &tags);
+                if (r < 0)
+                        return r;
+
+                if (!isempty(tags)) {
+                        r = device_add_property_internal(device, "CURRENT_TAGS", tags);
+                        if (r < 0)
+                                return r;
+                }
 
                 device->property_tags_outdated = false;
         }
@@ -1572,38 +1722,68 @@ _public_ const char *sd_device_get_property_next(sd_device *device, const char *
         return key;
 }
 
-static int device_sysattrs_read_all(sd_device *device) {
+static int device_sysattrs_read_all_internal(sd_device *device, const char *subdir) {
+        _cleanup_free_ char *path_dir = NULL;
         _cleanup_closedir_ DIR *dir = NULL;
-        const char *syspath;
         struct dirent *dent;
+        const char *syspath;
         int r;
-
-        assert(device);
-
-        if (device->sysattrs_read)
-                return 0;
 
         r = sd_device_get_syspath(device, &syspath);
         if (r < 0)
                 return r;
 
-        dir = opendir(syspath);
+        if (subdir) {
+                _cleanup_free_ char *p = NULL;
+
+                p = path_join(syspath, subdir, "uevent");
+                if (!p)
+                        return -ENOMEM;
+
+                if (access(p, F_OK) >= 0)
+                        /* this is a child device, skipping */
+                        return 0;
+                if (errno != ENOENT) {
+                        log_device_debug_errno(device, errno, "sd-device: Failed to stat %s, ignoring subdir: %m", p);
+                        return 0;
+                }
+
+                path_dir = path_join(syspath, subdir);
+                if (!path_dir)
+                        return -ENOMEM;
+        }
+
+        dir = opendir(path_dir ?: syspath);
         if (!dir)
                 return -errno;
 
-        r = set_ensure_allocated(&device->sysattrs, &string_hash_ops);
-        if (r < 0)
-                return r;
-
         FOREACH_DIRENT_ALL(dent, dir, return -errno) {
-                _cleanup_free_ char *path = NULL;
+                _cleanup_free_ char *path = NULL, *p = NULL;
                 struct stat statbuf;
 
-                /* only handle symlinks and regular files */
-                if (!IN_SET(dent->d_type, DT_LNK, DT_REG))
+                if (dot_or_dot_dot(dent->d_name))
                         continue;
 
-                path = path_join(syspath, dent->d_name);
+                /* only handle symlinks, regular files, and directories */
+                if (!IN_SET(dent->d_type, DT_LNK, DT_REG, DT_DIR))
+                        continue;
+
+                if (subdir) {
+                        p = path_join(subdir, dent->d_name);
+                        if (!p)
+                                return -ENOMEM;
+                }
+
+                if (dent->d_type == DT_DIR) {
+                        /* read subdirectory */
+                        r = device_sysattrs_read_all_internal(device, p ?: dent->d_name);
+                        if (r < 0)
+                                return r;
+
+                        continue;
+                }
+
+                path = path_join(syspath, p ?: dent->d_name);
                 if (!path)
                         return -ENOMEM;
 
@@ -1613,10 +1793,25 @@ static int device_sysattrs_read_all(sd_device *device) {
                 if (!(statbuf.st_mode & S_IRUSR))
                         continue;
 
-                r = set_put_strdup(device->sysattrs, dent->d_name);
+                r = set_put_strdup(&device->sysattrs, p ?: dent->d_name);
                 if (r < 0)
                         return r;
         }
+
+        return 0;
+}
+
+static int device_sysattrs_read_all(sd_device *device) {
+        int r;
+
+        assert(device);
+
+        if (device->sysattrs_read)
+                return 0;
+
+        r = device_sysattrs_read_all_internal(device, NULL);
+        if (r < 0)
+                return r;
 
         device->sysattrs_read = true;
 
@@ -1661,11 +1856,23 @@ _public_ int sd_device_has_tag(sd_device *device, const char *tag) {
 
         (void) device_read_db(device);
 
-        return !!set_contains(device->tags, tag);
+        return set_contains(device->all_tags, tag);
 }
 
-_public_ int sd_device_get_property_value(sd_device *device, const char *key, const char **_value) {
-        char *value;
+_public_ int sd_device_has_current_tag(sd_device *device, const char *tag) {
+        assert_return(device, -EINVAL);
+        assert_return(tag, -EINVAL);
+
+        if (!device_database_supports_current_tags(device))
+                return sd_device_has_tag(device, tag);
+
+        (void) device_read_db(device);
+
+        return set_contains(device->current_tags, tag);
+}
+
+_public_ int sd_device_get_property_value(sd_device *device, const char *key, const char **ret_value) {
+        const char *value;
         int r;
 
         assert_return(device, -EINVAL);
@@ -1679,40 +1886,67 @@ _public_ int sd_device_get_property_value(sd_device *device, const char *key, co
         if (!value)
                 return -ENOENT;
 
-        if (_value)
-                *_value = value;
+        if (ret_value)
+                *ret_value = value;
         return 0;
 }
 
-/* replaces the value if it already exists */
-static int device_add_sysattr_value(sd_device *device, const char *_key, char *value) {
-        _cleanup_free_ char *key = NULL;
-        _cleanup_free_ char *value_old = NULL;
+_public_ int sd_device_get_trigger_uuid(sd_device *device, sd_id128_t *ret) {
+        const char *s;
+        sd_id128_t id;
+        int r;
+
+        assert_return(device, -EINVAL);
+
+        /* Retrieves the UUID attached to a uevent when triggering it from userspace via
+         * sd_device_trigger_with_uuid() or an equivalent interface. Returns -ENOENT if the record is not
+         * caused by a synthetic event and -ENODATA if it was but no UUID was specified */
+
+        r = sd_device_get_property_value(device, "SYNTH_UUID", &s);
+        if (r < 0)
+                return r;
+
+        if (streq(s, "0")) /* SYNTH_UUID=0 is set whenever a device is triggered by userspace without specifying a UUID */
+                return -ENODATA;
+
+        r = sd_id128_from_string(s, &id);
+        if (r < 0)
+                return r;
+
+        if (ret)
+                *ret = id;
+
+        return 0;
+}
+
+static int device_cache_sysattr_value(sd_device *device, const char *key, char *value) {
+        _cleanup_free_ char *new_key = NULL, *old_value = NULL;
         int r;
 
         assert(device);
-        assert(_key);
+        assert(key);
 
-        r = hashmap_ensure_allocated(&device->sysattr_values, &string_hash_ops);
-        if (r < 0)
-                return r;
+        /* This takes the reference of the input value. The input value may be NULL.
+         * This replaces the value if it already exists. */
 
-        value_old = hashmap_remove2(device->sysattr_values, _key, (void **)&key);
-        if (!key) {
-                key = strdup(_key);
-                if (!key)
+        /* First, remove the old cache entry. So, we do not need to clear cache on error. */
+        old_value = hashmap_remove2(device->sysattr_values, key, (void **) &new_key);
+        if (!new_key) {
+                new_key = strdup(key);
+                if (!new_key)
                         return -ENOMEM;
         }
 
-        r = hashmap_put(device->sysattr_values, key, value);
+        r = hashmap_ensure_put(&device->sysattr_values, &string_hash_ops_free_free, new_key, value);
         if (r < 0)
                 return r;
-        TAKE_PTR(key);
+
+        TAKE_PTR(new_key);
 
         return 0;
 }
 
-static int device_get_sysattr_value(sd_device *device, const char *_key, const char **_value) {
+static int device_get_cached_sysattr_value(sd_device *device, const char *_key, const char **_value) {
         const char *key = NULL, *value;
 
         assert(device);
@@ -1729,7 +1963,7 @@ static int device_get_sysattr_value(sd_device *device, const char *_key, const c
 
 /* We cache all sysattr lookups. If an attribute does not exist, it is stored
  * with a NULL value in the cache, otherwise the returned string is stored */
-_public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr, const char **_value) {
+_public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr, const char **ret_value) {
         _cleanup_free_ char *value = NULL;
         const char *path, *syspath, *cached_value = NULL;
         struct stat statbuf;
@@ -1739,7 +1973,7 @@ _public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr,
         assert_return(sysattr, -EINVAL);
 
         /* look for possibly already cached result */
-        r = device_get_sysattr_value(device, sysattr, &cached_value);
+        r = device_get_cached_sysattr_value(device, sysattr, &cached_value);
         if (r != -ENOENT) {
                 if (r < 0)
                         return r;
@@ -1748,8 +1982,8 @@ _public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr,
                         /* we looked up the sysattr before and it did not exist */
                         return -ENOENT;
 
-                if (_value)
-                        *_value = cached_value;
+                if (ret_value)
+                        *ret_value = cached_value;
 
                 return 0;
         }
@@ -1759,14 +1993,19 @@ _public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr,
                 return r;
 
         path = prefix_roota(syspath, sysattr);
-        r = lstat(path, &statbuf);
-        if (r < 0) {
-                /* remember that we could not access the sysattr */
-                r = device_add_sysattr_value(device, sysattr, NULL);
-                if (r < 0)
-                        return r;
+        if (lstat(path, &statbuf) < 0) {
+                int k;
 
-                return -ENOENT;
+                r = -errno;
+
+                /* remember that we could not access the sysattr */
+                k = device_cache_sysattr_value(device, sysattr, NULL);
+                if (k < 0)
+                        log_device_debug_errno(device, k,
+                                               "sd-device: failed to cache attribute '%s' with NULL, ignoring: %m",
+                                               sysattr);
+
+                return r;
         } else if (S_ISLNK(statbuf.st_mode)) {
                 /* Some core links return only the last element of the target path,
                  * these are just values, the paths should not be exposed. */
@@ -1776,35 +2015,42 @@ _public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr,
                                 return r;
                 } else
                         return -EINVAL;
-        } else if (S_ISDIR(statbuf.st_mode)) {
+        } else if (S_ISDIR(statbuf.st_mode))
                 /* skip directories */
-                return -EINVAL;
-        } else if (!(statbuf.st_mode & S_IRUSR)) {
+                return -EISDIR;
+        else if (!(statbuf.st_mode & S_IRUSR))
                 /* skip non-readable files */
                 return -EPERM;
-        } else {
+        else {
                 size_t size;
 
-                /* read attribute value */
+                /* Read attribute value, Some attributes contain embedded '\0'. So, it is necessary to
+                 * also get the size of the result. See issue #20025. */
                 r = read_full_virtual_file(path, &value, &size);
                 if (r < 0)
                         return r;
 
                 /* drop trailing newlines */
-                while (size > 0 && value[--size] == '\n')
+                while (size > 0 && strchr(NEWLINE, value[--size]))
                         value[size] = '\0';
         }
 
-        r = device_add_sysattr_value(device, sysattr, value);
-        if (r < 0)
-                return r;
-
-        *_value = TAKE_PTR(value);
+        /* Unfortunately, we need to return 'const char*' instead of 'char*'. Hence, failure in caching
+         * sysattr value is critical unlike the other places. */
+        r = device_cache_sysattr_value(device, sysattr, value);
+        if (r < 0) {
+                log_device_debug_errno(device, r,
+                                       "sd-device: failed to cache attribute '%s' with '%s'%s: %m",
+                                       sysattr, value, ret_value ? "" : ", ignoring");
+                if (ret_value)
+                        return r;
+        } else if (ret_value)
+                *ret_value = TAKE_PTR(value);
 
         return 0;
 }
 
-static void device_remove_sysattr_value(sd_device *device, const char *_key) {
+static void device_remove_cached_sysattr_value(sd_device *device, const char *_key) {
         _cleanup_free_ char *key = NULL;
 
         assert(device);
@@ -1813,8 +2059,6 @@ static void device_remove_sysattr_value(sd_device *device, const char *_key) {
         free(hashmap_remove2(device->sysattr_values, _key, (void **) &key));
 }
 
-/* set the attribute and save it in the cache. If a NULL value is passed the
- * attribute is cleared from the cache */
 _public_ int sd_device_set_sysattr_value(sd_device *device, const char *sysattr, const char *_value) {
         _cleanup_free_ char *value = NULL;
         const char *syspath, *path;
@@ -1824,8 +2068,11 @@ _public_ int sd_device_set_sysattr_value(sd_device *device, const char *sysattr,
         assert_return(device, -EINVAL);
         assert_return(sysattr, -EINVAL);
 
+        /* Set the attribute and save it in the cache. */
+
         if (!_value) {
-                device_remove_sysattr_value(device, sysattr);
+                /* If input value is NULL, then clear cache and not write anything. */
+                device_remove_cached_sysattr_value(device, sysattr);
                 return 0;
         }
 
@@ -1838,7 +2085,7 @@ _public_ int sd_device_set_sysattr_value(sd_device *device, const char *sysattr,
         len = strlen(_value);
 
         /* drop trailing newlines */
-        while (len > 0 && _value[len - 1] == '\n')
+        while (len > 0 && strchr(NEWLINE, _value[len - 1]))
                 len --;
 
         /* value length is limited to 4k */
@@ -1851,27 +2098,93 @@ _public_ int sd_device_set_sysattr_value(sd_device *device, const char *sysattr,
 
         r = write_string_file(path, value, WRITE_STRING_FILE_DISABLE_BUFFER | WRITE_STRING_FILE_NOFOLLOW);
         if (r < 0) {
-                if (r == -ELOOP)
-                        return -EINVAL;
-                if (r == -EISDIR)
-                        return r;
-
-                r = free_and_strdup(&value, "");
-                if (r < 0)
-                        return r;
-
-                r = device_add_sysattr_value(device, sysattr, value);
-                if (r < 0)
-                        return r;
-                TAKE_PTR(value);
-
-                return -ENXIO;
+                /* On failure, clear cache entry, as we do not know how it fails. */
+                device_remove_cached_sysattr_value(device, sysattr);
+                return r;
         }
 
-        r = device_add_sysattr_value(device, sysattr, value);
+        /* Do not cache action string written into uevent file. */
+        if (streq(sysattr, "uevent"))
+                return 0;
+
+        r = device_cache_sysattr_value(device, sysattr, value);
+        if (r < 0)
+                log_device_debug_errno(device, r,
+                                       "sd-device: failed to cache attribute '%s' with '%s', ignoring: %m",
+                                       sysattr, value);
+        else
+                TAKE_PTR(value);
+
+        return 0;
+}
+
+_public_ int sd_device_set_sysattr_valuef(sd_device *device, const char *sysattr, const char *format, ...) {
+        _cleanup_free_ char *value = NULL;
+        va_list ap;
+        int r;
+
+        assert_return(device, -EINVAL);
+        assert_return(sysattr, -EINVAL);
+
+        if (!format) {
+                device_remove_cached_sysattr_value(device, sysattr);
+                return 0;
+        }
+
+        va_start(ap, format);
+        r = vasprintf(&value, format, ap);
+        va_end(ap);
+
+        if (r < 0)
+                return -ENOMEM;
+
+        return sd_device_set_sysattr_value(device, sysattr, value);
+}
+
+_public_ int sd_device_trigger(sd_device *device, sd_device_action_t action) {
+        const char *s;
+
+        assert_return(device, -EINVAL);
+
+        s = device_action_to_string(action);
+        if (!s)
+                return -EINVAL;
+
+        /* This uses the simple no-UUID interface of kernel < 4.13 */
+        return sd_device_set_sysattr_value(device, "uevent", s);
+}
+
+_public_ int sd_device_trigger_with_uuid(
+                sd_device *device,
+                sd_device_action_t action,
+                sd_id128_t *ret_uuid) {
+
+        char buf[ID128_UUID_STRING_MAX];
+        const char *s, *j;
+        sd_id128_t u;
+        int r;
+
+        assert_return(device, -EINVAL);
+
+        /* If no one wants to know the UUID, use the simple interface from pre-4.13 times */
+        if (!ret_uuid)
+                return sd_device_trigger(device, action);
+
+        s = device_action_to_string(action);
+        if (!s)
+                return -EINVAL;
+
+        r = sd_id128_randomize(&u);
         if (r < 0)
                 return r;
-        TAKE_PTR(value);
 
+        id128_to_uuid_string(u, buf);
+        j = strjoina(s, " ", buf);
+
+        r = sd_device_set_sysattr_value(device, "uevent", j);
+        if (r < 0)
+                return r;
+
+        *ret_uuid = u;
         return 0;
 }

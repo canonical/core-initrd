@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <fcntl.h>
 #include <grp.h>
@@ -15,9 +15,7 @@
 #include "io-util.h"
 #include "log.h"
 #include "macro.h"
-#include "missing_network.h"
 #include "process-util.h"
-#include "socket-netlink.h"
 #include "socket-util.h"
 #include "string-util.h"
 #include "tests.h"
@@ -28,13 +26,13 @@ assert_cc(SUN_PATH_LEN == 108);
 static void test_ifname_valid(void) {
         log_info("/* %s */", __func__);
 
-        assert(ifname_valid("foo"));
-        assert(ifname_valid("eth0"));
+        assert( ifname_valid("foo"));
+        assert( ifname_valid("eth0"));
 
         assert(!ifname_valid("0"));
         assert(!ifname_valid("99"));
-        assert(ifname_valid("a99"));
-        assert(ifname_valid("99a"));
+        assert( ifname_valid("a99"));
+        assert( ifname_valid("99a"));
 
         assert(!ifname_valid(NULL));
         assert(!ifname_valid(""));
@@ -46,9 +44,13 @@ static void test_ifname_valid(void) {
         assert(ifname_valid("foo.bar"));
         assert(!ifname_valid("x:y"));
 
-        assert(ifname_valid("xxxxxxxxxxxxxxx"));
-        assert(!ifname_valid("xxxxxxxxxxxxxxxx"));
-        assert(ifname_valid_full("xxxxxxxxxxxxxxxx", true));
+        assert( ifname_valid_full("xxxxxxxxxxxxxxx", 0));
+        assert(!ifname_valid_full("xxxxxxxxxxxxxxxx", 0));
+        assert( ifname_valid_full("xxxxxxxxxxxxxxxx", IFNAME_VALID_ALTERNATIVE));
+        assert( ifname_valid_full("xxxxxxxxxxxxxxxx", IFNAME_VALID_ALTERNATIVE));
+        assert(!ifname_valid_full("999", IFNAME_VALID_ALTERNATIVE));
+        assert( ifname_valid_full("999", IFNAME_VALID_ALTERNATIVE | IFNAME_VALID_NUMERIC));
+        assert(!ifname_valid_full("0", IFNAME_VALID_ALTERNATIVE | IFNAME_VALID_NUMERIC));
 }
 
 static void test_socket_print_unix_one(const char *in, size_t len_in, const char *expected) {
@@ -82,167 +84,6 @@ static void test_socket_print_unix(void) {
         test_socket_print_unix_one("////////////////////////////////////////////////////////////////////////////////////////////////////////////", 108,
                                    "////////////////////////////////////////////////////////////////////////////////////////////////////////////");
         test_socket_print_unix_one("\0\a\b\n\255", 6, "@\\a\\b\\n\\255\\000");
-}
-
-static void test_in_addr_is_null(void) {
-        union in_addr_union i = {};
-
-        log_info("/* %s */", __func__);
-
-        assert_se(in_addr_is_null(AF_INET, &i) == true);
-        assert_se(in_addr_is_null(AF_INET6, &i) == true);
-
-        i.in.s_addr = 0x1000000;
-        assert_se(in_addr_is_null(AF_INET, &i) == false);
-        assert_se(in_addr_is_null(AF_INET6, &i) == false);
-
-        assert_se(in_addr_is_null(-1, &i) == -EAFNOSUPPORT);
-}
-
-static void test_in_addr_prefix_intersect_one(unsigned f, const char *a, unsigned apl, const char *b, unsigned bpl, int result) {
-        union in_addr_union ua, ub;
-
-        assert_se(in_addr_from_string(f, a, &ua) >= 0);
-        assert_se(in_addr_from_string(f, b, &ub) >= 0);
-
-        assert_se(in_addr_prefix_intersect(f, &ua, apl, &ub, bpl) == result);
-}
-
-static void test_in_addr_prefix_intersect(void) {
-        log_info("/* %s */", __func__);
-
-        test_in_addr_prefix_intersect_one(AF_INET, "255.255.255.255", 32, "255.255.255.254", 32, 0);
-        test_in_addr_prefix_intersect_one(AF_INET, "255.255.255.255", 0, "255.255.255.255", 32, 1);
-        test_in_addr_prefix_intersect_one(AF_INET, "0.0.0.0", 0, "47.11.8.15", 32, 1);
-
-        test_in_addr_prefix_intersect_one(AF_INET, "1.1.1.1", 24, "1.1.1.1", 24, 1);
-        test_in_addr_prefix_intersect_one(AF_INET, "2.2.2.2", 24, "1.1.1.1", 24, 0);
-
-        test_in_addr_prefix_intersect_one(AF_INET, "1.1.1.1", 24, "1.1.1.127", 25, 1);
-        test_in_addr_prefix_intersect_one(AF_INET, "1.1.1.1", 24, "1.1.1.127", 26, 1);
-        test_in_addr_prefix_intersect_one(AF_INET, "1.1.1.1", 25, "1.1.1.127", 25, 1);
-        test_in_addr_prefix_intersect_one(AF_INET, "1.1.1.1", 25, "1.1.1.255", 25, 0);
-
-        test_in_addr_prefix_intersect_one(AF_INET6, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 128, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe", 128, 0);
-        test_in_addr_prefix_intersect_one(AF_INET6, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 0, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 128, 1);
-        test_in_addr_prefix_intersect_one(AF_INET6, "::", 0, "beef:beef:beef:beef:beef:beef:beef:beef", 128, 1);
-
-        test_in_addr_prefix_intersect_one(AF_INET6, "1::2", 64, "1::2", 64, 1);
-        test_in_addr_prefix_intersect_one(AF_INET6, "2::2", 64, "1::2", 64, 0);
-
-        test_in_addr_prefix_intersect_one(AF_INET6, "1::1", 120, "1::007f", 121, 1);
-        test_in_addr_prefix_intersect_one(AF_INET6, "1::1", 120, "1::007f", 122, 1);
-        test_in_addr_prefix_intersect_one(AF_INET6, "1::1", 121, "1::007f", 121, 1);
-        test_in_addr_prefix_intersect_one(AF_INET6, "1::1", 121, "1::00ff", 121, 0);
-}
-
-static void test_in_addr_prefix_next_one(unsigned f, const char *before, unsigned pl, const char *after) {
-        union in_addr_union ubefore, uafter, t;
-
-        assert_se(in_addr_from_string(f, before, &ubefore) >= 0);
-
-        t = ubefore;
-        assert_se((in_addr_prefix_next(f, &t, pl) > 0) == !!after);
-
-        if (after) {
-                assert_se(in_addr_from_string(f, after, &uafter) >= 0);
-                assert_se(in_addr_equal(f, &t, &uafter) > 0);
-        }
-}
-
-static void test_in_addr_prefix_next(void) {
-        log_info("/* %s */", __func__);
-
-        test_in_addr_prefix_next_one(AF_INET, "192.168.0.0", 24, "192.168.1.0");
-        test_in_addr_prefix_next_one(AF_INET, "192.168.0.0", 16, "192.169.0.0");
-        test_in_addr_prefix_next_one(AF_INET, "192.168.0.0", 20, "192.168.16.0");
-
-        test_in_addr_prefix_next_one(AF_INET, "0.0.0.0", 32, "0.0.0.1");
-        test_in_addr_prefix_next_one(AF_INET, "255.255.255.255", 32, NULL);
-        test_in_addr_prefix_next_one(AF_INET, "255.255.255.0", 24, NULL);
-
-        test_in_addr_prefix_next_one(AF_INET6, "4400::", 128, "4400::0001");
-        test_in_addr_prefix_next_one(AF_INET6, "4400::", 120, "4400::0100");
-        test_in_addr_prefix_next_one(AF_INET6, "4400::", 127, "4400::0002");
-        test_in_addr_prefix_next_one(AF_INET6, "4400::", 8, "4500::");
-        test_in_addr_prefix_next_one(AF_INET6, "4400::", 7, "4600::");
-
-        test_in_addr_prefix_next_one(AF_INET6, "::", 128, "::1");
-
-        test_in_addr_prefix_next_one(AF_INET6, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 128, NULL);
-        test_in_addr_prefix_next_one(AF_INET6, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00", 120, NULL);
-}
-
-static void test_in_addr_to_string_one(int f, const char *addr) {
-        union in_addr_union ua;
-        _cleanup_free_ char *r = NULL;
-
-        assert_se(in_addr_from_string(f, addr, &ua) >= 0);
-        assert_se(in_addr_to_string(f, &ua, &r) >= 0);
-        printf("test_in_addr_to_string_one: %s == %s\n", addr, r);
-        assert_se(streq(addr, r));
-}
-
-static void test_in_addr_to_string(void) {
-        log_info("/* %s */", __func__);
-
-        test_in_addr_to_string_one(AF_INET, "192.168.0.1");
-        test_in_addr_to_string_one(AF_INET, "10.11.12.13");
-        test_in_addr_to_string_one(AF_INET6, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff");
-        test_in_addr_to_string_one(AF_INET6, "::1");
-        test_in_addr_to_string_one(AF_INET6, "fe80::");
-}
-
-static void test_in_addr_ifindex_to_string_one(int f, const char *a, int ifindex, const char *b) {
-        _cleanup_free_ char *r = NULL;
-        union in_addr_union ua, uuaa;
-        int ff, ifindex2;
-
-        assert_se(in_addr_from_string(f, a, &ua) >= 0);
-        assert_se(in_addr_ifindex_to_string(f, &ua, ifindex, &r) >= 0);
-        printf("test_in_addr_ifindex_to_string_one: %s == %s\n", b, r);
-        assert_se(streq(b, r));
-
-        assert_se(in_addr_ifindex_from_string_auto(b, &ff, &uuaa, &ifindex2) >= 0);
-        assert_se(ff == f);
-        assert_se(in_addr_equal(f, &ua, &uuaa));
-        assert_se(ifindex2 == ifindex || ifindex2 == 0);
-}
-
-static void test_in_addr_ifindex_to_string(void) {
-        log_info("/* %s */", __func__);
-
-        test_in_addr_ifindex_to_string_one(AF_INET, "192.168.0.1", 7, "192.168.0.1");
-        test_in_addr_ifindex_to_string_one(AF_INET, "10.11.12.13", 9, "10.11.12.13");
-        test_in_addr_ifindex_to_string_one(AF_INET6, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 10, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff");
-        test_in_addr_ifindex_to_string_one(AF_INET6, "::1", 11, "::1");
-        test_in_addr_ifindex_to_string_one(AF_INET6, "fe80::", 12, "fe80::%12");
-        test_in_addr_ifindex_to_string_one(AF_INET6, "fe80::", 0, "fe80::");
-        test_in_addr_ifindex_to_string_one(AF_INET6, "fe80::14", 12, "fe80::14%12");
-        test_in_addr_ifindex_to_string_one(AF_INET6, "fe80::15", -7, "fe80::15");
-        test_in_addr_ifindex_to_string_one(AF_INET6, "fe80::16", LOOPBACK_IFINDEX, "fe80::16%1");
-}
-
-static void test_in_addr_ifindex_from_string_auto(void) {
-        int family, ifindex;
-        union in_addr_union ua;
-
-        log_info("/* %s */", __func__);
-        /* Most in_addr_ifindex_from_string_auto() invocations have already been tested above, but let's test some more */
-
-        assert_se(in_addr_ifindex_from_string_auto("fe80::17", &family, &ua, &ifindex) >= 0);
-        assert_se(family == AF_INET6);
-        assert_se(ifindex == 0);
-
-        assert_se(in_addr_ifindex_from_string_auto("fe80::18%19", &family, &ua, &ifindex) >= 0);
-        assert_se(family == AF_INET6);
-        assert_se(ifindex == 19);
-
-        assert_se(in_addr_ifindex_from_string_auto("fe80::18%lo", &family, &ua, &ifindex) >= 0);
-        assert_se(family == AF_INET6);
-        assert_se(ifindex == LOOPBACK_IFINDEX);
-
-        assert_se(in_addr_ifindex_from_string_auto("fe80::19%thisinterfacecantexist", &family, &ua, &ifindex) == -ENODEV);
 }
 
 static void test_sockaddr_equal(void) {
@@ -663,34 +504,27 @@ static void test_flush_accept(void) {
         assert_se(flush_accept(listen_seqpacket) >= 0);
 }
 
+static void test_ipv6_enabled(void) {
+        log_info("IPv6 supported: %s", yes_no(socket_ipv6_is_supported()));
+        log_info("IPv6 enabled: %s", yes_no(socket_ipv6_is_enabled()));
+}
+
 int main(int argc, char *argv[]) {
         test_setup_logging(LOG_DEBUG);
 
         test_ifname_valid();
-
         test_socket_print_unix();
-
-        test_in_addr_is_null();
-        test_in_addr_prefix_intersect();
-        test_in_addr_prefix_next();
-        test_in_addr_to_string();
-        test_in_addr_ifindex_to_string();
-        test_in_addr_ifindex_from_string_auto();
-
         test_sockaddr_equal();
-
         test_sockaddr_un_len();
-
         test_in_addr_is_multicast();
-
         test_getpeercred_getpeergroups();
-
         test_passfd_read();
         test_passfd_contents_read();
         test_receive_nopassfd();
         test_send_nodata_nofd();
         test_send_emptydata();
         test_flush_accept();
+        test_ipv6_enabled();
 
         return 0;
 }

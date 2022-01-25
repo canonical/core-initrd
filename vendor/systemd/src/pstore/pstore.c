@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 /* Copyright © 2019 Oracle and/or its affiliates. */
 
@@ -53,7 +53,7 @@ typedef enum PStoreStorage {
         PSTORE_STORAGE_EXTERNAL,
         PSTORE_STORAGE_JOURNAL,
         _PSTORE_STORAGE_MAX,
-        _PSTORE_STORAGE_INVALID = -1
+        _PSTORE_STORAGE_INVALID = -EINVAL,
 } PStoreStorage;
 
 static const char* const pstore_storage_table[_PSTORE_STORAGE_MAX] = {
@@ -78,11 +78,14 @@ static int parse_config(void) {
                 {}
         };
 
-        return config_parse_many_nulstr(PKGSYSCONFDIR "/pstore.conf",
-                                        CONF_PATHS_NULSTR("systemd/pstore.conf.d"),
-                                        "PStore\0",
-                                        config_item_table_lookup, items,
-                                        CONFIG_PARSE_WARN, NULL);
+        return config_parse_many_nulstr(
+                        PKGSYSCONFDIR "/pstore.conf",
+                        CONF_PATHS_NULSTR("systemd/pstore.conf.d"),
+                        "PStore\0",
+                        config_item_table_lookup, items,
+                        CONFIG_PARSE_WARN,
+                        NULL,
+                        NULL);
 }
 
 /* File list handling - PStoreEntry is the struct and
@@ -99,7 +102,6 @@ typedef struct PStoreEntry {
 typedef struct PStoreList {
         PStoreEntry *entries;
         size_t n_entries;
-        size_t n_entries_allocated;
 } PStoreList;
 
 static void pstore_entries_reset(PStoreList *list) {
@@ -109,8 +111,7 @@ static void pstore_entries_reset(PStoreList *list) {
         list->n_entries = 0;
 }
 
-static int compare_pstore_entries(const void *_a, const void *_b) {
-        PStoreEntry *a = (PStoreEntry *)_a, *b = (PStoreEntry *)_b;
+static int compare_pstore_entries(const PStoreEntry *a, const PStoreEntry *b) {
         return strcmp(a->dirent.d_name, b->dirent.d_name);
 }
 
@@ -206,7 +207,7 @@ static int write_dmesg(const char *dmesg, size_t size, const char *id) {
 static void process_dmesg_files(PStoreList *list) {
         /* Move files, reconstruct dmesg.txt */
         _cleanup_free_ char *dmesg = NULL, *dmesg_id = NULL;
-        size_t dmesg_size = 0, dmesg_allocated = 0;
+        size_t dmesg_size = 0;
         bool dmesg_bad = false;
         PStoreEntry *pe;
 
@@ -301,8 +302,8 @@ static void process_dmesg_files(PStoreList *list) {
                 /* Reconstruction of dmesg is done as a useful courtesy: do not fail, but don't write garbled
                  * output either. */
                 size_t needed = strlen(pe->dirent.d_name) + strlen(":\n") + pe->content_size + 1;
-                if (!GREEDY_REALLOC(dmesg, dmesg_allocated, dmesg_size + needed)) {
-                        log_warning_errno(ENOMEM, "Failed to write dmesg file: %m");
+                if (!GREEDY_REALLOC(dmesg, dmesg_size + needed)) {
+                        log_oom();
                         dmesg_bad = true;
                         continue;
                 }
@@ -340,13 +341,13 @@ static int list_files(PStoreList *list, const char *sourcepath) {
                 size_t buf_size;
 
                 /* Now read contents of pstore file */
-                r = read_full_file(ifd_path, &buf, &buf_size);
+                r = read_full_virtual_file(ifd_path, &buf, &buf_size);
                 if (r < 0) {
                         log_warning_errno(r, "Failed to read file %s, skipping: %m", ifd_path);
                         continue;
                 }
 
-                if (!GREEDY_REALLOC(list->entries, list->n_entries_allocated, list->n_entries + 1))
+                if (!GREEDY_REALLOC(list->entries, list->n_entries + 1))
                         return log_oom();
 
                 list->entries[list->n_entries++] = (PStoreEntry) {
@@ -365,7 +366,7 @@ static int run(int argc, char *argv[]) {
         _cleanup_(pstore_entries_reset) PStoreList list = {};
         int r;
 
-        log_setup_service();
+        log_setup();
 
         if (argc == 3) {
                 arg_sourcedir = argv[1];
@@ -391,7 +392,7 @@ static int run(int argc, char *argv[]) {
 
         /* Handle each pstore file */
         /* Sort files lexigraphically ascending, generally needed by all */
-        qsort_safe(list.entries, list.n_entries, sizeof(PStoreEntry), compare_pstore_entries);
+        typesafe_qsort(list.entries, list.n_entries, compare_pstore_entries);
 
         /* Process known file types */
         process_dmesg_files(&list);

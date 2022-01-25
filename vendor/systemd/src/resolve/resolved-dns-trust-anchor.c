@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "sd-messages.h"
 
@@ -60,7 +60,7 @@ static int add_root_ksk(
         if (!rr->ds.digest)
                 return  -ENOMEM;
 
-        r = dns_answer_add(answer, rr, 0, DNS_ANSWER_AUTHENTICATED);
+        r = dns_answer_add(answer, rr, 0, DNS_ANSWER_AUTHENTICATED, NULL);
         if (r < 0)
                 return r;
 
@@ -160,7 +160,10 @@ static int dns_trust_anchor_add_builtin_negative(DnsTrustAnchor *d) {
                 "lan\0"
                 "intranet\0"
                 "internal\0"
-                "private\0";
+                "private\0"
+
+                /* Defined by RFC 8375. The most official choice. */
+                "home.arpa\0";
 
         const char *name;
         int r;
@@ -184,11 +187,10 @@ static int dns_trust_anchor_add_builtin_negative(DnsTrustAnchor *d) {
          * unsigned. */
 
         NULSTR_FOREACH(name, private_domains) {
-
                 if (dns_trust_anchor_knows_domain_positive(d, name))
                         continue;
 
-                r = set_put_strdup(d->negative_by_name, name);
+                r = set_put_strdup(&d->negative_by_name, name);
                 if (r < 0)
                         return r;
         }
@@ -355,7 +357,7 @@ static int dns_trust_anchor_load_positive(DnsTrustAnchor *d, const char *path, u
         old_answer = hashmap_get(d->positive_by_key, rr->key);
         answer = dns_answer_ref(old_answer);
 
-        r = dns_answer_add_extend(&answer, rr, 0, DNS_ANSWER_AUTHENTICATED);
+        r = dns_answer_add_extend(&answer, rr, 0, DNS_ANSWER_AUTHENTICATED, NULL);
         if (r < 0)
                 return log_error_errno(r, "Failed to add trust anchor RR: %m");
 
@@ -394,15 +396,9 @@ static int dns_trust_anchor_load_negative(DnsTrustAnchor *d, const char *path, u
                 return -EINVAL;
         }
 
-        r = set_ensure_allocated(&d->negative_by_name, &dns_name_hash_ops);
+        r = set_ensure_consume(&d->negative_by_name, &dns_name_hash_ops, TAKE_PTR(domain));
         if (r < 0)
                 return log_oom();
-
-        r = set_put(d->negative_by_name, domain);
-        if (r < 0)
-                return log_oom();
-        if (r > 0)
-                domain = NULL;
 
         return 0;
 }
@@ -471,7 +467,6 @@ static int domain_name_cmp(char * const *a, char * const *b) {
 
 static int dns_trust_anchor_dump(DnsTrustAnchor *d) {
         DnsAnswer *a;
-        Iterator i;
 
         assert(d);
 
@@ -479,7 +474,7 @@ static int dns_trust_anchor_dump(DnsTrustAnchor *d) {
                 log_info("No positive trust anchors defined.");
         else {
                 log_info("Positive Trust Anchors:");
-                HASHMAP_FOREACH(a, d->positive_by_key, i) {
+                HASHMAP_FOREACH(a, d->positive_by_key) {
                         DnsResourceRecord *rr;
 
                         DNS_ANSWER_FOREACH(rr, a)
@@ -593,11 +588,7 @@ static int dns_trust_anchor_revoked_put(DnsTrustAnchor *d, DnsResourceRecord *rr
 
         assert(d);
 
-        r = set_ensure_allocated(&d->revoked_by_rr, &dns_resource_record_hash_ops);
-        if (r < 0)
-                return r;
-
-        r = set_put(d->revoked_by_rr, rr);
+        r = set_ensure_put(&d->revoked_by_rr, &dns_resource_record_hash_ops, rr);
         if (r < 0)
                 return r;
         if (r > 0)

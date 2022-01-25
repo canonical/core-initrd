@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 typedef enum DnssecResult DnssecResult;
@@ -27,7 +27,7 @@ enum DnssecResult {
         DNSSEC_INCOMPATIBLE_SERVER,
 
         _DNSSEC_RESULT_MAX,
-        _DNSSEC_RESULT_INVALID = -1
+        _DNSSEC_RESULT_INVALID = -EINVAL,
 };
 
 enum DnssecVerdict {
@@ -37,7 +37,7 @@ enum DnssecVerdict {
         DNSSEC_INDETERMINATE,
 
         _DNSSEC_VERDICT_MAX,
-        _DNSSEC_VERDICT_INVALID = -1
+        _DNSSEC_VERDICT_INVALID = -EINVAL,
 };
 
 #define DNSSEC_CANONICAL_HOSTNAME_MAX (DNS_HOSTNAME_MAX + 2)
@@ -57,8 +57,6 @@ int dnssec_verify_dnskey_by_ds_search(DnsResourceRecord *dnskey, DnsAnswer *vali
 int dnssec_has_rrsig(DnsAnswer *a, const DnsResourceKey *key);
 
 uint16_t dnssec_keytag(DnsResourceRecord *dnskey, bool mask_revoke);
-
-int dnssec_canonicalize(const char *n, char *buffer, size_t buffer_max);
 
 int dnssec_nsec3_hash(DnsResourceRecord *nsec3, const char *name, void *ret);
 

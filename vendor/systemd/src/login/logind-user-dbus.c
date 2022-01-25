@@ -1,8 +1,9 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 
 #include "alloc-util.h"
+#include "bus-get-properties.h"
 #include "bus-polkit.h"
 #include "bus-util.h"
 #include "format-util.h"
@@ -215,7 +216,7 @@ int bus_user_method_terminate(sd_bus_message *message, void *userdata, sd_bus_er
         if (r == 0)
                 return 1; /* Will call us back */
 
-        r = user_stop(u, true);
+        r = user_stop(u, /* force = */ true);
         if (r < 0)
                 return r;
 
@@ -258,31 +259,7 @@ int bus_user_method_kill(sd_bus_message *message, void *userdata, sd_bus_error *
         return sd_bus_reply_method_return(message, NULL);
 }
 
-const sd_bus_vtable user_vtable[] = {
-        SD_BUS_VTABLE_START(0),
-
-        SD_BUS_PROPERTY("UID", "u", property_get_uid, 0, SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("GID", "u", property_get_gid, 0, SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Name", "s", property_get_name, 0, SD_BUS_VTABLE_PROPERTY_CONST),
-        BUS_PROPERTY_DUAL_TIMESTAMP("Timestamp", offsetof(User, timestamp), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("RuntimePath", "s", NULL, offsetof(User, runtime_path), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Service", "s", NULL, offsetof(User, service), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Slice", "s", NULL, offsetof(User, slice), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Display", "(so)", property_get_display, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
-        SD_BUS_PROPERTY("State", "s", property_get_state, 0, 0),
-        SD_BUS_PROPERTY("Sessions", "a(so)", property_get_sessions, 0, 0),
-        SD_BUS_PROPERTY("IdleHint", "b", property_get_idle_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
-        SD_BUS_PROPERTY("IdleSinceHint", "t", property_get_idle_since_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
-        SD_BUS_PROPERTY("IdleSinceHintMonotonic", "t", property_get_idle_since_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
-        SD_BUS_PROPERTY("Linger", "b", property_get_linger, 0, 0),
-
-        SD_BUS_METHOD("Terminate", NULL, NULL, bus_user_method_terminate, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("Kill", "i", NULL, bus_user_method_kill, SD_BUS_VTABLE_UNPRIVILEGED),
-
-        SD_BUS_VTABLE_END
-};
-
-int user_object_find(sd_bus *bus, const char *path, const char *interface, void *userdata, void **found, sd_bus_error *error) {
+static int user_object_find(sd_bus *bus, const char *path, const char *interface, void *userdata, void **found, sd_bus_error *error) {
         Manager *m = userdata;
         uid_t uid;
         User *user;
@@ -337,19 +314,18 @@ char *user_bus_path(User *u) {
         return s;
 }
 
-int user_node_enumerator(sd_bus *bus, const char *path, void *userdata, char ***nodes, sd_bus_error *error) {
+static int user_node_enumerator(sd_bus *bus, const char *path, void *userdata, char ***nodes, sd_bus_error *error) {
         _cleanup_strv_free_ char **l = NULL;
         sd_bus_message *message;
         Manager *m = userdata;
         User *user;
-        Iterator i;
         int r;
 
         assert(bus);
         assert(path);
         assert(nodes);
 
-        HASHMAP_FOREACH(user, m->users, i) {
+        HASHMAP_FOREACH(user, m->users) {
                 char *p;
 
                 p = user_bus_path(user);
@@ -385,6 +361,42 @@ int user_node_enumerator(sd_bus *bus, const char *path, void *userdata, char ***
 
         return 1;
 }
+
+static const sd_bus_vtable user_vtable[] = {
+        SD_BUS_VTABLE_START(0),
+
+        SD_BUS_PROPERTY("UID", "u", property_get_uid, 0, SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("GID", "u", property_get_gid, 0, SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Name", "s", property_get_name, 0, SD_BUS_VTABLE_PROPERTY_CONST),
+        BUS_PROPERTY_DUAL_TIMESTAMP("Timestamp", offsetof(User, timestamp), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("RuntimePath", "s", NULL, offsetof(User, runtime_path), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Service", "s", NULL, offsetof(User, service), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Slice", "s", NULL, offsetof(User, slice), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Display", "(so)", property_get_display, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("State", "s", property_get_state, 0, 0),
+        SD_BUS_PROPERTY("Sessions", "a(so)", property_get_sessions, 0, 0),
+        SD_BUS_PROPERTY("IdleHint", "b", property_get_idle_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("IdleSinceHint", "t", property_get_idle_since_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("IdleSinceHintMonotonic", "t", property_get_idle_since_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("Linger", "b", property_get_linger, 0, 0),
+
+        SD_BUS_METHOD("Terminate", NULL, NULL, bus_user_method_terminate, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("Kill",
+                                 "i",
+                                 SD_BUS_PARAM(signal_number),
+                                 NULL,,
+                                 bus_user_method_kill,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+
+        SD_BUS_VTABLE_END
+};
+
+const BusObjectImplementation user_object = {
+        "/org/freedesktop/login1/user",
+        "org.freedesktop.login1.User",
+        .fallback_vtables = BUS_FALLBACK_VTABLES({user_vtable, user_object_find}),
+        .node_enumerator = user_node_enumerator,
+};
 
 int user_send_signal(User *u, bool new_user) {
         _cleanup_free_ char *p = NULL;

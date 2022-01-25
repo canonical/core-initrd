@@ -1,7 +1,7 @@
 <?xml version='1.0'?> <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="kernel-command-line">
 
@@ -109,7 +109,7 @@
           <para>During early boot, the generation of core dump files is disabled until a core dump handler (if any)
           takes over. This parameter allows specifying an absolute path where core dump files should be stored until
           a handler is installed. The path should be absolute and may contain specifiers, see
-          <citerefentry><refentrytitle>core</refentrytitle><manvolnum>5</manvolnum></citerefentry> for details.</para>
+          <citerefentry project='man-pages'><refentrytitle>core</refentrytitle><manvolnum>5</manvolnum></citerefentry> for details.</para>
         </listitem>
       </varlistentry>
 
@@ -131,15 +131,15 @@
         <listitem>
           <para>This parameter controls whether the system shall boot up in volatile mode. Takes a boolean argument, or
           the special value <literal>state</literal>. If false (the default), normal boot mode is selected, the root
-          directory and <filename>/var</filename> are mounted as specified on the kernel command line or
+          directory and <filename>/var/</filename> are mounted as specified on the kernel command line or
           <filename>/etc/fstab</filename>, or otherwise configured. If true, full state-less boot mode is selected. In
           this case the root directory is mounted as volatile memory file system (<literal>tmpfs</literal>), and only
-          <filename>/usr</filename> is mounted from the file system configured as root device, in read-only mode. This
+          <filename>/usr/</filename> is mounted from the file system configured as root device, in read-only mode. This
           enables fully state-less boots were the vendor-supplied OS is used as shipped, with only default
-          configuration and no stored state in effect, as <filename>/etc</filename> and <filename>/var</filename> (as
+          configuration and no stored state in effect, as <filename>/etc/</filename> and <filename>/var/</filename> (as
           well as all other resources shipped in the root file system) are reset at boot and lost on shutdown. If this
           setting is set to <literal>state</literal> the root file system is mounted read-only, however
-          <filename>/var</filename> is mounted as a volatile memory file system (<literal>tmpfs</literal>), so that the
+          <filename>/var/</filename> is mounted as a volatile memory file system (<literal>tmpfs</literal>), so that the
           system boots up with the normal configuration applied, but all state reset at boot and lost at shutdown. If
           this setting is set to <literal>overlay</literal> the root file system is set up as
           <literal>overlayfs</literal> mount combining the read-only root directory with a writable
@@ -263,14 +263,18 @@
       </varlistentry>
 
       <varlistentry>
-        <term><varname>udev.log_priority=</varname></term>
-        <term><varname>rd.udev.log_priority=</varname></term>
+        <term><varname>udev.log_level=</varname></term>
+        <term><varname>rd.udev.log_level=</varname></term>
         <term><varname>udev.children_max=</varname></term>
         <term><varname>rd.udev.children_max=</varname></term>
         <term><varname>udev.exec_delay=</varname></term>
         <term><varname>rd.udev.exec_delay=</varname></term>
         <term><varname>udev.event_timeout=</varname></term>
         <term><varname>rd.udev.event_timeout=</varname></term>
+        <term><varname>udev.timeout_signal=</varname></term>
+        <term><varname>rd.udev.timeout_signal=</varname></term>
+        <term><varname>udev.blockdev_read_only</varname></term>
+        <term><varname>rd.udev.blockdev_read_only</varname></term>
         <term><varname>net.ifnames=</varname></term>
         <term><varname>net.naming-scheme=</varname></term>
 
@@ -352,11 +356,14 @@
       </varlistentry>
 
       <varlistentry>
+        <term><varname>veritytab=</varname></term>
+        <term><varname>rd.veritytab=</varname></term>
         <term><varname>roothash=</varname></term>
         <term><varname>systemd.verity=</varname></term>
         <term><varname>rd.systemd.verity=</varname></term>
         <term><varname>systemd.verity_root_data=</varname></term>
         <term><varname>systemd.verity_root_hash=</varname></term>
+        <term><varname>systemd.verity.root_options=</varname></term>
         <listitem>
           <para>Configures the integrity protection root hash for the root file system, and other related
           parameters. For details, see
@@ -433,8 +440,71 @@
 
         <listitem><para>Takes a boolean argument, defaults to on. If off,
         <citerefentry><refentrytitle>systemd-firstboot.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>
-        will not query the user for basic system settings, even if the system boots up for the first time and the
-        relevant settings are not initialized yet.</para></listitem>
+        will not query the user for basic system settings, even if the system boots up for the first time and
+        the relevant settings are not initialized yet. Not to be confused with
+        <varname>systemd.condition-first-boot=</varname> (see below), which overrides the result of the
+        <varname>ConditionFirstBoot=</varname> unit file condition, and thus controls more than just
+        <filename>systemd-firstboot.service</filename> behaviour.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>systemd.condition-needs-update=</varname></term>
+
+        <listitem><para>Takes a boolean argument. If specified, overrides the result of
+        <varname>ConditionNeedsUpdate=</varname> unit condition checks. See
+        <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry> for
+        details.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>systemd.condition-first-boot=</varname></term>
+
+        <listitem><para>Takes a boolean argument. If specified, overrides the result of
+        <varname>ConditionFirstBoot=</varname> unit condition checks. See
+        <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry> for
+        details. Not to be confused with <varname>systemd.firstboot=</varname> which only controls behaviour
+        of the <filename>systemd-firstboot.service</filename> system service but has no effect on the
+        condition check (see above).</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>systemd.clock-usec=</varname></term>
+
+        <listitem><para>Takes a decimal, numeric timestamp in µs since January 1st 1970, 00:00am, to set the
+        system clock to. The system time is set to the specified timestamp early during boot. It is not
+        propagated to the hardware clock (RTC).</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>systemd.random-seed=</varname></term>
+
+        <listitem><para>Takes a base64 encoded random seed value to credit with full entropy to the kernel's
+        random pool during early service manager initialization. This option is useful in testing
+        environments where delays due to random pool initialization in entropy starved virtual machines shall
+        be avoided.</para>
+
+        <para>Note that if this option is used the seed is accessible to unprivileged programs from
+        <filename>/proc/cmdline</filename>. This option is hence a security risk when used outside of test
+        systems, since the (possibly) only seed used for initialization of the kernel's entropy pool might be
+        easily acquired by unprivileged programs.</para>
+
+        <para>It is recommended to pass 512 bytes of randomized data (as that matches the Linux kernel pool
+        size), which may be generated with a command like the following:</para>
+
+        <programlisting>dd if=/dev/urandom bs=512 count=1 status=none | base64 -w 0</programlisting>
+
+        <para>Again: do not use this option outside of testing environments, it's a security risk elsewhere,
+        as secret key material derived from the entropy pool can possibly be reconstructed by unprivileged
+        programs.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>systemd.hostname=</varname></term>
+
+        <listitem><para>Accepts a hostname to set during early boot. If specified takes precedence over what
+        is set in <filename>/etc/hostname</filename>. Note that this does not bar later runtime changes to
+        the hostname, it simply controls the initial hostname set during early boot.</para></listitem>
       </varlistentry>
     </variablelist>
 

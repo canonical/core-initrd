@@ -82,7 +82,7 @@ mkdir -p debian/tmp
  git config user.email "$DUMMY_USER_EMAIL"
  git config user.name "$DUMMY_USER_NAME"
  if  [ -n "${UPSTREAM_PULL_REQUEST:-}" ]; then
-     git rebase master
+     git rebase main
  fi
  git submodule update --init --recursive)
 UPSTREAM_VER=$(cd debian/tmp/upstream; git describe | sed 's/^v//;s/-/./g')

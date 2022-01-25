@@ -1,5 +1,5 @@
 # systemd-resolve(1) completion                             -*- shell-script -*-
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # This file is part of systemd.
 #
@@ -71,7 +71,7 @@ _systemd-resolve() {
         return 0
     fi
 
-    if [[ "$cur" = -* ]]; then
+    if [[ "$cur" = -* ]] || [[ -z ${comps-} ]]; then
         COMPREPLY=( $(compgen -W '${OPTS[*]}' -- "$cur") )
         return 0
     fi

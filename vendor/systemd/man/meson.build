@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 # This is lame, I know, but meson has no other include mechanism
 subdir('rules')
@@ -26,14 +26,17 @@ custom_man_xsl = files('custom-man.xsl')
 custom_html_xsl = files('custom-html.xsl')
 xslt_cmd = [xsltproc, '-o', '@OUTPUT0@'] + xsltproc_flags
 
-custom_entities_ent = configure_file(
+custom_entities_ent = custom_target(
+        'custom-entities.ent',
         input : 'custom-entities.ent.in',
         output : 'custom-entities.ent',
-        configuration : conf)
+        command : [meson_render_jinja2, config_h, '@INPUT@'],
+        capture : true)
 
 man_pages = []
 html_pages = []
 source_xml_files = []
+dbus_docs = []
 foreach tuple : xsltproc.found() ? manpages : []
         stem = tuple[0]
         section = tuple[1]
@@ -59,7 +62,7 @@ foreach tuple : xsltproc.found() ? manpages : []
                         input : xml,
                         output : [man] + manaliases,
                         command : xslt_cmd + [custom_man_xsl, '@INPUT@'],
-                        depend_files : custom_entities_ent,
+                        depends : custom_entities_ent,
                         install : want_man,
                         install_dir : mandirn)
                 man_pages += p1
@@ -69,7 +72,7 @@ foreach tuple : xsltproc.found() ? manpages : []
                         link = custom_target(
                                 htmlalias,
                                 output : htmlalias,
-                                command : ['ln', '-fs', html, '@OUTPUT@'])
+                                command : [ln, '-fs', html, '@OUTPUT@'])
                         if want_html
                                 dst = join_paths(docdir, 'html', htmlalias)
                                 cmd = 'ln -fs @0@ $DESTDIR@1@'.format(html, dst)
@@ -84,13 +87,16 @@ foreach tuple : xsltproc.found() ? manpages : []
                         input : xml,
                         output : html,
                         command : xslt_cmd + [custom_html_xsl, '@INPUT@'],
-                        depend_files : custom_entities_ent,
-                        depends : p2,
+                        depends : [custom_entities_ent, p2],
                         install : want_html,
                         install_dir : join_paths(docdir, 'html'))
                 html_pages += p3
 
-                source_xml_files += files(tuple[0] + '.xml')
+                file = files(tuple[0] + '.xml')
+                source_xml_files += file
+                if tuple[0].startswith('org.freedesktop.')
+                        dbus_docs += file
+                endif
         else
                 message('Skipping @0@.@1@ because @2@ is false'.format(stem, section, condition))
         endif
@@ -105,9 +111,10 @@ endif
 
 systemd_directives_xml = custom_target(
         'systemd.directives.xml',
-        input : source_xml_files,
+        input : ['directives-template.xml', source_xml_files],
         output : 'systemd.directives.xml',
-        command : [make_directive_index_py, '@OUTPUT@'] + source_xml_files)
+        depends : custom_entities_ent,
+        command : [make_directive_index_py, '@OUTPUT@', '@INPUT@'])
 
 nonindex_xml_files = source_xml_files + [systemd_directives_xml]
 systemd_index_xml = custom_target(
@@ -143,7 +150,7 @@ foreach tuple : xsltproc.found() ? [['systemd.directives', '7', systemd_directiv
                         htmlalias,
                         input : p2,
                         output : htmlalias,
-                        command : ['ln', '-fs', html, '@OUTPUT@'])
+                        command : [ln, '-fs', html, '@OUTPUT@'])
                 if want_html
                         dst = join_paths(docdir, 'html', htmlalias)
                         cmd = 'ln -fs @0@ $DESTDIR@1@'.format(html, dst)
@@ -158,8 +165,7 @@ foreach tuple : xsltproc.found() ? [['systemd.directives', '7', systemd_directiv
                 input : xml,
                 output : html,
                 command : xslt_cmd + [custom_html_xsl, '@INPUT@'],
-                depend_files : custom_entities_ent,
-                depends : p2,
+                depends : [custom_entities_ent, p2],
                 install : want_html and have_lxml,
                 install_dir : join_paths(docdir, 'html'))
         html_pages += p3
@@ -171,47 +177,39 @@ man = custom_target(
         'man',
         output : 'man',
         depends : man_pages,
-        command : ['echo'])
+        command : [echo])
 
 html = custom_target(
         'html',
         output : 'html',
         depends : html_pages,
-        command : ['echo'])
+        command : [echo])
 
-run_target(
-        'doc-sync',
-        depends : man_pages + html_pages,
-        command : ['rsync', '-rlv',
-                   '--delete-excluded',
-                   '--include=man',
-                   '--include=*.html',
-                   '--exclude=*',
-                   '--omit-dir-times',
-                   meson.current_build_dir(),
-                   get_option('www-target')])
-
-############################################################
-
-if git.found()
-        custom_target(
-                'update-man-rules',
-                output : 'update-man-rules',
-                command : ['sh', '-c',
-                           'cd @0@ && '.format(meson.build_root()) +
-                           'python3 @0@/tools/make-man-rules.py $(git ls-files ":/man/*.xml") >t && '.format(project_source_root) +
-                           'mv t @0@/rules/meson.build'.format(meson.current_source_dir())],
-                depend_files : custom_entities_ent)
+if rsync.found()
+        run_target(
+                'doc-sync',
+                depends : man_pages + html_pages,
+                command : [rsync, '-rlv',
+                           '--delete-excluded',
+                           '--include=man',
+                           '--include=*.html',
+                           '--exclude=*',
+                           '--omit-dir-times',
+                           meson.current_build_dir(),
+                           get_option('www-target')])
 endif
 
 ############################################################
 
+buildroot_substs = configuration_data()
+buildroot_substs.set_quoted('BUILD_ROOT', project_build_root)
+
 configure_file(
         input : 'man.in',
         output : 'man',
-        configuration : substs)
+        configuration : buildroot_substs)
 
 configure_file(
         input : 'html.in',
         output : 'html',
-        configuration : substs)
+        configuration : buildroot_substs)

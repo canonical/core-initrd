@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+
+/* SPDX-License-Identifier: LGPL-2.1-or-later
  * Copyright © 2019 VMware, Inc. */
 
 #include <linux/pkt_sched.h>
@@ -80,9 +80,11 @@ int config_parse_network_emulator_delay(
         r = qdisc_new_static(QDISC_KIND_NETEM, network, filename, section_line, &qdisc);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r < 0)
-                return log_syntax(unit, LOG_ERR, filename, line, r,
-                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "More than one kind of queueing discipline, ignoring assignment: %m");
+                return 0;
+        }
 
         ne = NETEM(qdisc);
 
@@ -92,13 +94,13 @@ int config_parse_network_emulator_delay(
                 else if (STR_IN_SET(lvalue, "DelayJitterSec", "NetworkEmulatorDelayJitterSec"))
                         ne->jitter = USEC_INFINITY;
 
-                qdisc = NULL;
+                TAKE_PTR(qdisc);
                 return 0;
         }
 
         r = parse_sec(rvalue, &u);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse '%s=', ignoring assignment: %s",
                            lvalue, rvalue);
                 return 0;
@@ -109,7 +111,7 @@ int config_parse_network_emulator_delay(
         else if (STR_IN_SET(lvalue, "DelayJitterSec", "NetworkEmulatorDelayJitterSec"))
                 ne->jitter = u;
 
-        qdisc = NULL;
+        TAKE_PTR(qdisc);
 
         return 0;
 }
@@ -140,9 +142,11 @@ int config_parse_network_emulator_rate(
         r = qdisc_new_static(QDISC_KIND_NETEM, network, filename, section_line, &qdisc);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r < 0)
-                return log_syntax(unit, LOG_ERR, filename, line, r,
-                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "More than one kind of queueing discipline, ignoring assignment: %m");
+                return 0;
+        }
 
         ne = NETEM(qdisc);
 
@@ -152,13 +156,13 @@ int config_parse_network_emulator_rate(
                 else if (STR_IN_SET(lvalue, "DuplicateRate", "NetworkEmulatorDuplicateRate"))
                         ne->duplicate = 0;
 
-                qdisc = NULL;
+                TAKE_PTR(qdisc);
                 return 0;
         }
 
         r = parse_tc_percent(rvalue, &rate);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse '%s=', ignoring assignment: %s",
                            lvalue, rvalue);
                 return 0;
@@ -169,7 +173,7 @@ int config_parse_network_emulator_rate(
         else if (STR_IN_SET(lvalue, "DuplicateRate", "NetworkEmulatorDuplicateRate"))
                 ne->duplicate = rate;
 
-        qdisc = NULL;
+        TAKE_PTR(qdisc);
         return 0;
 }
 
@@ -198,28 +202,30 @@ int config_parse_network_emulator_packet_limit(
         r = qdisc_new_static(QDISC_KIND_NETEM, network, filename, section_line, &qdisc);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r < 0)
-                return log_syntax(unit, LOG_ERR, filename, line, r,
-                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "More than one kind of queueing discipline, ignoring assignment: %m");
+                return 0;
+        }
 
         ne = NETEM(qdisc);
 
         if (isempty(rvalue)) {
                 ne->limit = 0;
-                qdisc = NULL;
 
+                TAKE_PTR(qdisc);
                 return 0;
         }
 
         r = safe_atou(rvalue, &ne->limit);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse '%s=', ignoring assignment: %s",
                            lvalue, rvalue);
                 return 0;
         }
 
-        qdisc = NULL;
+        TAKE_PTR(qdisc);
         return 0;
 }
 

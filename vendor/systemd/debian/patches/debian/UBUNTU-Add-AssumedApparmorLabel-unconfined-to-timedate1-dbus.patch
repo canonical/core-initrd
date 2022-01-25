@@ -18,7 +18,7 @@ LP: #1749000
  1 file changed, 1 insertion(+)
 
 diff --git a/src/timedate/org.freedesktop.timedate1.service b/src/timedate/org.freedesktop.timedate1.service
-index d5f3a6e..c498b82 100644
+index 6b82d70..e3b0f46 100644
 --- a/src/timedate/org.freedesktop.timedate1.service
 +++ b/src/timedate/org.freedesktop.timedate1.service
 @@ -12,3 +12,4 @@ Name=org.freedesktop.timedate1

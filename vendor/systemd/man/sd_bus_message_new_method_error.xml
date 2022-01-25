@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="sd_bus_message_new_method_error"
           xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -22,7 +22,7 @@
     <refname>sd_bus_message_new_method_errno</refname>
     <refname>sd_bus_message_new_method_errnof</refname>
 
-    <refpurpose>Create a an error reply for a method call</refpurpose>
+    <refpurpose>Create an error reply for a method call</refpurpose>
   </refnamediv>
 
   <refsynopsisdiv>
@@ -98,7 +98,7 @@
     an error reply similarly to
     <function>sd_bus_message_new_method_error()</function>, but in addition to the
     error structure <parameter>p</parameter>, it takes an
-    <citerefentry><refentrytitle>errno</refentrytitle><manvolnum>3</manvolnum></citerefentry>
+    <citerefentry project='man-pages'><refentrytitle>errno</refentrytitle><manvolnum>3</manvolnum></citerefentry>
     error value in parameter <parameter>error</parameter>. If the error
     <parameter>p</parameter> is set (see
     <citerefentry><refentrytitle>sd_bus_error_is_set</refentrytitle><manvolnum>3</manvolnum></citerefentry>),
@@ -111,7 +111,7 @@
     <para>The <function>sd_bus_message_new_method_errnof()</function> function
     creates an error reply similarly to
     <function>sd_bus_message_new_method_error()</function>. It takes an
-    <citerefentry><refentrytitle>errno</refentrytitle><manvolnum>3</manvolnum></citerefentry>
+    <citerefentry project='man-pages'><refentrytitle>errno</refentrytitle><manvolnum>3</manvolnum></citerefentry>
     error value in parameter <parameter>error</parameter>, plus a <citerefentry
     project='man-pages'><refentrytitle>printf</refentrytitle><manvolnum>3</manvolnum></citerefentry>
     format string <parameter>format</parameter> and corresponding arguments.
@@ -143,8 +143,8 @@
           <para>Message <parameter>call</parameter> is not a method call
           message.</para>
 
-          <para>The error <parameter>error</parameter> parameter to
-          <function>sd_bus_message_new_method_error</function> is not set, see
+          <para>The error <parameter>e</parameter> parameter to
+          <function>sd_bus_message_new_method_error()</function> is not set, see
           <citerefentry><refentrytitle>sd_bus_error_is_set</refentrytitle><manvolnum>3</manvolnum></citerefentry>.
           </para>
           </listitem>

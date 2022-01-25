@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "ether-addr-util.h"
 #include "fd-util.h"
@@ -190,11 +190,7 @@ static int network_new(Context *context, const char *name, Network **ret) {
                 .dhcp_use_dns = -1,
         };
 
-        r = hashmap_ensure_allocated(&context->networks_by_name, &string_hash_ops);
-        if (r < 0)
-                return r;
-
-        r = hashmap_put(context->networks_by_name, network->ifname, network);
+        r = hashmap_ensure_put(&context->networks_by_name, &string_hash_ops, network->ifname, network);
         if (r < 0)
                 return r;
 
@@ -247,11 +243,7 @@ static int netdev_new(Context *context, const char *_kind, const char *_ifname, 
                 .ifname = TAKE_PTR(ifname),
         };
 
-        r = hashmap_ensure_allocated(&context->netdevs_by_name, &string_hash_ops);
-        if (r < 0)
-                return r;
-
-        r = hashmap_put(context->netdevs_by_name, netdev->ifname, netdev);
+        r = hashmap_ensure_put(&context->netdevs_by_name, &string_hash_ops, netdev->ifname, netdev);
         if (r < 0)
                 return r;
 
@@ -299,11 +291,7 @@ static int link_new(Context *context, const char *name, struct ether_addr *mac, 
                 .mac = *mac,
         };
 
-        r = hashmap_ensure_allocated(&context->links_by_name, &string_hash_ops);
-        if (r < 0)
-                return r;
-
-        r = hashmap_put(context->links_by_name, link->ifname, link);
+        r = hashmap_ensure_put(&context->links_by_name, &string_hash_ops, link->ifname, link);
         if (r < 0)
                 return r;
 
@@ -325,7 +313,7 @@ static int network_set_dhcp_type(Context *context, const char *ifname, const cha
 
         t = dracut_dhcp_type_from_string(dhcp_type);
         if (t < 0)
-                return -EINVAL;
+                return t;
 
         network = network_get(context, ifname);
         if (!network) {
@@ -372,7 +360,7 @@ static int network_set_address(Context *context, const char *ifname, int family,
                                union in_addr_union *addr, union in_addr_union *peer) {
         Network *network;
 
-        if (in_addr_is_null(family, addr) != 0)
+        if (!in_addr_is_set(family, addr))
                 return 0;
 
         network = network_get(context, ifname);
@@ -387,7 +375,7 @@ static int network_set_route(Context *context, const char *ifname, int family, u
         Network *network;
         int r;
 
-        if (in_addr_is_null(family, gateway) != 0)
+        if (!in_addr_is_set(family, gateway))
                 return 0;
 
         network = network_get(context, ifname);
@@ -601,7 +589,7 @@ static int parse_cmdline_ip_address(Context *context, int family, const char *va
 
         if (p != value) {
                 hostname = strndupa(value, p - value);
-                if (!hostname_is_valid(hostname, false))
+                if (!hostname_is_valid(hostname, 0))
                         return -EINVAL;
         }
 
@@ -957,7 +945,6 @@ int parse_cmdline_item(const char *key, const char *value, void *data) {
 int context_merge_networks(Context *context) {
         Network *all, *network;
         Route *route;
-        Iterator i;
         int r;
 
         assert(context);
@@ -974,7 +961,7 @@ int context_merge_networks(Context *context) {
         if (hashmap_size(context->networks_by_name) <= 1)
                 return 0;
 
-        HASHMAP_FOREACH(network, context->networks_by_name, i) {
+        HASHMAP_FOREACH(network, context->networks_by_name) {
                 if (network == all)
                         continue;
 
@@ -1013,7 +1000,7 @@ static int address_dump(Address *address, FILE *f) {
         if (r < 0)
                 return r;
 
-        if (in_addr_is_null(address->family, &address->peer) == 0) {
+        if (in_addr_is_set(address->family, &address->peer)) {
                 r = in_addr_to_string(address->family, &address->peer, &peer);
                 if (r < 0)
                         return r;
@@ -1034,7 +1021,7 @@ static int route_dump(Route *route, FILE *f) {
         _cleanup_free_ char *dest = NULL, *gateway = NULL;
         int r;
 
-        if (in_addr_is_null(route->family, &route->dest) == 0) {
+        if (in_addr_is_set(route->family, &route->dest)) {
                 r = in_addr_prefix_to_string(route->family, &route->dest, route->prefixlen, &dest);
                 if (r < 0)
                         return r;
@@ -1053,7 +1040,6 @@ static int route_dump(Route *route, FILE *f) {
 }
 
 void network_dump(Network *network, FILE *f) {
-        char mac[ETHER_ADDR_TO_STRING_MAX];
         Address *address;
         Route *route;
         const char *dhcp;
@@ -1070,7 +1056,7 @@ void network_dump(Network *network, FILE *f) {
         fputs("\n[Link]\n", f);
 
         if (!ether_addr_is_null(&network->mac))
-                fprintf(f, "MACAddress=%s\n", ether_addr_to_string(&network->mac, mac));
+                fprintf(f, "MACAddress=%s\n", ETHER_ADDR_TO_STR(&network->mac));
         if (network->mtu > 0)
                 fprintf(f, "MTUBytes=%" PRIu32 "\n", network->mtu);
 
@@ -1124,15 +1110,13 @@ void netdev_dump(NetDev *netdev, FILE *f) {
 }
 
 void link_dump(Link *link, FILE *f) {
-        char mac[ETHER_ADDR_TO_STRING_MAX];
-
         assert(link);
         assert(f);
 
         fputs("[Match]\n", f);
 
         if (!ether_addr_is_null(&link->mac))
-                fprintf(f, "MACAddress=%s\n", ether_addr_to_string(&link->mac, mac));
+                fprintf(f, "MACAddress=%s\n", ETHER_ADDR_TO_STR(&link->mac));
 
         fprintf(f,
                 "\n[Link]\n"

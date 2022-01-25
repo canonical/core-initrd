@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 /***
@@ -27,14 +27,13 @@ struct sd_dhcp6_lease {
 
         struct in6_addr *dns;
         size_t dns_count;
-        size_t dns_allocated;
         char **domains;
         size_t domains_count;
         struct in6_addr *ntp;
         size_t ntp_count;
-        size_t ntp_allocated;
         char **ntp_fqdn;
         size_t ntp_fqdn_count;
+        char *fqdn;
 };
 
 int dhcp6_lease_ia_rebind_expire(const DHCP6IA *ia, uint32_t *expire);
@@ -57,5 +56,6 @@ int dhcp6_lease_set_domains(sd_dhcp6_lease *lease, uint8_t *optval,
 int dhcp6_lease_set_ntp(sd_dhcp6_lease *lease, uint8_t *optval, size_t optlen);
 int dhcp6_lease_set_sntp(sd_dhcp6_lease *lease, uint8_t *optval,
                          size_t optlen) ;
+int dhcp6_lease_set_fqdn(sd_dhcp6_lease *lease, const uint8_t *optval, size_t optlen);
 
 int dhcp6_lease_new(sd_dhcp6_lease **ret);

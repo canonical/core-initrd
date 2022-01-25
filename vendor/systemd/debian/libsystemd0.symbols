@@ -26,6 +26,10 @@ libsystemd.so.0 libsystemd0 #MINVER#
  LIBSYSTEMD_241@LIBSYSTEMD_241 241
  LIBSYSTEMD_243@LIBSYSTEMD_243 243
  LIBSYSTEMD_245@LIBSYSTEMD_245 245
+ LIBSYSTEMD_246@LIBSYSTEMD_246 246
+ LIBSYSTEMD_247@LIBSYSTEMD_247 247
+ LIBSYSTEMD_248@LIBSYSTEMD_248 248
+ LIBSYSTEMD_249@LIBSYSTEMD_249 249
  sd_booted@LIBSYSTEMD_209 0
  sd_bus_add_fallback@LIBSYSTEMD_221 221
  sd_bus_add_fallback_vtable@LIBSYSTEMD_221 221
@@ -41,6 +45,8 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_call_async@LIBSYSTEMD_221 221
  sd_bus_call_method@LIBSYSTEMD_221 221
  sd_bus_call_method_async@LIBSYSTEMD_221 221
+ sd_bus_call_method_asyncv@LIBSYSTEMD_246 246
+ sd_bus_call_methodv@LIBSYSTEMD_246 246
  sd_bus_can_send@LIBSYSTEMD_221 221
  sd_bus_close@LIBSYSTEMD_221 221
  sd_bus_close_unref@LIBSYSTEMD_241 241
@@ -97,12 +103,14 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_emit_properties_changed@LIBSYSTEMD_221 221
  sd_bus_emit_properties_changed_strv@LIBSYSTEMD_221 221
  sd_bus_emit_signal@LIBSYSTEMD_221 221
+ sd_bus_emit_signalv@LIBSYSTEMD_246 246
  sd_bus_enqueue_for_read@LIBSYSTEMD_245 245
  sd_bus_error_add_map@LIBSYSTEMD_221 221
  sd_bus_error_copy@LIBSYSTEMD_221 221
  sd_bus_error_free@LIBSYSTEMD_221 221
  sd_bus_error_get_errno@LIBSYSTEMD_221 221
  sd_bus_error_has_name@LIBSYSTEMD_221 221
+ sd_bus_error_has_names_sentinel@LIBSYSTEMD_247 247
  sd_bus_error_is_set@LIBSYSTEMD_221 221
  sd_bus_error_move@LIBSYSTEMD_240 240
  sd_bus_error_set@LIBSYSTEMD_221 221
@@ -144,6 +152,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_get_timeout@LIBSYSTEMD_221 221
  sd_bus_get_unique_name@LIBSYSTEMD_221 221
  sd_bus_get_watch_bind@LIBSYSTEMD_237 237
+ sd_bus_interface_name_is_valid@LIBSYSTEMD_246 246
  sd_bus_is_anonymous@LIBSYSTEMD_221 221
  sd_bus_is_bus_client@LIBSYSTEMD_221 221
  sd_bus_is_monitor@LIBSYSTEMD_221 221
@@ -154,6 +163,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_list_names@LIBSYSTEMD_221 221
  sd_bus_match_signal@LIBSYSTEMD_237 237
  sd_bus_match_signal_async@LIBSYSTEMD_237 237
+ sd_bus_member_name_is_valid@LIBSYSTEMD_246 246
  sd_bus_message_append@LIBSYSTEMD_221 221
  sd_bus_message_append_array@LIBSYSTEMD_221 221
  sd_bus_message_append_array_iovec@LIBSYSTEMD_221 221
@@ -214,6 +224,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_message_ref@LIBSYSTEMD_221 221
  sd_bus_message_rewind@LIBSYSTEMD_221 221
  sd_bus_message_seal@LIBSYSTEMD_236 236
+ sd_bus_message_send@LIBSYSTEMD_248 248
  sd_bus_message_sensitive@LIBSYSTEMD_245 245
  sd_bus_message_set_allow_interactive_authorization@LIBSYSTEMD_221 221
  sd_bus_message_set_auto_start@LIBSYSTEMD_221 221
@@ -228,6 +239,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_negotiate_fds@LIBSYSTEMD_221 221
  sd_bus_negotiate_timestamp@LIBSYSTEMD_221 221
  sd_bus_new@LIBSYSTEMD_221 221
+ sd_bus_object_path_is_valid@LIBSYSTEMD_246 246
  sd_bus_object_vtable_format@LIBSYSTEMD_243 243
  sd_bus_open@LIBSYSTEMD_221 221
  sd_bus_open_system@LIBSYSTEMD_221 221
@@ -235,6 +247,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_open_system_remote@LIBSYSTEMD_221 221
  sd_bus_open_system_with_description@LIBSYSTEMD_239 239
  sd_bus_open_user@LIBSYSTEMD_221 221
+ sd_bus_open_user_machine@LIBSYSTEMD_248 248
  sd_bus_open_user_with_description@LIBSYSTEMD_239 239
  sd_bus_open_with_description@LIBSYSTEMD_239 239
  sd_bus_path_decode@LIBSYSTEMD_221 221
@@ -250,13 +263,17 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_release_name_async@LIBSYSTEMD_237 237
  sd_bus_reply_method_errno@LIBSYSTEMD_221 221
  sd_bus_reply_method_errnof@LIBSYSTEMD_221 221
+ sd_bus_reply_method_errnofv@LIBSYSTEMD_246 246
  sd_bus_reply_method_error@LIBSYSTEMD_221 221
  sd_bus_reply_method_errorf@LIBSYSTEMD_221 221
+ sd_bus_reply_method_errorfv@LIBSYSTEMD_246 246
  sd_bus_reply_method_return@LIBSYSTEMD_221 221
+ sd_bus_reply_method_returnv@LIBSYSTEMD_246 246
  sd_bus_request_name@LIBSYSTEMD_221 221
  sd_bus_request_name_async@LIBSYSTEMD_237 237
  sd_bus_send@LIBSYSTEMD_221 221
  sd_bus_send_to@LIBSYSTEMD_221 221
+ sd_bus_service_name_is_valid@LIBSYSTEMD_246 246
  sd_bus_set_address@LIBSYSTEMD_221 221
  sd_bus_set_allow_interactive_authorization@LIBSYSTEMD_221 221
  sd_bus_set_anonymous@LIBSYSTEMD_221 221
@@ -270,6 +287,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_bus_set_method_call_timeout@LIBSYSTEMD_240 240
  sd_bus_set_monitor@LIBSYSTEMD_221 221
  sd_bus_set_property@LIBSYSTEMD_221 221
+ sd_bus_set_propertyv@LIBSYSTEMD_246 246
  sd_bus_set_sender@LIBSYSTEMD_237 237
  sd_bus_set_server@LIBSYSTEMD_221 221
  sd_bus_set_trusted@LIBSYSTEMD_221 221
@@ -326,6 +344,9 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_device_enumerator_new@LIBSYSTEMD_240 240
  sd_device_enumerator_ref@LIBSYSTEMD_240 240
  sd_device_enumerator_unref@LIBSYSTEMD_240 240
+ sd_device_get_action@LIBSYSTEMD_248 248
+ sd_device_get_current_tag_first@LIBSYSTEMD_247 247
+ sd_device_get_current_tag_next@LIBSYSTEMD_247 247
  sd_device_get_devlink_first@LIBSYSTEMD_240 240
  sd_device_get_devlink_next@LIBSYSTEMD_240 240
  sd_device_get_devname@LIBSYSTEMD_240 240
@@ -340,6 +361,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_device_get_property_first@LIBSYSTEMD_240 240
  sd_device_get_property_next@LIBSYSTEMD_240 240
  sd_device_get_property_value@LIBSYSTEMD_240 240
+ sd_device_get_seqnum@LIBSYSTEMD_248 248
  sd_device_get_subsystem@LIBSYSTEMD_240 240
  sd_device_get_sysattr_first@LIBSYSTEMD_240 240
  sd_device_get_sysattr_next@LIBSYSTEMD_240 240
@@ -349,11 +371,16 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_device_get_syspath@LIBSYSTEMD_240 240
  sd_device_get_tag_first@LIBSYSTEMD_240 240
  sd_device_get_tag_next@LIBSYSTEMD_240 240
+ sd_device_get_trigger_uuid@LIBSYSTEMD_249 249
+ sd_device_get_usec_initialized@LIBSYSTEMD_249 249
  sd_device_get_usec_since_initialized@LIBSYSTEMD_240 240
+ sd_device_has_current_tag@LIBSYSTEMD_247 247
  sd_device_has_tag@LIBSYSTEMD_240 240
  sd_device_monitor_attach_event@LIBSYSTEMD_240 240
  sd_device_monitor_detach_event@LIBSYSTEMD_240 240
+ sd_device_monitor_filter_add_match_parent@LIBSYSTEMD_249 249
  sd_device_monitor_filter_add_match_subsystem_devtype@LIBSYSTEMD_240 240
+ sd_device_monitor_filter_add_match_sysattr@LIBSYSTEMD_249 249
  sd_device_monitor_filter_add_match_tag@LIBSYSTEMD_240 240
  sd_device_monitor_filter_remove@LIBSYSTEMD_240 240
  sd_device_monitor_filter_update@LIBSYSTEMD_240 240
@@ -367,10 +394,16 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_device_monitor_unref@LIBSYSTEMD_240 240
  sd_device_new_from_device_id@LIBSYSTEMD_240 240
  sd_device_new_from_devnum@LIBSYSTEMD_240 240
+ sd_device_new_from_ifindex@LIBSYSTEMD_249 249
+ sd_device_new_from_ifname@LIBSYSTEMD_249 249
+ sd_device_new_from_stat_rdev@LIBSYSTEMD_248 248
  sd_device_new_from_subsystem_sysname@LIBSYSTEMD_240 240
  sd_device_new_from_syspath@LIBSYSTEMD_240 240
  sd_device_ref@LIBSYSTEMD_240 240
  sd_device_set_sysattr_value@LIBSYSTEMD_240 240
+ sd_device_set_sysattr_valuef@LIBSYSTEMD_247 247
+ sd_device_trigger@LIBSYSTEMD_248 248
+ sd_device_trigger_with_uuid@LIBSYSTEMD_249 249
  sd_device_unref@LIBSYSTEMD_240 240
  sd_event_add_child@LIBSYSTEMD_221 221
  sd_event_add_child_pidfd@LIBSYSTEMD_245 245
@@ -381,6 +414,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_event_add_post@LIBSYSTEMD_221 221
  sd_event_add_signal@LIBSYSTEMD_221 221
  sd_event_add_time@LIBSYSTEMD_221 221
+ sd_event_add_time_relative@LIBSYSTEMD_247 247
  sd_event_default@LIBSYSTEMD_221 221
  sd_event_dispatch@LIBSYSTEMD_221 221
  sd_event_exit@LIBSYSTEMD_221 221
@@ -406,6 +440,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_event_source_get_destroy_callback@LIBSYSTEMD_239 239
  sd_event_source_get_enabled@LIBSYSTEMD_221 221
  sd_event_source_get_event@LIBSYSTEMD_221 221
+ sd_event_source_get_exit_on_failure@LIBSYSTEMD_247 247
  sd_event_source_get_floating@LIBSYSTEMD_240 240
  sd_event_source_get_inotify_mask@LIBSYSTEMD_239 239
  sd_event_source_get_io_events@LIBSYSTEMD_221 221
@@ -414,11 +449,13 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_event_source_get_io_revents@LIBSYSTEMD_221 221
  sd_event_source_get_pending@LIBSYSTEMD_221 221
  sd_event_source_get_priority@LIBSYSTEMD_221 221
+ sd_event_source_get_ratelimit@LIBSYSTEMD_248 248
  sd_event_source_get_signal@LIBSYSTEMD_221 221
  sd_event_source_get_time@LIBSYSTEMD_221 221
  sd_event_source_get_time_accuracy@LIBSYSTEMD_221 221
  sd_event_source_get_time_clock@LIBSYSTEMD_221 221
  sd_event_source_get_userdata@LIBSYSTEMD_221 221
+ sd_event_source_is_ratelimited@LIBSYSTEMD_248 248
  sd_event_source_ref@LIBSYSTEMD_221 221
  sd_event_source_send_child_signal@LIBSYSTEMD_245 245
  sd_event_source_set_child_pidfd_own@LIBSYSTEMD_245 245
@@ -426,14 +463,17 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_event_source_set_description@LIBSYSTEMD_221 221
  sd_event_source_set_destroy_callback@LIBSYSTEMD_239 239
  sd_event_source_set_enabled@LIBSYSTEMD_221 221
+ sd_event_source_set_exit_on_failure@LIBSYSTEMD_247 247
  sd_event_source_set_floating@LIBSYSTEMD_240 240
  sd_event_source_set_io_events@LIBSYSTEMD_221 221
  sd_event_source_set_io_fd@LIBSYSTEMD_221 221
  sd_event_source_set_io_fd_own@LIBSYSTEMD_237 237
  sd_event_source_set_prepare@LIBSYSTEMD_221 221
  sd_event_source_set_priority@LIBSYSTEMD_221 221
+ sd_event_source_set_ratelimit@LIBSYSTEMD_248 248
  sd_event_source_set_time@LIBSYSTEMD_221 221
  sd_event_source_set_time_accuracy@LIBSYSTEMD_221 221
+ sd_event_source_set_time_relative@LIBSYSTEMD_247 247
  sd_event_source_set_userdata@LIBSYSTEMD_221 221
  sd_event_source_unref@LIBSYSTEMD_221 221
  sd_event_unref@LIBSYSTEMD_221 221
@@ -467,6 +507,8 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_journal_add_disjunction@LIBSYSTEMD_209 0
  sd_journal_add_match@LIBSYSTEMD_209 0
  sd_journal_close@LIBSYSTEMD_209 0
+ sd_journal_enumerate_available_data@LIBSYSTEMD_246 246
+ sd_journal_enumerate_available_unique@LIBSYSTEMD_246 246
  sd_journal_enumerate_data@LIBSYSTEMD_209 0
  sd_journal_enumerate_fields@LIBSYSTEMD_229 229
  sd_journal_enumerate_unique@LIBSYSTEMD_209 0
@@ -533,7 +575,10 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_machine_get_class@LIBSYSTEMD_211 211
  sd_machine_get_ifindices@LIBSYSTEMD_216 217
  sd_notify@LIBSYSTEMD_209 0
+ sd_notify_barrier@LIBSYSTEMD_246 246
  sd_notifyf@LIBSYSTEMD_209 0
+ sd_path_lookup@LIBSYSTEMD_246 246
+ sd_path_lookup_strv@LIBSYSTEMD_246 246
  sd_peer_get_cgroup@LIBSYSTEMD_226 226
  sd_peer_get_machine_name@LIBSYSTEMD_211 211
  sd_peer_get_owner_uid@LIBSYSTEMD_211 211

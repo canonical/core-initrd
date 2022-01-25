@@ -156,7 +156,8 @@ class FsckdTest(unittest.TestCase):
     def check_plymouth_start(self):
         unit = 'plymouth-start'
         self.assertUnitStarted(unit)
-        self.assertUnitNotActive(unit)
+        # stays active in 20.10 and later
+        self.assertUnitActive(unit)
         self.assertUnitNotFailed(unit)
 
     def test_systemd_fsckd_run(self):

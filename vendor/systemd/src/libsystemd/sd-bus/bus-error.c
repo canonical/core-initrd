@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <stdarg.h>
@@ -13,6 +13,7 @@
 #include "errno-list.h"
 #include "errno-util.h"
 #include "string-util.h"
+#include "strv.h"
 #include "util.h"
 
 BUS_ERROR_MAP_ELF_REGISTER const sd_bus_error_map bus_standard_errors[] = {
@@ -85,8 +86,10 @@ static int bus_error_name_to_errno(const char *name) {
                                 if (m->code == BUS_ERROR_MAP_END_MARKER)
                                         break;
 
-                                if (streq(m->name, name))
+                                if (streq(m->name, name)) {
+                                        assert(m->code > 0);
                                         return m->code;
+                                }
                         }
 
         m = ALIGN_TO_PTR(__start_SYSTEMD_BUS_ERROR_MAP, sizeof(void*));
@@ -102,8 +105,10 @@ static int bus_error_name_to_errno(const char *name) {
                         continue;
                 }
 
-                if (streq(m->name, name))
+                if (streq(m->name, name)) {
+                        assert(m->code > 0);
                         return m->code;
+                }
 
                 m++;
         }
@@ -207,30 +212,33 @@ _public_ void sd_bus_error_free(sd_bus_error *e) {
 }
 
 _public_ int sd_bus_error_set(sd_bus_error *e, const char *name, const char *message) {
+        int r;
 
         if (!name)
                 return 0;
-        if (!e)
-                goto finish;
 
-        assert_return(!bus_error_is_dirty(e), -EINVAL);
+        if (e) {
+                assert_return(!bus_error_is_dirty(e), -EINVAL);
 
-        e->name = strdup(name);
-        if (!e->name) {
-                *e = BUS_ERROR_OOM;
-                return -ENOMEM;
+                e->name = strdup(name);
+                if (!e->name) {
+                        *e = BUS_ERROR_OOM;
+                        return -ENOMEM;
+                }
+
+                if (message)
+                        e->message = strdup(message);
+
+                e->_need_free = 1;
         }
 
-        if (message)
-                e->message = strdup(message);
-
-        e->_need_free = 1;
-
-finish:
-        return -bus_error_name_to_errno(name);
+        r = bus_error_name_to_errno(name);
+        assert(r > 0);
+        return -r;
 }
 
 int bus_error_setfv(sd_bus_error *e, const char *name, const char *format, va_list ap) {
+        int r;
 
         if (!name)
                 return 0;
@@ -252,23 +260,28 @@ int bus_error_setfv(sd_bus_error *e, const char *name, const char *format, va_li
                 e->_need_free = 1;
         }
 
-        return -bus_error_name_to_errno(name);
+        r = bus_error_name_to_errno(name);
+        assert(r > 0);
+        return -r;
 }
 
 _public_ int sd_bus_error_setf(sd_bus_error *e, const char *name, const char *format, ...) {
+        int r;
 
         if (format) {
-                int r;
                 va_list ap;
 
                 va_start(ap, format);
                 r = bus_error_setfv(e, name, format, ap);
+                assert(!name || r < 0);
                 va_end(ap);
 
                 return r;
         }
 
-        return sd_bus_error_set(e, name, NULL);
+        r = sd_bus_error_set(e, name, NULL);
+        assert(!name || r < 0);
+        return r;
 }
 
 _public_ int sd_bus_error_copy(sd_bus_error *dest, const sd_bus_error *e) {
@@ -355,11 +368,23 @@ _public_ int sd_bus_error_has_name(const sd_bus_error *e, const char *name) {
         return streq_ptr(e->name, name);
 }
 
-_public_ int sd_bus_error_get_errno(const sd_bus_error* e) {
-        if (!e)
+_public_ int sd_bus_error_has_names_sentinel(const sd_bus_error *e, ...) {
+        if (!e || !e->name)
                 return 0;
 
-        if (!e->name)
+        va_list ap;
+        const char *p;
+
+        va_start(ap, e);
+        while ((p = va_arg(ap, const char *)))
+                if (streq(p, e->name))
+                        break;
+        va_end(ap);
+        return !!p;
+}
+
+_public_ int sd_bus_error_get_errno(const sd_bus_error* e) {
+        if (!e || !e->name)
                 return 0;
 
         return bus_error_name_to_errno(e->name);
@@ -442,7 +467,7 @@ _public_ int sd_bus_error_set_errno(sd_bus_error *e, int error) {
         if (!e)
                 return -error;
         if (error == 0)
-                return -error;
+                return 0;
 
         assert_return(!bus_error_is_dirty(e), -EINVAL);
 
@@ -471,7 +496,6 @@ _public_ int sd_bus_error_set_errno(sd_bus_error *e, int error) {
 
 _public_ int sd_bus_error_set_errnofv(sd_bus_error *e, int error, const char *format, va_list ap) {
         PROTECT_ERRNO;
-        int r;
 
         if (error < 0)
                 error = -error;
@@ -502,34 +526,30 @@ _public_ int sd_bus_error_set_errnofv(sd_bus_error *e, int error, const char *fo
         }
 
         if (format) {
-                char *m;
+                _cleanup_free_ char *m = NULL;
 
                 /* Then, let's try to fill in the supplied message */
 
                 errno = error; /* Make sure that %m resolves to the specified error */
-                r = vasprintf(&m, format, ap);
-                if (r >= 0) {
+                if (vasprintf(&m, format, ap) < 0)
+                        goto fail;
 
-                        if (e->_need_free <= 0) {
-                                char *t;
+                if (e->_need_free <= 0) {
+                        char *t;
 
-                                t = strdup(e->name);
-                                if (t) {
-                                        e->_need_free = 1;
-                                        e->name = t;
-                                        e->message = m;
-                                        return -error;
-                                }
+                        t = strdup(e->name);
+                        if (!t)
+                                goto fail;
 
-                                free(m);
-                        } else {
-                                free((char*) e->message);
-                                e->message = m;
-                                return -error;
-                        }
+                        e->_need_free = 1;
+                        e->name = t;
                 }
+
+                e->message = TAKE_PTR(m);
+                return -error;
         }
 
+fail:
         /* If that didn't work, use strerror() for the message */
         bus_error_strerror(e, error);
         return -error;
@@ -572,9 +592,6 @@ const char *bus_error_message(const sd_bus_error *e, int error) {
                 if (e->message)
                         return e->message;
         }
-
-        if (error < 0)
-                error = -error;
 
         return strerror_safe(error);
 }

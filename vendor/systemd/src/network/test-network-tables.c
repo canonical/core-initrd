@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
 #include "bond.h"
 #include "dhcp6-internal.h"
 #include "dhcp6-protocol.h"
@@ -35,13 +37,18 @@ int main(int argc, char **argv) {
         test_table(netdev_kind, NETDEV_KIND);
         test_table(nl_union_link_info_data, NL_UNION_LINK_INFO_DATA);
         test_table(radv_prefix_delegation, RADV_PREFIX_DELEGATION);
-        test_table(wol, WOL);
         test_table(lldp_event, SD_LLDP_EVENT);
         test_table(ndisc_event, SD_NDISC_EVENT);
+        test_table(dhcp_lease_server_type, SD_DHCP_LEASE_SERVER_TYPE);
 
         test_table_sparse(ipvlan_mode, NETDEV_IPVLAN_MODE);
         test_table_sparse(macvlan_mode, NETDEV_MACVLAN_MODE);
         test_table_sparse(address_family, ADDRESS_FAMILY);
+
+        assert_cc(sizeof(sd_lldp_event_t) == sizeof(int64_t));
+        assert_cc(sizeof(sd_ndisc_event_t) == sizeof(int64_t));
+        assert_cc(sizeof(sd_dhcp_lease_server_type_t) == sizeof(int64_t));
+        assert_cc(sizeof(sd_genl_family_t) == sizeof(int64_t));
 
         return EXIT_SUCCESS;
 }

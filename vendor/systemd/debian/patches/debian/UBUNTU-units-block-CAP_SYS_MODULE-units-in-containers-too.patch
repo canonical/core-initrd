@@ -13,7 +13,7 @@ start non-degraded.
  2 files changed, 2 insertions(+)
 
 diff --git a/units/sys-kernel-config.mount b/units/sys-kernel-config.mount
-index e699788..3e0ec92 100644
+index b99b4f4..c6dff31 100644
 --- a/units/sys-kernel-config.mount
 +++ b/units/sys-kernel-config.mount
 @@ -14,6 +14,7 @@ Documentation=https://www.freedesktop.org/wiki/Software/systemd/APIFileSystems
@@ -21,11 +21,11 @@ index e699788..3e0ec92 100644
  ConditionPathExists=/sys/kernel/config
  ConditionCapability=CAP_SYS_RAWIO
 +ConditionVirtualization=!container
- After=systemd-modules-load.service
  Before=sysinit.target
  
+ # These dependencies are used to make certain that the module is fully
 diff --git a/units/systemd-modules-load.service.in b/units/systemd-modules-load.service.in
-index 26abe21..73a8d67 100644
+index 604d871..8999369 100644
 --- a/units/systemd-modules-load.service.in
 +++ b/units/systemd-modules-load.service.in
 @@ -14,6 +14,7 @@ DefaultDependencies=no

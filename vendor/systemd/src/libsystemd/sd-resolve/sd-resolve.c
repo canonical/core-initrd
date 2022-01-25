@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <poll.h>
@@ -15,7 +15,7 @@
 #include "sd-resolve.h"
 
 #include "alloc-util.h"
-#include "dns-domain.h"
+#include "dns-def.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "io-util.h"
@@ -496,10 +496,10 @@ _public_ int sd_resolve_new(sd_resolve **ret) {
         for (i = 0; i < _FD_MAX; i++)
                 resolve->fds[i] = -1;
 
-        if (socketpair(PF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0, resolve->fds + REQUEST_RECV_FD) < 0)
+        if (socketpair(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0, resolve->fds + REQUEST_RECV_FD) < 0)
                 return -errno;
 
-        if (socketpair(PF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0, resolve->fds + RESPONSE_RECV_FD) < 0)
+        if (socketpair(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0, resolve->fds + RESPONSE_RECV_FD) < 0)
                 return -errno;
 
         for (i = 0; i < _FD_MAX; i++)
@@ -621,7 +621,7 @@ _public_ int sd_resolve_get_timeout(sd_resolve *resolve, uint64_t *usec) {
         assert_return(usec, -EINVAL);
         assert_return(!resolve_pid_changed(resolve), -ECHILD);
 
-        *usec = (uint64_t) -1;
+        *usec = UINT64_MAX;
         return 0;
 }
 

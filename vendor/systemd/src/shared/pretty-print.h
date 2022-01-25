@@ -1,9 +1,11 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 void print_separator(void);
 
 int file_url_from_path(const char *path, char **ret);
+
+bool urlify_enabled(void);
 
 int terminal_urlify(const char *url, const char *text, char **ret);
 int terminal_urlify_path(const char *path, const char *text, char **ret);

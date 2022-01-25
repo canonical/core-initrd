@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <fcntl.h>
 #include <stddef.h>
@@ -27,10 +27,12 @@
 #include "tmpfile-util.h"
 #include "user-util.h"
 
+/* Nontrivial value serves as a placeholder to check that parsing function (didn't) change it */
+#define CGROUP_LIMIT_DUMMY      3
+
 static int test_unit_file_get_set(void) {
         int r;
         Hashmap *h;
-        Iterator i;
         UnitFileList *p;
 
         h = hashmap_new(&string_hash_ops);
@@ -45,7 +47,7 @@ static int test_unit_file_get_set(void) {
         if (r < 0)
                 return EXIT_FAILURE;
 
-        HASHMAP_FOREACH(p, h, i)
+        HASHMAP_FOREACH(p, h)
                 printf("%s = %s\n", p->path, unit_file_state_to_string(p->state));
 
         unit_file_list_free(h);
@@ -200,12 +202,11 @@ static void test_config_parse_exec(void) {
                               "-@/RValue argv0 r1 ; ; "
                               "/goo/goo boo",
                               &c, u);
-        assert_se(r == -ENOEXEC);
+        assert_se(r >= 0);
         c1 = c1->command_next;
         check_execcommand(c1, "/RValue", "argv0", "r1", NULL, true);
-
-        /* second command fails because the executable name is ";" */
-        assert_se(c1->command_next == NULL);
+        c1 = c1->command_next;
+        check_execcommand(c1, "/goo/goo", "/goo/goo", "boo", NULL, false);
 
         log_info("/* trailing semicolon */");
         r = config_parse_exec(NULL, "fake", 5, "section", 1,
@@ -497,8 +498,8 @@ static void test_install_printf(void) {
 
         _cleanup_free_ char *mid = NULL, *bid = NULL, *host = NULL, *gid = NULL, *group = NULL, *uid = NULL, *user = NULL;
 
-        assert_se(specifier_machine_id('m', NULL, NULL, &mid) >= 0 && mid);
-        assert_se(specifier_boot_id('b', NULL, NULL, &bid) >= 0 && bid);
+        assert_se(specifier_machine_id('m', NULL, NULL, NULL, &mid) >= 0 && mid);
+        assert_se(specifier_boot_id('b', NULL, NULL, NULL, &bid) >= 0 && bid);
         assert_se(host = gethostname_malloc());
         assert_se(group = gid_to_name(getgid()));
         assert_se(asprintf(&gid, UID_FMT, getgid()) >= 0);
@@ -511,7 +512,7 @@ static void test_install_printf(void) {
                 _cleanup_free_ char                                     \
                         *d1 = strdup(i.name),                           \
                         *d2 = strdup(i.path);                           \
-                assert_se(install_full_printf(&src, pattern, &t) >= 0 || !result); \
+                assert_se(install_name_printf(&src, pattern, NULL, &t) >= 0 || !result); \
                 memzero(i.name, strlen(i.name));                        \
                 memzero(i.path, strlen(i.path));                        \
                 assert_se(d1 && d2);                                    \
@@ -747,30 +748,85 @@ static void test_config_parse_pass_environ(void) {
         _cleanup_strv_free_ char **passenv = NULL;
 
         r = config_parse_pass_environ(NULL, "fake", 1, "section", 1,
-                              "PassEnvironment", 0, "A B",
-                              &passenv, NULL);
+                                      "PassEnvironment", 0, "A B",
+                                      &passenv, NULL);
         assert_se(r >= 0);
         assert_se(strv_length(passenv) == 2);
         assert_se(streq(passenv[0], "A"));
         assert_se(streq(passenv[1], "B"));
 
         r = config_parse_pass_environ(NULL, "fake", 1, "section", 1,
-                              "PassEnvironment", 0, "",
-                              &passenv, NULL);
+                                      "PassEnvironment", 0, "",
+                                      &passenv, NULL);
         assert_se(r >= 0);
         assert_se(strv_isempty(passenv));
 
         r = config_parse_pass_environ(NULL, "fake", 1, "section", 1,
-                              "PassEnvironment", 0, "'invalid name' 'normal_name' A=1 \\",
-                              &passenv, NULL);
+                                      "PassEnvironment", 0, "'invalid name' 'normal_name' A=1 'special_name$$' \\",
+                                      &passenv, NULL);
         assert_se(r >= 0);
         assert_se(strv_length(passenv) == 1);
         assert_se(streq(passenv[0], "normal_name"));
-
 }
 
 static void test_unit_dump_config_items(void) {
         unit_dump_config_items(stdout);
+}
+
+static void test_config_parse_memory_limit(void) {
+        /* int config_parse_memory_limit(
+                const char *unit,
+                const char *filename,
+                unsigned line,
+                const char *section,
+                unsigned section_line,
+                const char *lvalue,
+                int ltype,
+                const char *rvalue,
+                void *data,
+                void *userdata) */
+        CGroupContext c;
+        struct limit_test {
+                const char *limit;
+                const char *value;
+                uint64_t *result;
+                uint64_t expected;
+        } limit_tests[]= {
+                { "MemoryMin",  "",             &c.memory_min,  CGROUP_LIMIT_MIN },
+                { "MemoryMin",  "0",            &c.memory_min,  CGROUP_LIMIT_MIN },
+                { "MemoryMin",  "10",           &c.memory_min,  10 },
+                { "MemoryMin",  "infinity",     &c.memory_min,  CGROUP_LIMIT_MAX },
+                { "MemoryLow",  "",             &c.memory_low,  CGROUP_LIMIT_MIN },
+                { "MemoryLow",  "0",            &c.memory_low,  CGROUP_LIMIT_MIN },
+                { "MemoryLow",  "10",           &c.memory_low,  10 },
+                { "MemoryLow",  "infinity",     &c.memory_low,  CGROUP_LIMIT_MAX },
+                { "MemoryHigh", "",             &c.memory_high, CGROUP_LIMIT_MAX },
+                { "MemoryHigh", "0",            &c.memory_high, CGROUP_LIMIT_DUMMY },
+                { "MemoryHigh", "10",           &c.memory_high, 10 },
+                { "MemoryHigh", "infinity",     &c.memory_high, CGROUP_LIMIT_MAX },
+                { "MemoryMax",  "",             &c.memory_max,  CGROUP_LIMIT_MAX },
+                { "MemoryMax",  "0",            &c.memory_max,  CGROUP_LIMIT_DUMMY },
+                { "MemoryMax",  "10",           &c.memory_max,  10 },
+                { "MemoryMax",  "infinity",     &c.memory_max,  CGROUP_LIMIT_MAX },
+        };
+        size_t i;
+        int r;
+
+        for (i = 0; i < ELEMENTSOF(limit_tests); i++) {
+                c.memory_min = CGROUP_LIMIT_DUMMY;
+                c.memory_low = CGROUP_LIMIT_DUMMY;
+                c.memory_high = CGROUP_LIMIT_DUMMY;
+                c.memory_max = CGROUP_LIMIT_DUMMY;
+                r = config_parse_memory_limit(NULL, "fake", 1, "section", 1,
+                                              limit_tests[i].limit, 1,
+                                              limit_tests[i].value, &c, NULL);
+                log_info("%s=%s\t%"PRIu64"==%"PRIu64"\n",
+                         limit_tests[i].limit, limit_tests[i].value,
+                         *limit_tests[i].result, limit_tests[i].expected);
+                assert_se(r >= 0);
+                assert_se(*limit_tests[i].result == limit_tests[i].expected);
+        }
+
 }
 
 int main(int argc, char *argv[]) {
@@ -793,6 +849,7 @@ int main(int argc, char *argv[]) {
         test_config_parse_pass_environ();
         TEST_REQ_RUNNING_SYSTEMD(test_install_printf());
         test_unit_dump_config_items();
+        test_config_parse_memory_limit();
 
         return r;
 }

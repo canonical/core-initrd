@@ -1,7 +1,7 @@
 <?xml version='1.0'?> <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="systemd.automount">
   <refentryinfo>
@@ -35,9 +35,9 @@
     this unit type. See
     <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
     for the common options of all unit configuration files. The common
-    configuration items are configured in the generic <literal>[Unit]</literal> and
-    <literal>[Install]</literal> sections. The automount specific configuration options
-    are configured in the <literal>[Automount]</literal> section.</para>
+    configuration items are configured in the generic [Unit] and
+    [Install] sections. The automount specific configuration options
+    are configured in the [Automount] section.</para>
 
     <para>Automount units must be named after the automount directories they control. Example: the automount point
     <filename index="false">/home/lennart</filename> must be configured in a unit file
@@ -57,6 +57,16 @@
 
     <para>Automount units may be used to implement on-demand mounting
     as well as parallelized mounting of file systems.</para>
+
+    <para>Note that automount units are separate from the mount itself, so you
+    should not set <varname>After=</varname> or <varname>Requires=</varname>
+    for mount dependencies here. For example, you should not set
+    <varname>After=network-online.target</varname> or similar on network
+    filesystems. Doing so may result in an ordering cycle.</para>
+
+    <para>Note that automount support on Linux is privileged, automount units are hence only available in the
+    system service manager (and root's user service manager), but not in unprivileged user's service
+    manager.</para>
   </refsect1>
 
   <refsect1>
@@ -86,6 +96,10 @@
         <listitem><para>Automount units acquire automatic <varname>Before=</varname> and
         <varname>Conflicts=</varname> on <filename>umount.target</filename> in order to be stopped during
         shutdown.</para></listitem>
+
+        <listitem><para>Automount units automatically gain an <varname>After=</varname> dependency
+        on <filename>local-fs-pre.target</filename>, and a <varname>Before=</varname> dependency on
+        <filename>local-fs.target</filename>.</para></listitem>
       </itemizedlist>
     </refsect2>
   </refsect1>

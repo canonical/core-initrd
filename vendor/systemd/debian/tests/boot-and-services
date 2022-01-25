@@ -41,8 +41,9 @@ class ServicesTest(unittest.TestCase):
     def test_no_failed(self):
         '''No failed units'''
 
-        out = subprocess.check_output(['systemctl', '--state=failed', '--no-legend'],
-                                      universal_newlines=True)
+        out = subprocess.check_output(
+                ['systemctl', '--state=failed', '--no-legend', '--plain'],
+                universal_newlines=True)
         failed = out.splitlines()
         # ignore /etc/modules failure as stuff that we put there by default
         # often fails
@@ -88,7 +89,7 @@ class ServicesTest(unittest.TestCase):
         else:
             out = subprocess.check_output(['nmcli', 'nm'])
         self.assertIn(b'enabled', out)
-        self.active_unit('network-manager')
+        self.active_unit('NetworkManager')
 
     def test_cron(self):
         out = subprocess.check_output(['ps', 'u', '-C', 'cron'])
@@ -102,6 +103,7 @@ class ServicesTest(unittest.TestCase):
 
     @unittest.skipIf('TEST_UPSTREAM' in os.environ,
                      'Forwarding to rsyslog is a Debian patch')
+    @unittest.skipIf(is_container and platform.machine() == 's390x', 'LP: #1895576')
     def test_rsyslog(self):
         out = subprocess.check_output(['ps', 'u', '-C', 'rsyslogd'])
         self.assertIn(b'bin/rsyslogd', out)
@@ -246,6 +248,7 @@ poweroff\n''')
         self.assertRegex(out, b'Container c1.*shut down')
         self.assertEqual(nspawn.returncode, 0)
 
+    @unittest.skip('Broken on Linux > 5.10, see https://github.com/systemd/systemd/issues/20989')
     def test_service(self):
         self.assertTrue(os.path.isdir('/var/lib/machines'))
         cont = '/var/lib/machines/c1'

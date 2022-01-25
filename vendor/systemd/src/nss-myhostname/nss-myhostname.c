@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <net/if.h>
@@ -54,8 +54,7 @@ enum nss_status _nss_myhostname_gethostbyname4_r(
         assert(h_errnop);
 
         if (is_localhost(name)) {
-                /* We respond to 'localhost', so that /etc/hosts
-                 * is optional */
+                /* We respond to 'localhost', so that /etc/hosts is optional */
 
                 canonical = "localhost";
                 local_address_ipv4 = htobe32(INADDR_LOOPBACK);
@@ -68,6 +67,14 @@ enum nss_status _nss_myhostname_gethostbyname4_r(
 
                 canonical = "_gateway";
 
+        } else if (is_outbound_hostname(name)) {
+
+                n_addresses = local_outbounds(NULL, 0, AF_UNSPEC, &addresses);
+                if (n_addresses <= 0)
+                        goto not_found;
+
+                canonical = "_outbound";
+
         } else {
                 hn = gethostname_malloc();
                 if (!hn) {
@@ -77,7 +84,7 @@ enum nss_status _nss_myhostname_gethostbyname4_r(
                         return NSS_STATUS_TRYAGAIN;
                 }
 
-                /* We respond to our local host name, our hostname suffixed with a single dot. */
+                /* We respond to our local hostname, our hostname suffixed with a single dot. */
                 if (!streq(name, hn) && !streq_ptr(startswith(name, hn), "."))
                         goto not_found;
 
@@ -134,7 +141,7 @@ enum nss_status _nss_myhostname_gethostbyname4_r(
                 r_tuple->next = r_tuple_prev;
                 r_tuple->name = r_name;
                 r_tuple->family = a->family;
-                r_tuple->scopeid = a->family == AF_INET6 && IN6_IS_ADDR_LINKLOCAL(&a->address.in6) ? a->ifindex : 0;
+                r_tuple->scopeid = a->family == AF_INET6 && in6_addr_is_link_local(&a->address.in6) ? a->ifindex : 0;
                 memcpy(r_tuple->addr, &a->address, 16);
 
                 idx += ALIGN(sizeof(struct gaih_addrtuple));
@@ -342,6 +349,14 @@ enum nss_status _nss_myhostname_gethostbyname3_r(
                         goto not_found;
 
                 canonical = "_gateway";
+
+        } else if (is_outbound_hostname(name)) {
+
+                n_addresses = local_outbounds(NULL, 0, af, &addresses);
+                if (n_addresses <= 0)
+                        goto not_found;
+
+                canonical = "_outbound";
 
         } else {
                 hn = gethostname_malloc();

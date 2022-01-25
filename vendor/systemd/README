@@ -14,7 +14,7 @@ MAILING LIST:
         https://lists.freedesktop.org/mailman/listinfo/systemd-devel
 
 IRC:
-        #systemd on irc.freenode.org
+        #systemd on irc.libera.chat
 
 BUG REPORTS:
         https://github.com/systemd/systemd/issues
@@ -35,6 +35,11 @@ LICENSE:
 REQUIREMENTS:
         Linux kernel >= 3.13
         Linux kernel >= 4.2 for unified cgroup hierarchy support
+        Linux kernel >= 4.10 for cgroup-bpf egress and ingress hooks
+        Linux kernel >= 4.15 for cgroup-bpf device hook
+        Linux kernel >= 4.17 for cgroup-bpf socket address hooks
+        Linux kernel >= 5.3 for bounded-loops in BPF program
+        Linux kernel >= 5.4 for signed Verity images support
 
         Kernel Config Options:
           CONFIG_DEVTMPFS
@@ -43,7 +48,7 @@ REQUIREMENTS:
           CONFIG_SIGNALFD
           CONFIG_TIMERFD
           CONFIG_EPOLL
-          CONFIG_NET
+          CONFIG_UNIX (it requires CONFIG_NET, but every other flag in it is not necessary)
           CONFIG_SYSFS
           CONFIG_PROC_FS
           CONFIG_FHANDLE (libudev, mount and bind mount handling)
@@ -80,7 +85,7 @@ REQUIREMENTS:
 
         Optional but strongly recommended:
           CONFIG_IPV6
-          CONFIG_AUTOFS4_FS
+          CONFIG_AUTOFS_FS
           CONFIG_TMPFS_XATTR
           CONFIG_{TMPFS,EXT4_FS,XFS,BTRFS_FS,...}_POSIX_ACL
           CONFIG_SECCOMP
@@ -94,13 +99,28 @@ REQUIREMENTS:
         Required for CPUQuota= in resource control unit settings
           CONFIG_CFS_BANDWIDTH
 
-        Required for IPAddressDeny= and IPAddressAllow= in resource control
+        Required for IPAddressDeny=, IPAddressAllow=, IPIngressFilterPath=,
+        IPEgressFilterPath= in resource control unit settings
         unit settings
+          CONFIG_BPF
+          CONFIG_BPF_SYSCALL
+          CONFIG_BPF_JIT
+          CONFIG_HAVE_EBPF_JIT
+          CONFIG_CGROUP_BPF
+
+        Required for SocketBind{Allow|Deny}= in resource control unit settings
+          CONFIG_BPF
+          CONFIG_BPF_SYSCALL
+          CONFIG_BPF_JIT
+          CONFIG_HAVE_EBPF_JIT
           CONFIG_CGROUP_BPF
 
         For UEFI systems:
           CONFIG_EFIVAR_FS
           CONFIG_EFI_PARTITION
+
+        Required for signed Verity images support:
+          CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG
 
         We recommend to turn off Real-Time group scheduling in the
         kernel when using systemd. RT group scheduling effectively
@@ -121,6 +141,9 @@ REQUIREMENTS:
 
         Required for systemd-nspawn:
           CONFIG_DEVPTS_MULTIPLE_INSTANCES or Linux kernel >= 4.7
+
+        Required for systemd-oomd:
+          CONFIG_PSI
 
         Note that kernel auditing is broken when used with systemd's
         container code. When using systemd in conjunction with
@@ -144,12 +167,15 @@ REQUIREMENTS:
         libblkid >= 2.24 (from util-linux) (optional)
         libkmod >= 15 (optional)
         PAM >= 1.1.2 (optional)
-        libcryptsetup (optional)
+        libcryptsetup (optional), >= 2.3.0 required for signed Verity images support
         libaudit (optional)
         libacl (optional)
+        libbpf >= 0.2.0 (optional)
+        libfdisk >= 2.33 (from util-linux) (optional)
         libselinux (optional)
         liblzma (optional)
         liblz4 >= 1.3.0 / 130 (optional)
+        libzstd >= 1.4.0 (optional)
         libgcrypt (optional)
         libqrencode (optional)
         libmicrohttpd (optional)
@@ -164,11 +190,14 @@ REQUIREMENTS:
         gperf
         docbook-xsl (optional, required for documentation)
         xsltproc    (optional, required for documentation)
+        python-jinja2
         python-lxml (optional, required to build the indices)
         python >= 3.5
         meson >= 0.46 (>= 0.49 is required to build position-independent executables)
         ninja
-        gcc, awk, sed, grep, m4, and similar tools
+        gcc, awk, sed, grep, and similar tools
+        clang >= 10.0, llvm >= 10.0 (optional, required to build BPF programs
+                from source code in C)
 
         During runtime, you need the following additional
         dependencies:
@@ -181,20 +210,20 @@ REQUIREMENTS:
         polkit (optional)
 
         To build in directory build/:
-          meson build/ && ninja -C build
+          meson setup build/ && meson compile -C build/
 
         Any configuration options can be specified as -Darg=value... arguments
         to meson. After the build directory is initially configured, meson will
         refuse to run again, and options must be changed with:
-          mesonconf -Darg=value...
-        mesonconf without any arguments will print out available options and
+          meson configure -Darg=value build/
+        meson configure without any arguments will print out available options and
         their current values.
 
         Useful commands:
-          ninja -v some/target
-          ninja test
-          sudo ninja install
-          DESTDIR=... ninja install
+          meson compile -v -C build/ some/target
+          meson test -C build/
+          sudo meson install -C build/
+          DESTDIR=... meson install -C build/
 
         A tarball can be created with:
           git archive --format=tar --prefix=systemd-222/ v222 | xz > systemd-222.tar.xz
@@ -213,9 +242,10 @@ REQUIREMENTS:
         Note that the build prefix for systemd must be /usr. (Moreover,
         packages systemd relies on — such as D-Bus — really should use the same
         prefix, otherwise you are on your own.) -Dsplit-usr=false (which is the
-        default and does not need to be specified) is the recommended setting,
-        and -Dsplit-usr=true should be used on systems which have /usr on a
-        separate partition.
+        default and does not need to be specified) is the recommended setting.
+        -Dsplit-usr=true can be used to give a semblance of support for systems
+        with programs installed split between / and /usr. Moving everything
+        under /usr is strongly encouraged.
 
         Additional packages are necessary to run some tests:
         - busybox            (used by test/TEST-13-NSPAWN-SMOKE)
@@ -257,19 +287,19 @@ USERS AND GROUPS:
 NSS:
         systemd ships with four glibc NSS modules:
 
-        nss-myhostname resolves the local hostname to locally
-        configured IP addresses, as well as "localhost" to
-        127.0.0.1/::1.
+        nss-myhostname resolves the local hostname to locally configured IP
+        addresses, as well as "localhost" to 127.0.0.1/::1.
 
-        nss-resolve enables DNS resolution via the systemd-resolved
-        DNS/LLMNR caching stub resolver "systemd-resolved".
+        nss-resolve enables DNS resolution via the systemd-resolved DNS/LLMNR
+        caching stub resolver "systemd-resolved".
 
         nss-mymachines enables resolution of all local containers registered
-        with machined to their respective IP addresses. It also maps UID/GIDs
-        ranges used by containers to useful names.
+        with machined to their respective IP addresses.
 
-        nss-systemd enables resolution of all dynamically allocated service
-        users. (See the DynamicUser= setting in unit files.)
+        nss-systemd enables resolution of users/group registered via the
+        User/Group Record Lookup API (https://systemd.io/USER_GROUP_API),
+        including all dynamically allocated service users. (See the
+        DynamicUser= setting in unit files.)
 
         To make use of these NSS modules, please add them to the "hosts:",
         "passwd:" and "group:" lines in /etc/nsswitch.conf. The "resolve"
@@ -278,8 +308,8 @@ NSS:
 
         The four modules should be used in the following order:
 
-                passwd: compat mymachines systemd
-                group: compat mymachines systemd
+                passwd: compat systemd
+                group: compat systemd
                 hosts: files mymachines resolve [!UNAVAIL=return] dns myhostname
 
 SYSV INIT.D SCRIPTS:
@@ -319,16 +349,11 @@ WARNINGS:
         we don't execve() systemd-shutdown.
 
 STABLE BRANCHES AND BACKPORTS:
-       Stable branches with backported patches are available in the
-       systemd-stable repo at https://github.com/systemd/systemd-stable.
+        Stable branches with backported patches are available in the
+        systemd-stable repo at https://github.com/systemd/systemd-stable.
 
-       Stable branches are started for certain releases of systemd and named
-       after them, e.g. v238-stable. Stable branches are managed by
-       distribution maintainers on an as needed basis. See
-       https://www.freedesktop.org/wiki/Software/systemd/Backports/ for some
-       more information and examples.
-
-ENGINEERING AND CONSULTING SERVICES:
-        Kinvolk (https://kinvolk.io) offers professional engineering
-        and consulting services for systemd. Please contact Chris Kühl
-        <chris@kinvolk.io> for more information.
+        Stable branches are started for certain releases of systemd and named
+        after them, e.g. v238-stable. Stable branches are managed by
+        distribution maintainers on an as needed basis. See
+        https://www.freedesktop.org/wiki/Software/systemd/Backports/ for some
+        more information and examples.

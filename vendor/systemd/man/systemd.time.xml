@@ -1,7 +1,7 @@
 <?xml version='1.0'?> <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="systemd.time">
 
@@ -75,6 +75,16 @@
     <para>One can use the <command>timespan</command> command of
     <citerefentry><refentrytitle>systemd-analyze</refentrytitle><manvolnum>1</manvolnum></citerefentry>
     to normalise a textual time span for testing and validation purposes.</para>
+
+    <para>Internally, systemd generally operates with microsecond time granularity, while the default time
+    unit in user-configurable time spans is usually seconds (see above). This disparity becomes visible when
+    comparing the same settings in the (high-level) unit file syntax with the matching (more low-level) D-Bus
+    properties (which are what
+    <citerefentry><refentrytitle>systemctl</refentrytitle><manvolnum>1</manvolnum></citerefentry>'s
+    <command>show</command> command displays). The former typically are suffixed with <literal>…Sec</literal>
+    to indicate the default unit of seconds, the latter are typically suffixed with <literal>…USec</literal>
+    to indicate the underlying low-level time unit, even if they both encapsulate the very same
+    settings.</para>
   </refsect1>
 
   <refsect1>
@@ -98,18 +108,20 @@
   <refsect1>
     <title>Parsing Timestamps</title>
 
-    <para>When parsing, systemd will accept a similar syntax, but expects no timezone specification, unless it is given
-    as the literal string <literal>UTC</literal> (for the UTC timezone), or is specified to be the locally configured
-    timezone, or the timezone name in the IANA timezone database format. The complete list of timezones
-    supported on your system can be obtained using the <literal>timedatectl list-timezones</literal>
-    (see <citerefentry><refentrytitle>timedatectl</refentrytitle><manvolnum>1</manvolnum></citerefentry>).
-    Using IANA format is recommended over local timezone names, as less prone to errors (eg: with local timezone it's possible to
-    specify daylight saving time in winter, while it's incorrect). The weekday specification is optional, but when
-    the weekday is specified, it must either be in the abbreviated (<literal>Wed</literal>) or non-abbreviated
-    (<literal>Wednesday</literal>) English language form (case does not matter), and is not subject to the locale
-    choice of the user.  Either the date, or the time part may be omitted, in which case the current date or 00:00:00,
-    respectively, is assumed. The seconds component of the time may also be omitted, in which case ":00" is
-    assumed. Year numbers may be specified in full or may be abbreviated (omitting the century).</para>
+    <para>When parsing, systemd will accept a similar syntax, but expects no timezone specification, unless
+    it is given as the literal string <literal>UTC</literal> (for the UTC timezone), or is specified to be
+    the locally configured timezone, or the timezone name in the IANA timezone database format. The complete
+    list of timezones supported on your system can be obtained using the <literal>timedatectl
+    list-timezones</literal> (see
+    <citerefentry><refentrytitle>timedatectl</refentrytitle><manvolnum>1</manvolnum></citerefentry>).  Using
+    IANA format is recommended over local timezone names, as less prone to errors (e.g. with local timezone
+    it's possible to specify daylight saving time in winter, even though that is not correct). The weekday
+    specification is optional, but when the weekday is specified, it must either be in the abbreviated
+    (<literal>Wed</literal>) or non-abbreviated (<literal>Wednesday</literal>) English language form (case
+    does not matter), and is not subject to the locale choice of the user. Either the date, or the time part
+    may be omitted, in which case the current date or 00:00:00, respectively, is assumed. The seconds
+    component of the time may also be omitted, in which case ":00" is assumed. Year numbers may be specified
+    in full or may be abbreviated (omitting the century).</para>
 
     <para>A timestamp is considered invalid if a weekday is specified and the date does not match the specified day of
     the week.</para>
@@ -199,15 +211,14 @@ tomorrow Pacific/Auckland → Thu 2012-11-23 19:00:00
     continuous weekdays. <literal>,</literal> and <literal>..</literal>
     may be combined freely.</para>
 
-    <para>In the date and time specifications, any component may be
-    specified as <literal>*</literal> in which case any value will
-    match. Alternatively, each component can be specified as a list of
-    values separated by commas. Values may be suffixed with
-    <literal>/</literal> and a repetition value, which indicates that
-    the value itself and the value plus all multiples of the repetition value
-    are matched.  Two values separated by <literal>..</literal> may be used
-    to indicate a range of values; ranges may also be followed with
-    <literal>/</literal> and a repetition value.</para>
+    <para>In the date and time specifications, any component may be specified as <literal>*</literal> in
+    which case any value will match. Alternatively, each component can be specified as a list of values
+    separated by commas. Values may be suffixed with <literal>/</literal> and a repetition value, which
+    indicates that the value itself and the value plus all multiples of the repetition value are matched.
+    Two values separated by <literal>..</literal> may be used to indicate a range of values; ranges may also
+    be followed with <literal>/</literal> and a repetition value, in which case the expression matches all
+    times starting with the start value, and continuing with all multiples of the repetition value relative
+    to the start value, ending at the end value the latest.</para>
 
     <para>A date specification may use <literal>~</literal> to indicate the
     last day(s) in a month. For example, <literal>*-02~03</literal> means
@@ -283,7 +294,7 @@ Wed..Sat,Tue 12-10-15 1:2:3 → Tue..Sat 2012-10-15 01:02:03
       <para>Use the <command>calendar</command> command of
       <citerefentry><refentrytitle>systemd-analyze</refentrytitle><manvolnum>1</manvolnum></citerefentry> to validate
       and normalize calendar time specifications for testing purposes. The tool also calculates when a specified
-      calendar event would elapse next.</para>
+      calendar event would occur next.</para>
   </refsect1>
 
   <refsect1>

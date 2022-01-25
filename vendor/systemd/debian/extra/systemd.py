@@ -26,4 +26,3 @@ def add_info(report):
                 failed += '------\n'
             failed += apport.hookutils.command_output(['systemctl', 'status', '--full', unit])
         report['SystemdFailedUnits'] = failed
-

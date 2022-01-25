@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /***
   Copyright © 2008 Alan Jenkins <alan.christopher.jenkins@googlemail.com>
 ***/
@@ -17,25 +17,9 @@
 #include "fd-util.h"
 #include "hashmap.h"
 #include "hwdb-internal.h"
-#include "hwdb-util.h"
 #include "nulstr-util.h"
 #include "string-util.h"
 #include "time-util.h"
-
-struct sd_hwdb {
-        unsigned n_ref;
-
-        FILE *f;
-        struct stat st;
-        union {
-                struct trie_header_f *head;
-                const char *map;
-        };
-
-        OrderedHashmap *properties;
-        Iterator properties_iterator;
-        bool properties_modified;
-};
 
 struct linebuf {
         char bytes[LINE_MAX];
@@ -296,15 +280,6 @@ static int trie_search_f(sd_hwdb *hwdb, const char *search) {
         return 0;
 }
 
-static const char hwdb_bin_paths[] =
-        "/etc/systemd/hwdb/hwdb.bin\0"
-        "/etc/udev/hwdb.bin\0"
-        "/usr/lib/systemd/hwdb/hwdb.bin\0"
-#if HAVE_SPLIT_USR
-        "/lib/systemd/hwdb/hwdb.bin\0"
-#endif
-        UDEVLIBEXECDIR "/hwdb.bin\0";
-
 _public_ int sd_hwdb_new(sd_hwdb **ret) {
         _cleanup_(sd_hwdb_unrefp) sd_hwdb *hwdb = NULL;
         const char *hwdb_bin_path;
@@ -343,10 +318,10 @@ _public_ int sd_hwdb_new(sd_hwdb **ret) {
                 return log_debug_errno(errno, "Failed to map %s: %m", hwdb_bin_path);
 
         if (memcmp(hwdb->map, sig, sizeof(hwdb->head->signature)) != 0 ||
-            (size_t) hwdb->st.st_size != le64toh(hwdb->head->file_size)) {
-                log_debug("Failed to recognize the format of %s", hwdb_bin_path);
-                return -EINVAL;
-        }
+            (size_t) hwdb->st.st_size != le64toh(hwdb->head->file_size))
+                return log_debug_errno(SYNTHETIC_ERRNO(EINVAL),
+                                       "Failed to recognize the format of %s",
+                                       hwdb_bin_path);
 
         log_debug("=== trie on-disk ===");
         log_debug("tool version:          %"PRIu64, le64toh(hwdb->head->tool_version));
@@ -371,30 +346,6 @@ static sd_hwdb *hwdb_free(sd_hwdb *hwdb) {
 }
 
 DEFINE_PUBLIC_TRIVIAL_REF_UNREF_FUNC(sd_hwdb, sd_hwdb, hwdb_free)
-
-bool hwdb_validate(sd_hwdb *hwdb) {
-        bool found = false;
-        const char* p;
-        struct stat st;
-
-        if (!hwdb)
-                return false;
-        if (!hwdb->f)
-                return false;
-
-        /* if hwdb.bin doesn't exist anywhere, we need to update */
-        NULSTR_FOREACH(p, hwdb_bin_paths)
-                if (stat(p, &st) >= 0) {
-                        found = true;
-                        break;
-                }
-        if (!found)
-                return true;
-
-        if (timespec_load(&hwdb->st.st_mtim) != timespec_load(&st.st_mtim))
-                return true;
-        return false;
-}
 
 static int properties_prepare(sd_hwdb *hwdb, const char *modalias) {
         assert(hwdb);

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stddef.h>
 #include <stdio.h>
@@ -39,7 +39,8 @@ static int mhd_respond_internal(struct MHD_Connection *connection,
                 return MHD_NO;
 
         log_debug("Queueing response %u: %s", code, buffer);
-        MHD_add_response_header(response, "Content-Type", "text/plain");
+        if (MHD_add_response_header(response, "Content-Type", "text/plain") == MHD_NO)
+                return MHD_NO;
         return MHD_queue_response(connection, code, response);
 }
 
@@ -78,10 +79,9 @@ int mhd_respondf(struct MHD_Connection *connection,
         errno = -error;
         fmt = strjoina(format, "\n");
         va_start(ap, format);
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+        DISABLE_WARNING_FORMAT_NONLITERAL;
         r = vasprintf(&m, fmt, ap);
-#pragma GCC diagnostic pop
+        REENABLE_WARNING;
         va_end(ap);
 
         if (r < 0)

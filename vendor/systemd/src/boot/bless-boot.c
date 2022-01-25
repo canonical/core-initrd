@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <getopt.h>
 #include <stdlib.h>
@@ -34,6 +34,7 @@ static int help(int argc, char *argv[], void *userdata) {
         printf("%s [OPTIONS...] COMMAND\n"
                "\n%sMark the boot process as good or bad.%s\n"
                "\nCommands:\n"
+               "     status          Show status of current boot loader entry\n"
                "     good            Mark this boot as good\n"
                "     bad             Mark this boot as bad\n"
                "     indeterminate   Undo any marking as good or bad\n"
@@ -41,12 +42,11 @@ static int help(int argc, char *argv[], void *userdata) {
                "  -h --help          Show this help\n"
                "     --version       Print version\n"
                "     --path=PATH     Path to the $BOOT partition (may be used multiple times)\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , ansi_highlight()
-               , ansi_normal()
-               , link
-        );
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               ansi_highlight(),
+               ansi_normal(),
+               link);
 
         return 0;
 }
@@ -126,7 +126,7 @@ static int acquire_path(void) {
         strv_free_and_replace(arg_path, a);
 
         if (DEBUG_LOGGING) {
-                _cleanup_free_ char *j;
+                _cleanup_free_ char *j = NULL;
 
                 j = strv_join(arg_path, ":");
                 log_debug("Using %s as boot loader drop-in search path.", j);
@@ -212,7 +212,7 @@ static int acquire_boot_count_path(
         uint64_t left, done;
         int r;
 
-        r = efi_get_variable_string(EFI_VENDOR_LOADER, "LoaderBootCountPath", &path);
+        r = efi_get_variable_string(EFI_LOADER_VARIABLE(LoaderBootCountPath), &path);
         if (r == -ENOENT)
                 return -EUNATCH; /* in this case, let the caller print a message */
         if (r < 0)

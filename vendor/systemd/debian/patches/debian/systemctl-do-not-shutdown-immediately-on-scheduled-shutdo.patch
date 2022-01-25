@@ -1,0 +1,52 @@
+From: Ioanna Alifieraki <ioanna-maria.alifieraki@canonical.com>
+Date: Thu, 17 Dec 2020 14:52:07 +0000
+Subject: systemctl: do not shutdown immediately on scheduled shutdown
+
+When, for whatever reason, a scheduled shutdown fails to be set, systemd
+will proceed with immediate shutdown without allowing the user to react.
+This is counterintuitive because when a scheduled shutdown is issued,
+it means the user wants to shutdown at a specified time in the future,
+not immediately. This patch prevents the immediate shutdown and informs
+the user that no action will be taken.
+
+Fixes: #17575
+---
+ src/systemctl/systemctl-compat-halt.c | 8 ++++----
+ src/systemctl/systemctl-logind.c      | 3 ++-
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/src/systemctl/systemctl-compat-halt.c b/src/systemctl/systemctl-compat-halt.c
+index 51a89ae..60eda72 100644
+--- a/src/systemctl/systemctl-compat-halt.c
++++ b/src/systemctl/systemctl-compat-halt.c
+@@ -148,11 +148,11 @@ int halt_main(void) {
+         if (r < 0)
+                 return r;
+ 
+-        /* Delayed shutdown requested, and was successful */
+-        if (arg_when > 0 && logind_schedule_shutdown() == 0)
+-                return 0;
++        /* Delayed shutdown requested */
++        if (arg_when > 0)
++                return logind_schedule_shutdown();
+ 
+-        /* No delay, or logind failed or is not at all available */
++        /* No delay, or logind is not at all available */
+         if (geteuid() != 0) {
+                 if (arg_dry_run || arg_force > 0) {
+                         (void) must_be_root();
+diff --git a/src/systemctl/systemctl-logind.c b/src/systemctl/systemctl-logind.c
+index 28dd25b..e2bdeb9 100644
+--- a/src/systemctl/systemctl-logind.c
++++ b/src/systemctl/systemctl-logind.c
+@@ -336,8 +336,9 @@ int logind_schedule_shutdown(void) {
+         (void) logind_set_wall_message();
+ 
+         r = bus_call_method(bus, bus_login_mgr, "ScheduleShutdown", &error, NULL, "st", action, arg_when);
++        /* logind fails, cannot schedule reboot, do nothing */
+         if (r < 0)
+-                return log_warning_errno(r, "Failed to call ScheduleShutdown in logind, proceeding with immediate shutdown: %s", bus_error_message(&error, r));
++                return log_warning_errno(r, "Failed to call ScheduleShutdown in logind, no action will be taken: %s", bus_error_message(&error, r));
+ 
+         if (!arg_quiet)
+                 log_info("%s scheduled for %s, use 'shutdown -c' to cancel.", log_action, format_timestamp_style(date, sizeof(date), arg_when, arg_timestamp_style));

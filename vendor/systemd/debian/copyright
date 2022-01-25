@@ -70,8 +70,8 @@ Files: src/basic/sparse-endian.h
 Copyright: 2012 Josh Triplett <josh@joshtriplett.org>
 License: Expat
 
-Files: src/journal/lookup3.c
-       src/journal/lookup3.h
+Files: src/libsystemd/sd-journal/lookup3.c
+       src/libsystemd/sd-journal/lookup3.h
 Copyright: none
 License: public-domain
  You can use this free for any purpose. It's in the public domain. It has no
@@ -134,10 +134,6 @@ Copyright: 2003-2012 Kay Sievers <kay@vrfy.org>
            2014 Zbigniew Jędrzejewski-Szmek <zbyszek@in.waw.pl>
            2014 David Herrmann <dh.herrmann@gmail.com>
            2014 Carlos Garnacho <carlosg@gnome.org>
-License: GPL-2+
-
-Files: src/udev/scsi_id/*
-Copyright: 2003 IBM Corp.
 License: GPL-2+
 
 Files: debian/*

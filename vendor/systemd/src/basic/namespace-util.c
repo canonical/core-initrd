@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/mount.h>
 
 #include "fd-util.h"
 #include "missing_fs.h"
@@ -9,6 +10,7 @@
 #include "namespace-util.h"
 #include "process-util.h"
 #include "stat-util.h"
+#include "stdio-util.h"
 #include "user-util.h"
 
 int namespace_open(pid_t pid, int *pidns_fd, int *mntns_fd, int *netns_fd, int *userns_fd, int *root_fd) {
@@ -81,15 +83,14 @@ int namespace_open(pid_t pid, int *pidns_fd, int *mntns_fd, int *netns_fd, int *
 }
 
 int namespace_enter(int pidns_fd, int mntns_fd, int netns_fd, int userns_fd, int root_fd) {
-        if (userns_fd >= 0) {
-                /* Can't setns to your own userns, since then you could
-                 * escalate from non-root to root in your own namespace, so
-                 * check if namespaces equal before attempting to enter. */
-                _cleanup_free_ char *userns_fd_path = NULL;
-                int r;
-                if (asprintf(&userns_fd_path, "/proc/self/fd/%d", userns_fd) < 0)
-                        return -ENOMEM;
+        int r;
 
+        if (userns_fd >= 0) {
+                /* Can't setns to your own userns, since then you could escalate from non-root to root in
+                 * your own namespace, so check if namespaces are equal before attempting to enter. */
+
+                char userns_fd_path[STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(int)];
+                xsprintf(userns_fd_path, "/proc/self/fd/%d", userns_fd);
                 r = files_same(userns_fd_path, "/proc/self/ns/user", 0);
                 if (r < 0)
                         return r;
@@ -124,13 +125,13 @@ int namespace_enter(int pidns_fd, int mntns_fd, int netns_fd, int userns_fd, int
         return reset_uid_gid();
 }
 
-int fd_is_network_ns(int fd) {
+int fd_is_ns(int fd, unsigned long nsflag) {
         struct statfs s;
         int r;
 
-        /* Checks whether the specified file descriptor refers to a network namespace. On old kernels there's no nice
-         * way to detect that, hence on those we'll return a recognizable error (EUCLEAN), so that callers can handle
-         * this somewhat nicely.
+        /* Checks whether the specified file descriptor refers to a namespace created by specifying nsflag in clone().
+         * On old kernels there's no nice way to detect that, hence on those we'll return a recognizable error (EUCLEAN),
+         * so that callers can handle this somewhat nicely.
          *
          * This function returns > 0 if the fd definitely refers to a network namespace, 0 if it definitely does not
          * refer to a network namespace, -EUCLEAN if we can't determine, and other negative error codes on error. */
@@ -167,5 +168,18 @@ int fd_is_network_ns(int fd) {
                 return -errno;
         }
 
-        return r == CLONE_NEWNET;
+        return (unsigned long) r == nsflag;
+}
+
+int detach_mount_namespace(void) {
+
+        /* Detaches the mount namespace, disabling propagation from our namespace to the host */
+
+        if (unshare(CLONE_NEWNS) < 0)
+                return -errno;
+
+        if (mount(NULL, "/", NULL, MS_SLAVE | MS_REC, NULL) < 0)
+                return -errno;
+
+        return 0;
 }

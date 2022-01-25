@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
-#include <sys/poll.h>
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+#include <poll.h>
 
 #include "fd-util.h"
 #include "io-util.h"
@@ -134,7 +134,7 @@ int nscd_flush_cache(char **databases) {
         int r = 0;
         char **i;
 
-        /* Tries to invalidate the specified database in nscd. We do this carefully, with a 5s time-out, so that we
+        /* Tries to invalidate the specified database in nscd. We do this carefully, with a 5s timeout, so that we
          * don't block indefinitely on another service. */
 
         end = usec_add(now(CLOCK_MONOTONIC), NSCD_FLUSH_CACHE_TIMEOUT_USEC);

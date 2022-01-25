@@ -2,9 +2,7 @@ etc/udev/
 lib/udev/*
 lib/systemd/network/*.link
 lib/systemd/system/systemd-udev*
-lib/systemd/system/systemd-hwdb*
 lib/systemd/system/*.target.wants/systemd-udev*
-lib/systemd/system/*.target.wants/*hwdb*
 lib/systemd/systemd-udevd
 bin/udevadm
 bin/systemd-hwdb

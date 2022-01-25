@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="kernel-install"
           xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -36,7 +36,7 @@
     <title>Description</title>
     <para><command>kernel-install</command> is used to install and remove kernel and initramfs images to and
     from the boot loader partition, referred to as <varname>$BOOT</varname> here. It will usually be one of
-    <filename>/boot</filename>, <filename>/efi</filename>, or <filename>/boot/efi</filename>, see below.
+    <filename>/boot/</filename>, <filename>/efi/</filename>, or <filename>/boot/efi/</filename>, see below.
     </para>
 
     <para><command>kernel-install</command> will execute the files
@@ -80,7 +80,7 @@
             </para></listitem>
 
             <listitem><para><filename>50-depmod.install</filename> runs
-            <citerefentry><refentrytitle>depmod</refentrytitle><manvolnum>8</manvolnum></citerefentry> for the
+            <citerefentry project='man-pages'><refentrytitle>depmod</refentrytitle><manvolnum>8</manvolnum></citerefentry> for the
             <replaceable>KERNEL-VERSION</replaceable>.</para></listitem>
 
             <listitem><para><filename>90-loaderentry.install</filename> copies <replaceable>KERNEL-IMAGE</replaceable>
@@ -137,7 +137,7 @@
     <para>The partition where the kernels and <ulink url="https://systemd.io/BOOT_LOADER_SPECIFICATION">Boot
     Loader Specification</ulink> snippets are located is called <varname>$BOOT</varname>.
     <command>kernel-install</command> determines the location of this partition by checking
-    <filename>/efi/</filename>, <filename>/boot/</filename>, and <filename>/boot/efi</filename>
+    <filename>/efi/</filename>, <filename>/boot/</filename>, and <filename>/boot/efi/</filename>
     in turn. The first location where <filename>$BOOT/loader/entries/</filename> or
     <filename>$BOOT/$MACHINE_ID/</filename> exists is used.</para>
   </refsect1>
@@ -211,7 +211,9 @@
           <filename>/etc/machine-id</filename>
         </term>
           <listitem>
-            <para>The content of the file specifies the machine identification <replaceable>MACHINE-ID</replaceable>.</para>
+            <para>The content of this file specifies the machine identification
+            <replaceable>MACHINE-ID</replaceable>. If it cannot read <filename>/etc/machine-id</filename>,
+            kernel-install will use "Linux" as the machine ID instead.</para>
           </listitem>
       </varlistentry>
       <varlistentry>
@@ -231,7 +233,7 @@
     <para>
       <citerefentry><refentrytitle>machine-id</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
       <citerefentry><refentrytitle>os-release</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
-      <citerefentry><refentrytitle>depmod</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
+      <citerefentry project='man-pages'><refentrytitle>depmod</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
       <citerefentry><refentrytitle>systemd-boot</refentrytitle><manvolnum>7</manvolnum></citerefentry>,
       <ulink url="https://systemd.io/BOOT_LOADER_SPECIFICATION">Boot Loader Specification</ulink>
     </para>

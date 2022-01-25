@@ -1,8 +1,7 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <limits.h>
-#include <poll.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -11,10 +10,6 @@
 #include "time-util.h"
 
 int flush_fd(int fd) {
-        struct pollfd pollfd = {
-                .fd = fd,
-                .events = POLLIN,
-        };
         int count = 0;
 
         /* Read from the specified file descriptor, until POLLIN is not set anymore, throwing away everything
@@ -27,19 +22,18 @@ int flush_fd(int fd) {
                 ssize_t l;
                 int r;
 
-                r = poll(&pollfd, 1, 0);
+                r = fd_wait_for_event(fd, POLLIN, 0);
                 if (r < 0) {
-                        if (errno == EINTR)
+                        if (r == -EINTR)
                                 continue;
 
-                        return -errno;
-
-                } else if (r == 0)
+                        return r;
+                }
+                if (r == 0)
                         return count;
 
                 l = read(fd, buf, sizeof(buf));
                 if (l < 0) {
-
                         if (errno == EINTR)
                                 continue;
 
@@ -155,38 +149,51 @@ int loop_write(int fd, const void *buf, size_t nbytes, bool do_poll) {
 }
 
 int pipe_eof(int fd) {
-        struct pollfd pollfd = {
-                .fd = fd,
-                .events = POLLIN|POLLHUP,
-        };
-
         int r;
 
-        r = poll(&pollfd, 1, 0);
+        r = fd_wait_for_event(fd, POLLIN, 0);
+        if (r <= 0)
+                return r;
+
+        return !!(r & POLLHUP);
+}
+
+int ppoll_usec(struct pollfd *fds, size_t nfds, usec_t timeout) {
+        struct timespec ts;
+        int r;
+
+        assert(fds || nfds == 0);
+
+        if (nfds == 0)
+                return 0;
+
+        r = ppoll(fds, nfds, timeout == USEC_INFINITY ? NULL : timespec_store(&ts, timeout), NULL);
         if (r < 0)
                 return -errno;
-
         if (r == 0)
                 return 0;
 
-        return pollfd.revents & POLLHUP;
+        for (size_t i = 0, n = r; i < nfds && n > 0; i++) {
+                if (fds[i].revents == 0)
+                        continue;
+                if (fds[i].revents & POLLNVAL)
+                        return -EBADF;
+                n--;
+        }
+
+        return r;
 }
 
-int fd_wait_for_event(int fd, int event, usec_t t) {
-
+int fd_wait_for_event(int fd, int event, usec_t timeout) {
         struct pollfd pollfd = {
                 .fd = fd,
                 .events = event,
         };
-
-        struct timespec ts;
         int r;
 
-        r = ppoll(&pollfd, 1, t == USEC_INFINITY ? NULL : timespec_store(&ts, t), NULL);
-        if (r < 0)
-                return -errno;
-        if (r == 0)
-                return 0;
+        r = ppoll_usec(&pollfd, 1, timeout);
+        if (r <= 0)
+                return r;
 
         return pollfd.revents;
 }
@@ -281,7 +288,6 @@ void iovw_free_contents(struct iovec_wrapper *iovw, bool free_vectors) {
 
         iovw->iovec = mfree(iovw->iovec);
         iovw->count = 0;
-        iovw->size_bytes = 0;
 }
 
 struct iovec_wrapper *iovw_free_free(struct iovec_wrapper *iovw) {
@@ -300,8 +306,8 @@ int iovw_put(struct iovec_wrapper *iovw, void *data, size_t len) {
         if (iovw->count >= IOV_MAX)
                 return -E2BIG;
 
-        if (!GREEDY_REALLOC(iovw->iovec, iovw->size_bytes, iovw->count + 1))
-                return log_oom();
+        if (!GREEDY_REALLOC(iovw->iovec, iovw->count + 1))
+                return -ENOMEM;
 
         iovw->iovec[iovw->count++] = IOVEC_MAKE(data, len);
         return 0;
@@ -313,7 +319,7 @@ int iovw_put_string_field(struct iovec_wrapper *iovw, const char *field, const c
 
         x = strjoin(field, value);
         if (!x)
-                return log_oom();
+                return -ENOMEM;
 
         r = iovw_put(iovw, x, strlen(x));
         if (r >= 0)
@@ -329,16 +335,14 @@ int iovw_put_string_field_free(struct iovec_wrapper *iovw, const char *field, ch
 }
 
 void iovw_rebase(struct iovec_wrapper *iovw, char *old, char *new) {
-        size_t i;
-
-        for (i = 0; i < iovw->count; i++)
+        for (size_t i = 0; i < iovw->count; i++)
                 iovw->iovec[i].iov_base = (char *)iovw->iovec[i].iov_base - old + new;
 }
 
 size_t iovw_size(struct iovec_wrapper *iovw) {
-        size_t n = 0, i;
+        size_t n = 0;
 
-        for (i = 0; i < iovw->count; i++)
+        for (size_t i = 0; i < iovw->count; i++)
                 n += iovw->iovec[i].iov_len;
 
         return n;

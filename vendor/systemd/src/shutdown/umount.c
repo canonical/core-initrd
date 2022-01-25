@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /***
   Copyright © 2010 ProFUSION embedded systems
 ***/
@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/dm-ioctl.h>
+#include <linux/major.h>
+#include <linux/raid/md_u.h>
 #include <linux/loop.h>
 #include <sys/mount.h>
 #include <sys/swap.h>
@@ -21,6 +23,7 @@
 #include "device-util.h"
 #include "escape.h"
 #include "fd-util.h"
+#include "fs-util.h"
 #include "fstab-util.h"
 #include "libmount-util.h"
 #include "mount-setup.h"
@@ -93,13 +96,9 @@ int mount_points_list_get(const char *mountinfo, MountPoint **head) {
                  * Even if there are duplicates later in mount_option_mangle()
                  * they shouldn't hurt anyways as they override each other.
                  */
-                if (!strextend_with_separator(&options, ",",
-                                              mnt_fs_get_vfs_options(fs),
-                                              NULL))
+                if (!strextend_with_separator(&options, ",", mnt_fs_get_vfs_options(fs)))
                         return log_oom();
-                if (!strextend_with_separator(&options, ",",
-                                              mnt_fs_get_fs_options(fs),
-                                              NULL))
+                if (!strextend_with_separator(&options, ",", mnt_fs_get_fs_options(fs)))
                         return log_oom();
 
                 /* Ignore mount points we can't unmount because they
@@ -326,6 +325,58 @@ static int dm_list_get(MountPoint **head) {
         return 0;
 }
 
+static int md_list_get(MountPoint **head) {
+        _cleanup_(sd_device_enumerator_unrefp) sd_device_enumerator *e = NULL;
+        sd_device *d;
+        int r;
+
+        assert(head);
+
+        r = sd_device_enumerator_new(&e);
+        if (r < 0)
+                return r;
+
+        r = sd_device_enumerator_allow_uninitialized(e);
+        if (r < 0)
+                return r;
+
+        r = sd_device_enumerator_add_match_subsystem(e, "block", true);
+        if (r < 0)
+                return r;
+
+        r = sd_device_enumerator_add_match_sysname(e, "md*");
+        if (r < 0)
+                return r;
+
+        FOREACH_DEVICE(e, d) {
+                _cleanup_free_ char *p = NULL;
+                const char *dn;
+                MountPoint *m;
+                dev_t devnum;
+
+                if (sd_device_get_devnum(d, &devnum) < 0 ||
+                    sd_device_get_devname(d, &dn) < 0)
+                        continue;
+
+                p = strdup(dn);
+                if (!p)
+                        return -ENOMEM;
+
+                m = new(MountPoint, 1);
+                if (!m)
+                        return -ENOMEM;
+
+                *m = (MountPoint) {
+                        .path = TAKE_PTR(p),
+                        .devnum = devnum,
+                };
+
+                LIST_PREPEND(mount_point, *head, m);
+        }
+
+        return 0;
+}
+
 static int delete_loopback(const char *device) {
         _cleanup_close_ int fd = -1;
         struct loop_info64 info;
@@ -333,8 +384,15 @@ static int delete_loopback(const char *device) {
         assert(device);
 
         fd = open(device, O_RDONLY|O_CLOEXEC);
-        if (fd < 0)
+        if (fd < 0) {
+                log_debug_errno(errno, "Failed to open loopback device %s: %m", device);
                 return errno == ENOENT ? 0 : -errno;
+        }
+
+        /* Loopback block devices don't sync in-flight blocks when we clear the fd, hence sync explicitly
+         * first */
+        if (fsync(fd) < 0)
+                log_debug_errno(errno, "Failed to sync loop block device %s, ignoring: %m", device);
 
         if (ioctl(fd, LOOP_CLR_FD, 0) < 0) {
                 if (errno == ENXIO) /* Nothing bound, didn't do anything */
@@ -386,27 +444,51 @@ static int delete_loopback(const char *device) {
         return -EBUSY; /* Nothing changed, the device is still attached, hence it apparently is still busy */
 }
 
-static int delete_dm(dev_t devnum) {
-
-        struct dm_ioctl dm = {
-                .version = {
-                        DM_VERSION_MAJOR,
-                        DM_VERSION_MINOR,
-                        DM_VERSION_PATCHLEVEL
-                },
-                .data_size = sizeof(dm),
-                .dev = devnum,
-        };
-
+static int delete_dm(MountPoint *m) {
         _cleanup_close_ int fd = -1;
+        int r;
 
-        assert(major(devnum) != 0);
+        assert(m);
+        assert(major(m->devnum) != 0);
+        assert(m->path);
 
         fd = open("/dev/mapper/control", O_RDWR|O_CLOEXEC);
         if (fd < 0)
                 return -errno;
 
-        if (ioctl(fd, DM_DEV_REMOVE, &dm) < 0)
+        r = fsync_path_at(AT_FDCWD, m->path);
+        if (r < 0)
+                log_debug_errno(r, "Failed to sync DM block device %s, ignoring: %m", m->path);
+
+        if (ioctl(fd, DM_DEV_REMOVE, &(struct dm_ioctl) {
+                .version = {
+                        DM_VERSION_MAJOR,
+                        DM_VERSION_MINOR,
+                        DM_VERSION_PATCHLEVEL
+                },
+                .data_size = sizeof(struct dm_ioctl),
+                .dev = m->devnum,
+        }) < 0)
+                return -errno;
+
+        return 0;
+}
+
+static int delete_md(MountPoint *m) {
+        _cleanup_close_ int fd = -1;
+
+        assert(m);
+        assert(major(m->devnum) != 0);
+        assert(m->path);
+
+        fd = open(m->path, O_RDONLY|O_CLOEXEC|O_EXCL);
+        if (fd < 0)
+                return -errno;
+
+        if (fsync(fd) < 0)
+                log_debug_errno(errno, "Failed to sync MD block device %s, ignoring: %m", m->path);
+
+        if (ioctl(fd, STOP_ARRAY, NULL) < 0)
                 return -errno;
 
         return 0;
@@ -428,10 +510,8 @@ static int remount_with_timeout(MountPoint *m, int umount_log_level) {
 
         assert(m);
 
-        /* Due to the possibility of a remount operation hanging, we
-         * fork a child process and set a timeout. If the timeout
-         * lapses, the assumption is that that particular remount
-         * failed. */
+        /* Due to the possibility of a remount operation hanging, we fork a child process and set a
+         * timeout. If the timeout lapses, the assumption is that the particular remount failed. */
         r = safe_fork("(sd-remount)", FORK_RESET_SIGNALS|FORK_CLOSE_ALL_FDS|FORK_LOG|FORK_REOPEN_LOG, &pid);
         if (r < 0)
                 return r;
@@ -466,10 +546,8 @@ static int umount_with_timeout(MountPoint *m, int umount_log_level) {
 
         assert(m);
 
-        /* Due to the possibility of a umount operation hanging, we
-         * fork a child process and set a timeout. If the timeout
-         * lapses, the assumption is that that particular umount
-         * failed. */
+        /* Due to the possibility of a umount operation hanging, we fork a child process and set a
+         * timeout. If the timeout lapses, the assumption is that the particular umount failed. */
         r = safe_fork("(sd-umount)", FORK_RESET_SIGNALS|FORK_CLOSE_ALL_FDS|FORK_LOG|FORK_REOPEN_LOG, &pid);
         if (r < 0)
                 return r;
@@ -482,7 +560,7 @@ static int umount_with_timeout(MountPoint *m, int umount_log_level) {
                  * rather than blocking indefinitely. If the filesysten is
                  * "busy", this may allow processes to die, thus making the
                  * filesystem less busy so the unmount might succeed (rather
-                 * then return EBUSY).*/
+                 * than return EBUSY). */
                 r = umount2(m->path, MNT_FORCE);
                 if (r < 0)
                         log_full_errno(umount_log_level, errno, "Failed to unmount %s: %m", m->path);
@@ -621,9 +699,40 @@ static int dm_points_list_detach(MountPoint **head, bool *changed, int umount_lo
                 }
 
                 log_info("Detaching DM %s (%u:%u).", m->path, major(m->devnum), minor(m->devnum));
-                r = delete_dm(m->devnum);
+                r = delete_dm(m);
                 if (r < 0) {
                         log_full_errno(umount_log_level, r, "Could not detach DM %s: %m", m->path);
+                        n_failed++;
+                        continue;
+                }
+
+                *changed = true;
+                mount_point_free(head, m);
+        }
+
+        return n_failed;
+}
+
+static int md_points_list_detach(MountPoint **head, bool *changed, int umount_log_level) {
+        MountPoint *m, *n;
+        int n_failed = 0, r;
+        dev_t rootdev = 0;
+
+        assert(head);
+        assert(changed);
+
+        (void) get_block_device("/", &rootdev);
+
+        LIST_FOREACH_SAFE(mount_point, m, n, *head) {
+                if (major(rootdev) != 0 && rootdev == m->devnum) {
+                        n_failed ++;
+                        continue;
+                }
+
+                log_info("Stopping MD %s (%u:%u).", m->path, major(m->devnum), minor(m->devnum));
+                r = delete_md(m);
+                if (r < 0) {
+                        log_full_errno(umount_log_level, r, "Could not stop MD %s: %m", m->path);
                         n_failed++;
                         continue;
                 }
@@ -712,4 +821,19 @@ int dm_detach_all(bool *changed, int umount_log_level) {
                 return r;
 
         return dm_points_list_detach(&dm_list_head, changed, umount_log_level);
+}
+
+int md_detach_all(bool *changed, int umount_log_level) {
+        _cleanup_(mount_points_list_free) LIST_HEAD(MountPoint, md_list_head);
+        int r;
+
+        assert(changed);
+
+        LIST_HEAD_INIT(md_list_head);
+
+        r = md_list_get(&md_list_head);
+        if (r < 0)
+                return r;
+
+        return md_points_list_detach(&md_list_head, changed, umount_log_level);
 }

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -14,22 +14,13 @@
 #include "sd-event.h"
 #include "sd-id128.h"
 
-#include "alloc-util.h"
+#include "bus-common-errors.h"
 #include "bus-internal.h"
 #include "bus-label.h"
-#include "bus-message.h"
 #include "bus-util.h"
-#include "cap-list.h"
-#include "cgroup-util.h"
-#include "mountpoint-util.h"
-#include "nsflags.h"
-#include "parse-util.h"
 #include "path-util.h"
-#include "rlimit-util.h"
 #include "socket-util.h"
 #include "stdio-util.h"
-#include "strv.h"
-#include "user-util.h"
 
 static int name_owner_change_callback(sd_bus_message *m, void *userdata, sd_bus_error *ret_error) {
         sd_event *e = userdata;
@@ -110,41 +101,21 @@ int bus_event_loop_with_idle(
                 else
                         idle = true;
 
-                r = sd_event_run(e, exiting || !idle ? (uint64_t) -1 : timeout);
+                r = sd_event_run(e, exiting || !idle ? UINT64_MAX : timeout);
                 if (r < 0)
                         return r;
 
                 if (r == 0 && !exiting && idle) {
+                        /* Inform the service manager that we are going down, so that it will queue all
+                         * further start requests, instead of assuming we are already running. */
+                        sd_notify(false, "STOPPING=1");
 
-                        r = sd_bus_try_close(bus);
-                        if (r == -EBUSY)
-                                continue;
-
-                        /* Fallback for dbus1 connections: we
-                         * unregister the name and wait for the
-                         * response to come through for it */
-                        if (r == -EOPNOTSUPP) {
-
-                                /* Inform the service manager that we
-                                 * are going down, so that it will
-                                 * queue all further start requests,
-                                 * instead of assuming we are already
-                                 * running. */
-                                sd_notify(false, "STOPPING=1");
-
-                                r = bus_async_unregister_and_exit(e, bus, name);
-                                if (r < 0)
-                                        return r;
-
-                                exiting = true;
-                                continue;
-                        }
-
+                        r = bus_async_unregister_and_exit(e, bus, name);
                         if (r < 0)
                                 return r;
 
-                        sd_event_exit(e, 0);
-                        break;
+                        exiting = true;
+                        continue;
                 }
         }
 
@@ -179,6 +150,13 @@ int bus_name_has_owner(sd_bus *c, const char *name, sd_bus_error *error) {
                 return sd_bus_error_set_errno(error, r);
 
         return has_owner;
+}
+
+bool bus_error_is_unknown_service(const sd_bus_error *error) {
+        return sd_bus_error_has_names(error,
+                                      SD_BUS_ERROR_SERVICE_UNKNOWN,
+                                      SD_BUS_ERROR_NAME_HAS_NO_OWNER,
+                                      BUS_ERROR_NO_SUCH_UNIT);
 }
 
 int bus_check_peercred(sd_bus *c) {
@@ -271,674 +249,12 @@ int bus_connect_user_systemd(sd_bus **_bus) {
         return 0;
 }
 
-int bus_print_property_value(const char *name, const char *expected_value, bool only_value, const char *value) {
-        assert(name);
+int bus_connect_transport(
+                BusTransport transport,
+                const char *host,
+                bool user,
+                sd_bus **ret) {
 
-        if (expected_value && !streq_ptr(expected_value, value))
-                return 0;
-
-        if (only_value)
-                puts(value);
-        else
-                printf("%s=%s\n", name, value);
-
-        return 0;
-}
-
-int bus_print_property_valuef(const char *name, const char *expected_value, bool only_value, const char *fmt, ...) {
-        va_list ap;
-        int r;
-
-        assert(name);
-        assert(fmt);
-
-        if (expected_value) {
-                _cleanup_free_ char *s = NULL;
-
-                va_start(ap, fmt);
-                r = vasprintf(&s, fmt, ap);
-                va_end(ap);
-                if (r < 0)
-                        return -ENOMEM;
-
-                if (streq_ptr(expected_value, s)) {
-                        if (only_value)
-                                puts(s);
-                        else
-                                printf("%s=%s\n", name, s);
-                }
-
-                return 0;
-        }
-
-        if (!only_value)
-                printf("%s=", name);
-        va_start(ap, fmt);
-        vprintf(fmt, ap);
-        va_end(ap);
-        puts("");
-
-        return 0;
-}
-
-static int bus_print_property(const char *name, const char *expected_value, sd_bus_message *m, bool value, bool all) {
-        char type;
-        const char *contents;
-        int r;
-
-        assert(name);
-        assert(m);
-
-        r = sd_bus_message_peek_type(m, &type, &contents);
-        if (r < 0)
-                return r;
-
-        switch (type) {
-
-        case SD_BUS_TYPE_STRING: {
-                const char *s;
-
-                r = sd_bus_message_read_basic(m, type, &s);
-                if (r < 0)
-                        return r;
-
-                if (all || !isempty(s)) {
-                        bool good;
-
-                        /* This property has a single value, so we need to take
-                         * care not to print a new line, everything else is OK. */
-                        good = !strchr(s, '\n');
-                        bus_print_property_value(name, expected_value, value, good ? s : "[unprintable]");
-                }
-
-                return 1;
-        }
-
-        case SD_BUS_TYPE_BOOLEAN: {
-                int b;
-
-                r = sd_bus_message_read_basic(m, type, &b);
-                if (r < 0)
-                        return r;
-
-                if (expected_value && parse_boolean(expected_value) != b)
-                        return 1;
-
-                bus_print_property_value(name, NULL, value, yes_no(b));
-                return 1;
-        }
-
-        case SD_BUS_TYPE_UINT64: {
-                uint64_t u;
-
-                r = sd_bus_message_read_basic(m, type, &u);
-                if (r < 0)
-                        return r;
-
-                /* Yes, heuristics! But we can change this check
-                 * should it turn out to not be sufficient */
-
-                if (endswith(name, "Timestamp") ||
-                    STR_IN_SET(name, "NextElapseUSecRealtime", "LastTriggerUSec", "TimeUSec", "RTCTimeUSec")) {
-                        char timestamp[FORMAT_TIMESTAMP_MAX];
-                        const char *t;
-
-                        t = format_timestamp(timestamp, sizeof(timestamp), u);
-                        if (t || all)
-                                bus_print_property_value(name, expected_value, value, strempty(t));
-
-                } else if (strstr(name, "USec")) {
-                        char timespan[FORMAT_TIMESPAN_MAX];
-
-                        (void) format_timespan(timespan, sizeof(timespan), u, 0);
-                        bus_print_property_value(name, expected_value, value, timespan);
-
-                } else if (streq(name, "RestrictNamespaces")) {
-                        _cleanup_free_ char *s = NULL;
-                        const char *result;
-
-                        if ((u & NAMESPACE_FLAGS_ALL) == 0)
-                                result = "yes";
-                        else if (FLAGS_SET(u, NAMESPACE_FLAGS_ALL))
-                                result = "no";
-                        else {
-                                r = namespace_flags_to_string(u, &s);
-                                if (r < 0)
-                                        return r;
-
-                                result = strempty(s);
-                        }
-
-                        bus_print_property_value(name, expected_value, value, result);
-
-                } else if (streq(name, "MountFlags")) {
-                        const char *result;
-
-                        result = mount_propagation_flags_to_string(u);
-                        if (!result)
-                                return -EINVAL;
-
-                        bus_print_property_value(name, expected_value, value, result);
-
-                } else if (STR_IN_SET(name, "CapabilityBoundingSet", "AmbientCapabilities")) {
-                        _cleanup_free_ char *s = NULL;
-
-                        r = capability_set_to_string_alloc(u, &s);
-                        if (r < 0)
-                                return r;
-
-                        bus_print_property_value(name, expected_value, value, s);
-
-                } else if ((STR_IN_SET(name, "CPUWeight", "StartupCPUWeight", "IOWeight", "StartupIOWeight") && u == CGROUP_WEIGHT_INVALID) ||
-                           (STR_IN_SET(name, "CPUShares", "StartupCPUShares") && u == CGROUP_CPU_SHARES_INVALID) ||
-                           (STR_IN_SET(name, "BlockIOWeight", "StartupBlockIOWeight") && u == CGROUP_BLKIO_WEIGHT_INVALID) ||
-                           (STR_IN_SET(name, "MemoryCurrent", "TasksCurrent") && u == (uint64_t) -1) ||
-                           (endswith(name, "NSec") && u == (uint64_t) -1))
-
-                        bus_print_property_value(name, expected_value, value, "[not set]");
-
-                else if ((STR_IN_SET(name, "DefaultMemoryLow", "DefaultMemoryMin", "MemoryLow", "MemoryHigh", "MemoryMax", "MemorySwapMax", "MemoryLimit") && u == CGROUP_LIMIT_MAX) ||
-                         (STR_IN_SET(name, "TasksMax", "DefaultTasksMax") && u == (uint64_t) -1) ||
-                         (startswith(name, "Limit") && u == (uint64_t) -1) ||
-                         (startswith(name, "DefaultLimit") && u == (uint64_t) -1))
-
-                        bus_print_property_value(name, expected_value, value, "infinity");
-                else if (STR_IN_SET(name, "IPIngressBytes", "IPIngressPackets", "IPEgressBytes", "IPEgressPackets") && u == (uint64_t) -1)
-                        bus_print_property_value(name, expected_value, value, "[no data]");
-                else
-                        bus_print_property_valuef(name, expected_value, value, "%"PRIu64, u);
-
-                return 1;
-        }
-
-        case SD_BUS_TYPE_INT64: {
-                int64_t i;
-
-                r = sd_bus_message_read_basic(m, type, &i);
-                if (r < 0)
-                        return r;
-
-                bus_print_property_valuef(name, expected_value, value, "%"PRIi64, i);
-                return 1;
-        }
-
-        case SD_BUS_TYPE_UINT32: {
-                uint32_t u;
-
-                r = sd_bus_message_read_basic(m, type, &u);
-                if (r < 0)
-                        return r;
-
-                if (strstr(name, "UMask") || strstr(name, "Mode"))
-                        bus_print_property_valuef(name, expected_value, value, "%04o", u);
-
-                else if (streq(name, "UID")) {
-                        if (u == UID_INVALID)
-                                bus_print_property_value(name, expected_value, value, "[not set]");
-                        else
-                                bus_print_property_valuef(name, expected_value, value, "%"PRIu32, u);
-                } else if (streq(name, "GID")) {
-                        if (u == GID_INVALID)
-                                bus_print_property_value(name, expected_value, value, "[not set]");
-                        else
-                                bus_print_property_valuef(name, expected_value, value, "%"PRIu32, u);
-                } else
-                        bus_print_property_valuef(name, expected_value, value, "%"PRIu32, u);
-
-                return 1;
-        }
-
-        case SD_BUS_TYPE_INT32: {
-                int32_t i;
-
-                r = sd_bus_message_read_basic(m, type, &i);
-                if (r < 0)
-                        return r;
-
-                bus_print_property_valuef(name, expected_value, value, "%"PRIi32, i);
-                return 1;
-        }
-
-        case SD_BUS_TYPE_DOUBLE: {
-                double d;
-
-                r = sd_bus_message_read_basic(m, type, &d);
-                if (r < 0)
-                        return r;
-
-                bus_print_property_valuef(name, expected_value, value, "%g", d);
-                return 1;
-        }
-
-        case SD_BUS_TYPE_ARRAY:
-                if (streq(contents, "s")) {
-                        bool first = true;
-                        const char *str;
-
-                        r = sd_bus_message_enter_container(m, SD_BUS_TYPE_ARRAY, contents);
-                        if (r < 0)
-                                return r;
-
-                        while ((r = sd_bus_message_read_basic(m, SD_BUS_TYPE_STRING, &str)) > 0) {
-                                bool good;
-
-                                if (first && !value)
-                                        printf("%s=", name);
-
-                                /* This property has multiple space-separated values, so
-                                 * neither spaces nor newlines can be allowed in a value. */
-                                good = str[strcspn(str, " \n")] == '\0';
-
-                                printf("%s%s", first ? "" : " ", good ? str : "[unprintable]");
-
-                                first = false;
-                        }
-                        if (r < 0)
-                                return r;
-
-                        if (first && all && !value)
-                                printf("%s=", name);
-                        if (!first || all)
-                                puts("");
-
-                        r = sd_bus_message_exit_container(m);
-                        if (r < 0)
-                                return r;
-
-                        return 1;
-
-                } else if (streq(contents, "y")) {
-                        const uint8_t *u;
-                        size_t n;
-
-                        r = sd_bus_message_read_array(m, SD_BUS_TYPE_BYTE, (const void**) &u, &n);
-                        if (r < 0)
-                                return r;
-
-                        if (all || n > 0) {
-                                unsigned i;
-
-                                if (!value)
-                                        printf("%s=", name);
-
-                                for (i = 0; i < n; i++)
-                                        printf("%02x", u[i]);
-
-                                puts("");
-                        }
-
-                        return 1;
-
-                } else if (streq(contents, "u")) {
-                        uint32_t *u;
-                        size_t n;
-
-                        r = sd_bus_message_read_array(m, SD_BUS_TYPE_UINT32, (const void**) &u, &n);
-                        if (r < 0)
-                                return r;
-
-                        if (all || n > 0) {
-                                unsigned i;
-
-                                if (!value)
-                                        printf("%s=", name);
-
-                                for (i = 0; i < n; i++)
-                                        printf("%08x", u[i]);
-
-                                puts("");
-                        }
-
-                        return 1;
-                }
-
-                break;
-        }
-
-        return 0;
-}
-
-int bus_message_print_all_properties(
-                sd_bus_message *m,
-                bus_message_print_t func,
-                char **filter,
-                bool value,
-                bool all,
-                Set **found_properties) {
-
-        int r;
-
-        assert(m);
-
-        r = sd_bus_message_enter_container(m, SD_BUS_TYPE_ARRAY, "{sv}");
-        if (r < 0)
-                return r;
-
-        while ((r = sd_bus_message_enter_container(m, SD_BUS_TYPE_DICT_ENTRY, "sv")) > 0) {
-                _cleanup_free_ char *name_with_equal = NULL;
-                const char *name, *contents, *expected_value = NULL;
-
-                r = sd_bus_message_read_basic(m, SD_BUS_TYPE_STRING, &name);
-                if (r < 0)
-                        return r;
-
-                if (found_properties) {
-                        r = set_ensure_allocated(found_properties, &string_hash_ops);
-                        if (r < 0)
-                                return log_oom();
-
-                        r = set_put(*found_properties, name);
-                        if (r < 0 && r != -EEXIST)
-                                return log_oom();
-                }
-
-                name_with_equal = strjoin(name, "=");
-                if (!name_with_equal)
-                        return log_oom();
-
-                if (!filter || strv_find(filter, name) ||
-                    (expected_value = strv_find_startswith(filter, name_with_equal))) {
-                        r = sd_bus_message_peek_type(m, NULL, &contents);
-                        if (r < 0)
-                                return r;
-
-                        r = sd_bus_message_enter_container(m, SD_BUS_TYPE_VARIANT, contents);
-                        if (r < 0)
-                                return r;
-
-                        if (func)
-                                r = func(name, expected_value, m, value, all);
-                        if (!func || r == 0)
-                                r = bus_print_property(name, expected_value, m, value, all);
-                        if (r < 0)
-                                return r;
-                        if (r == 0) {
-                                if (all && !expected_value)
-                                        printf("%s=[unprintable]\n", name);
-                                /* skip what we didn't read */
-                                r = sd_bus_message_skip(m, contents);
-                                if (r < 0)
-                                        return r;
-                        }
-
-                        r = sd_bus_message_exit_container(m);
-                        if (r < 0)
-                                return r;
-                } else {
-                        r = sd_bus_message_skip(m, "v");
-                        if (r < 0)
-                                return r;
-                }
-
-                r = sd_bus_message_exit_container(m);
-                if (r < 0)
-                        return r;
-        }
-        if (r < 0)
-                return r;
-
-        r = sd_bus_message_exit_container(m);
-        if (r < 0)
-                return r;
-
-        return 0;
-}
-
-int bus_print_all_properties(
-                sd_bus *bus,
-                const char *dest,
-                const char *path,
-                bus_message_print_t func,
-                char **filter,
-                bool value,
-                bool all,
-                Set **found_properties) {
-
-        _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
-        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
-        int r;
-
-        assert(bus);
-        assert(path);
-
-        r = sd_bus_call_method(bus,
-                        dest,
-                        path,
-                        "org.freedesktop.DBus.Properties",
-                        "GetAll",
-                        &error,
-                        &reply,
-                        "s", "");
-        if (r < 0)
-                return r;
-
-        return bus_message_print_all_properties(reply, func, filter, value, all, found_properties);
-}
-
-int bus_map_id128(sd_bus *bus, const char *member, sd_bus_message *m, sd_bus_error *error, void *userdata) {
-        sd_id128_t *p = userdata;
-        const void *v;
-        size_t n;
-        int r;
-
-        r = sd_bus_message_read_array(m, SD_BUS_TYPE_BYTE, &v, &n);
-        if (r < 0)
-                return r;
-
-        if (n == 0)
-                *p = SD_ID128_NULL;
-        else if (n == 16)
-                memcpy((*p).bytes, v, n);
-        else
-                return -EINVAL;
-
-        return 0;
-}
-
-static int map_basic(sd_bus *bus, const char *member, sd_bus_message *m, unsigned flags, sd_bus_error *error, void *userdata) {
-        char type;
-        int r;
-
-        r = sd_bus_message_peek_type(m, &type, NULL);
-        if (r < 0)
-                return r;
-
-        switch (type) {
-
-        case SD_BUS_TYPE_STRING:
-        case SD_BUS_TYPE_OBJECT_PATH: {
-                const char **p = userdata;
-                const char *s;
-
-                r = sd_bus_message_read_basic(m, type, &s);
-                if (r < 0)
-                        return r;
-
-                if (isempty(s))
-                        s = NULL;
-
-                if (flags & BUS_MAP_STRDUP)
-                        return free_and_strdup((char **) userdata, s);
-
-                *p = s;
-                return 0;
-        }
-
-        case SD_BUS_TYPE_ARRAY: {
-                _cleanup_strv_free_ char **l = NULL;
-                char ***p = userdata;
-
-                r = bus_message_read_strv_extend(m, &l);
-                if (r < 0)
-                        return r;
-
-                return strv_extend_strv(p, l, false);
-        }
-
-        case SD_BUS_TYPE_BOOLEAN: {
-                int b;
-
-                r = sd_bus_message_read_basic(m, type, &b);
-                if (r < 0)
-                        return r;
-
-                if (flags & BUS_MAP_BOOLEAN_AS_BOOL)
-                        *(bool*) userdata = b;
-                else
-                        *(int*) userdata = b;
-
-                return 0;
-        }
-
-        case SD_BUS_TYPE_INT32:
-        case SD_BUS_TYPE_UINT32: {
-                uint32_t u, *p = userdata;
-
-                r = sd_bus_message_read_basic(m, type, &u);
-                if (r < 0)
-                        return r;
-
-                *p = u;
-                return 0;
-        }
-
-        case SD_BUS_TYPE_INT64:
-        case SD_BUS_TYPE_UINT64: {
-                uint64_t t, *p = userdata;
-
-                r = sd_bus_message_read_basic(m, type, &t);
-                if (r < 0)
-                        return r;
-
-                *p = t;
-                return 0;
-        }
-
-        case SD_BUS_TYPE_DOUBLE: {
-                double d, *p = userdata;
-
-                r = sd_bus_message_read_basic(m, type, &d);
-                if (r < 0)
-                        return r;
-
-                *p = d;
-                return 0;
-        }}
-
-        return -EOPNOTSUPP;
-}
-
-int bus_message_map_all_properties(
-                sd_bus_message *m,
-                const struct bus_properties_map *map,
-                unsigned flags,
-                sd_bus_error *error,
-                void *userdata) {
-
-        int r;
-
-        assert(m);
-        assert(map);
-
-        r = sd_bus_message_enter_container(m, SD_BUS_TYPE_ARRAY, "{sv}");
-        if (r < 0)
-                return r;
-
-        while ((r = sd_bus_message_enter_container(m, SD_BUS_TYPE_DICT_ENTRY, "sv")) > 0) {
-                const struct bus_properties_map *prop;
-                const char *member;
-                const char *contents;
-                void *v;
-                unsigned i;
-
-                r = sd_bus_message_read_basic(m, SD_BUS_TYPE_STRING, &member);
-                if (r < 0)
-                        return r;
-
-                for (i = 0, prop = NULL; map[i].member; i++)
-                        if (streq(map[i].member, member)) {
-                                prop = &map[i];
-                                break;
-                        }
-
-                if (prop) {
-                        r = sd_bus_message_peek_type(m, NULL, &contents);
-                        if (r < 0)
-                                return r;
-
-                        r = sd_bus_message_enter_container(m, SD_BUS_TYPE_VARIANT, contents);
-                        if (r < 0)
-                                return r;
-
-                        v = (uint8_t *)userdata + prop->offset;
-                        if (map[i].set)
-                                r = prop->set(sd_bus_message_get_bus(m), member, m, error, v);
-                        else
-                                r = map_basic(sd_bus_message_get_bus(m), member, m, flags, error, v);
-                        if (r < 0)
-                                return r;
-
-                        r = sd_bus_message_exit_container(m);
-                        if (r < 0)
-                                return r;
-                } else {
-                        r = sd_bus_message_skip(m, "v");
-                        if (r < 0)
-                                return r;
-                }
-
-                r = sd_bus_message_exit_container(m);
-                if (r < 0)
-                        return r;
-        }
-        if (r < 0)
-                return r;
-
-        return sd_bus_message_exit_container(m);
-}
-
-int bus_map_all_properties(
-                sd_bus *bus,
-                const char *destination,
-                const char *path,
-                const struct bus_properties_map *map,
-                unsigned flags,
-                sd_bus_error *error,
-                sd_bus_message **reply,
-                void *userdata) {
-
-        _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
-        int r;
-
-        assert(bus);
-        assert(destination);
-        assert(path);
-        assert(map);
-        assert(reply || (flags & BUS_MAP_STRDUP));
-
-        r = sd_bus_call_method(
-                        bus,
-                        destination,
-                        path,
-                        "org.freedesktop.DBus.Properties",
-                        "GetAll",
-                        error,
-                        &m,
-                        "s", "");
-        if (r < 0)
-                return r;
-
-        r = bus_message_map_all_properties(m, map, flags, error, userdata);
-        if (r < 0)
-                return r;
-
-        if (reply)
-                *reply = sd_bus_message_ref(m);
-
-        return r;
-}
-
-int bus_connect_transport(BusTransport transport, const char *host, bool user, sd_bus **ret) {
         _cleanup_(sd_bus_close_unrefp) sd_bus *bus = NULL;
         int r;
 
@@ -947,7 +263,7 @@ int bus_connect_transport(BusTransport transport, const char *host, bool user, s
         assert(ret);
 
         assert_return((transport == BUS_TRANSPORT_LOCAL) == !host, -EINVAL);
-        assert_return(transport == BUS_TRANSPORT_LOCAL || !user, -EOPNOTSUPP);
+        assert_return(transport != BUS_TRANSPORT_REMOTE || !user, -EOPNOTSUPP);
 
         switch (transport) {
 
@@ -955,12 +271,10 @@ int bus_connect_transport(BusTransport transport, const char *host, bool user, s
                 if (user)
                         r = sd_bus_default_user(&bus);
                 else {
-                        if (sd_booted() <= 0) {
+                        if (sd_booted() <= 0)
                                 /* Print a friendly message when the local system is actually not running systemd as PID 1. */
-                                log_error("System has not been booted with systemd as init system (PID 1). Can't operate.");
-
-                                return -EHOSTDOWN;
-                        }
+                                return log_error_errno(SYNTHETIC_ERRNO(EHOSTDOWN),
+                                                       "System has not been booted with systemd as init system (PID 1). Can't operate.");
                         r = sd_bus_default_system(&bus);
                 }
                 break;
@@ -970,7 +284,10 @@ int bus_connect_transport(BusTransport transport, const char *host, bool user, s
                 break;
 
         case BUS_TRANSPORT_MACHINE:
-                r = sd_bus_open_system_machine(&bus, host);
+                if (user)
+                        r = sd_bus_open_user_machine(&bus, host);
+                else
+                        r = sd_bus_open_system_machine(&bus, host);
                 break;
 
         default:
@@ -984,7 +301,6 @@ int bus_connect_transport(BusTransport transport, const char *host, bool user, s
                 return r;
 
         *ret = TAKE_PTR(bus);
-
         return 0;
 }
 
@@ -1026,102 +342,6 @@ int bus_connect_transport_systemd(BusTransport transport, const char *host, bool
 
         return r;
 }
-
-int bus_property_get_bool(
-                sd_bus *bus,
-                const char *path,
-                const char *interface,
-                const char *property,
-                sd_bus_message *reply,
-                void *userdata,
-                sd_bus_error *error) {
-
-        int b = *(bool*) userdata;
-
-        return sd_bus_message_append_basic(reply, 'b', &b);
-}
-
-int bus_property_set_bool(
-                sd_bus *bus,
-                const char *path,
-                const char *interface,
-                const char *property,
-                sd_bus_message *value,
-                void *userdata,
-                sd_bus_error *error) {
-
-        int b, r;
-
-        r = sd_bus_message_read(value, "b", &b);
-        if (r < 0)
-                return r;
-
-        *(bool*) userdata = b;
-        return 0;
-}
-
-int bus_property_get_id128(
-                sd_bus *bus,
-                const char *path,
-                const char *interface,
-                const char *property,
-                sd_bus_message *reply,
-                void *userdata,
-                sd_bus_error *error) {
-
-        sd_id128_t *id = userdata;
-
-        if (sd_id128_is_null(*id)) /* Add an empty array if the ID is zero */
-                return sd_bus_message_append(reply, "ay", 0);
-        else
-                return sd_bus_message_append_array(reply, 'y', id->bytes, 16);
-}
-
-#if __SIZEOF_SIZE_T__ != 8
-int bus_property_get_size(
-                sd_bus *bus,
-                const char *path,
-                const char *interface,
-                const char *property,
-                sd_bus_message *reply,
-                void *userdata,
-                sd_bus_error *error) {
-
-        uint64_t sz = *(size_t*) userdata;
-
-        return sd_bus_message_append_basic(reply, 't', &sz);
-}
-#endif
-
-#if __SIZEOF_LONG__ != 8
-int bus_property_get_long(
-                sd_bus *bus,
-                const char *path,
-                const char *interface,
-                const char *property,
-                sd_bus_message *reply,
-                void *userdata,
-                sd_bus_error *error) {
-
-        int64_t l = *(long*) userdata;
-
-        return sd_bus_message_append_basic(reply, 'x', &l);
-}
-
-int bus_property_get_ulong(
-                sd_bus *bus,
-                const char *path,
-                const char *interface,
-                const char *property,
-                sd_bus_message *reply,
-                void *userdata,
-                sd_bus_error *error) {
-
-        uint64_t ul = *(unsigned long*) userdata;
-
-        return sd_bus_message_append_basic(reply, 't', &ul);
-}
-#endif
 
 /**
  * bus_path_encode_unique() - encode unique object path
@@ -1166,7 +386,7 @@ int bus_path_encode_unique(sd_bus *b, const char *prefix, const char *sender_id,
         int r;
 
         assert_return(b || (sender_id && external_id), -EINVAL);
-        assert_return(object_path_is_valid(prefix), -EINVAL);
+        assert_return(sd_bus_object_path_is_valid(prefix), -EINVAL);
         assert_return(ret_path, -EINVAL);
 
         if (!sender_id) {
@@ -1218,8 +438,8 @@ int bus_path_decode_unique(const char *path, const char *prefix, char **ret_send
         const char *p, *q;
         char *sender, *external;
 
-        assert(object_path_is_valid(path));
-        assert(object_path_is_valid(prefix));
+        assert(sd_bus_object_path_is_valid(path));
+        assert(sd_bus_object_path_is_valid(prefix));
         assert(ret_sender);
         assert(ret_external);
 
@@ -1248,54 +468,6 @@ int bus_path_decode_unique(const char *path, const char *prefix, char **ret_send
         *ret_sender = sender;
         *ret_external = external;
         return 1;
-}
-
-int bus_property_get_rlimit(
-                sd_bus *bus,
-                const char *path,
-                const char *interface,
-                const char *property,
-                sd_bus_message *reply,
-                void *userdata,
-                sd_bus_error *error) {
-
-        const char *is_soft;
-        struct rlimit *rl;
-        uint64_t u;
-        rlim_t x;
-
-        assert(bus);
-        assert(reply);
-        assert(userdata);
-
-        is_soft = endswith(property, "Soft");
-
-        rl = *(struct rlimit**) userdata;
-        if (rl)
-                x = is_soft ? rl->rlim_cur : rl->rlim_max;
-        else {
-                struct rlimit buf = {};
-                const char *s, *p;
-                int z;
-
-                /* Chop off "Soft" suffix */
-                s = is_soft ? strndupa(property, is_soft - property) : property;
-
-                /* Skip over any prefix, such as "Default" */
-                assert_se(p = strstr(s, "Limit"));
-
-                z = rlimit_from_string(p + 5);
-                assert(z >= 0);
-
-                (void) getrlimit(z, &buf);
-                x = is_soft ? buf.rlim_cur : buf.rlim_max;
-        }
-
-        /* rlim_t might have different sizes, let's map RLIMIT_INFINITY to (uint64_t) -1, so that it is the same on all
-         * archs */
-        u = x == RLIM_INFINITY ? (uint64_t) -1 : (uint64_t) x;
-
-        return sd_bus_message_append(reply, "t", u);
 }
 
 int bus_track_add_name_many(sd_bus_track *t, char **l) {

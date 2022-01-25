@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #if !ENABLE_DNS_OVER_TLS || !DNS_OVER_TLS_USE_OPENSSL
 #error This source file requires DNS-over-TLS to be enabled and OpenSSL to be available.
@@ -6,13 +6,15 @@
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
+#include <openssl/x509v3.h>
 
 #include "io-util.h"
 #include "resolved-dns-stream.h"
 #include "resolved-dnstls.h"
+#include "resolved-manager.h"
 
-DEFINE_TRIVIAL_CLEANUP_FUNC(SSL*, SSL_free);
-DEFINE_TRIVIAL_CLEANUP_FUNC(BIO*, BIO_free);
+DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(SSL*, SSL_free, NULL);
+DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(BIO*, BIO_free, NULL);
 
 static int dnstls_flush_write_buffer(DnsStream *stream) {
         ssize_t ss;
@@ -80,13 +82,19 @@ int dnstls_stream_connect_tls(DnsStream *stream, DnsServer *server) {
 
         if (server->manager->dns_over_tls_mode == DNS_OVER_TLS_YES) {
                 X509_VERIFY_PARAM *v;
-                const unsigned char *ip;
 
                 SSL_set_verify(s, SSL_VERIFY_PEER, NULL);
                 v = SSL_get0_param(s);
-                ip = server->family == AF_INET ? (const unsigned char*) &server->address.in.s_addr : server->address.in6.s6_addr;
-                if (X509_VERIFY_PARAM_set1_ip(v, ip, FAMILY_ADDRESS_SIZE(server->family)) == 0)
-                        return -ECONNREFUSED;
+                if (server->server_name) {
+                        X509_VERIFY_PARAM_set_hostflags(v, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+                        if (X509_VERIFY_PARAM_set1_host(v, server->server_name, 0) == 0)
+                                return -ECONNREFUSED;
+                } else {
+                        const unsigned char *ip;
+                        ip = server->family == AF_INET ? (const unsigned char*) &server->address.in.s_addr : server->address.in6.s6_addr;
+                        if (X509_VERIFY_PARAM_set1_ip(v, ip, FAMILY_ADDRESS_SIZE(server->family)) == 0)
+                                return -ECONNREFUSED;
+                }
         }
 
         if (server->server_name) {

@@ -1,10 +1,13 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "bus-common-errors.h"
+#include "bus-get-properties.h"
+#include "bus-log-control-api.h"
+#include "bus-message-util.h"
 #include "bus-polkit.h"
-#include "bus-util.h"
 #include "dns-domain.h"
+#include "format-util.h"
 #include "memory-util.h"
 #include "missing_capability.h"
 #include "resolved-bus.h"
@@ -13,53 +16,97 @@
 #include "resolved-dnssd-bus.h"
 #include "resolved-dnssd.h"
 #include "resolved-link-bus.h"
+#include "resolved-resolv-conf.h"
 #include "socket-netlink.h"
 #include "stdio-util.h"
 #include "strv.h"
+#include "syslog-util.h"
 #include "user-util.h"
 #include "utf8.h"
 
 BUS_DEFINE_PROPERTY_GET_ENUM(bus_property_get_resolve_support, resolve_support, ResolveSupport);
 
+static int query_on_bus_track(sd_bus_track *t, void *userdata) {
+        DnsQuery *q = userdata;
+
+        assert(t);
+        assert(q);
+
+        if (!DNS_TRANSACTION_IS_LIVE(q->state))
+                return 0;
+
+        log_debug("Client of active query vanished, aborting query.");
+        dns_query_complete(q, DNS_TRANSACTION_ABORTED);
+        return 0;
+}
+
+static int dns_query_bus_track(DnsQuery *q, sd_bus_message *m) {
+        int r;
+
+        assert(q);
+        assert(m);
+
+        if (!q->bus_track) {
+                r = sd_bus_track_new(sd_bus_message_get_bus(m), &q->bus_track, query_on_bus_track, q);
+                if (r < 0)
+                        return r;
+        }
+
+        r = sd_bus_track_add_sender(q->bus_track, m);
+        if (r < 0)
+                return r;
+
+        return 0;
+}
+
 static int reply_query_state(DnsQuery *q) {
+
+        assert(q);
+        assert(q->bus_request);
 
         switch (q->state) {
 
         case DNS_TRANSACTION_NO_SERVERS:
-                return sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_NAME_SERVERS, "No appropriate name servers or networks for name found");
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_NAME_SERVERS, "No appropriate name servers or networks for name found");
 
         case DNS_TRANSACTION_TIMEOUT:
-                return sd_bus_reply_method_errorf(q->request, SD_BUS_ERROR_TIMEOUT, "Query timed out");
+                return sd_bus_reply_method_errorf(q->bus_request, SD_BUS_ERROR_TIMEOUT, "Query timed out");
 
         case DNS_TRANSACTION_ATTEMPTS_MAX_REACHED:
-                return sd_bus_reply_method_errorf(q->request, SD_BUS_ERROR_TIMEOUT, "All attempts to contact name servers or networks failed");
+                return sd_bus_reply_method_errorf(q->bus_request, SD_BUS_ERROR_TIMEOUT, "All attempts to contact name servers or networks failed");
 
         case DNS_TRANSACTION_INVALID_REPLY:
-                return sd_bus_reply_method_errorf(q->request, BUS_ERROR_INVALID_REPLY, "Received invalid reply");
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_INVALID_REPLY, "Received invalid reply");
 
         case DNS_TRANSACTION_ERRNO:
-                return sd_bus_reply_method_errnof(q->request, q->answer_errno, "Lookup failed due to system error: %m");
+                return sd_bus_reply_method_errnof(q->bus_request, q->answer_errno, "Lookup failed due to system error: %m");
 
         case DNS_TRANSACTION_ABORTED:
-                return sd_bus_reply_method_errorf(q->request, BUS_ERROR_ABORTED, "Query aborted");
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_ABORTED, "Query aborted");
 
         case DNS_TRANSACTION_DNSSEC_FAILED:
-                return sd_bus_reply_method_errorf(q->request, BUS_ERROR_DNSSEC_FAILED, "DNSSEC validation failed: %s",
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_DNSSEC_FAILED, "DNSSEC validation failed: %s",
                                                   dnssec_result_to_string(q->answer_dnssec_result));
 
         case DNS_TRANSACTION_NO_TRUST_ANCHOR:
-                return sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_TRUST_ANCHOR, "No suitable trust anchor known");
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_TRUST_ANCHOR, "No suitable trust anchor known");
 
         case DNS_TRANSACTION_RR_TYPE_UNSUPPORTED:
-                return sd_bus_reply_method_errorf(q->request, BUS_ERROR_RR_TYPE_UNSUPPORTED, "Server does not support requested resource record type");
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_RR_TYPE_UNSUPPORTED, "Server does not support requested resource record type");
 
         case DNS_TRANSACTION_NETWORK_DOWN:
-                return sd_bus_reply_method_errorf(q->request, BUS_ERROR_NETWORK_DOWN, "Network is down");
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NETWORK_DOWN, "Network is down");
 
         case DNS_TRANSACTION_NOT_FOUND:
                 /* We return this as NXDOMAIN. This is only generated when a host doesn't implement LLMNR/TCP, and we
                  * thus quickly know that we cannot resolve an in-addr.arpa or ip6.arpa address. */
-                return sd_bus_reply_method_errorf(q->request, _BUS_ERROR_DNS "NXDOMAIN", "'%s' not found", dns_query_string(q));
+                return sd_bus_reply_method_errorf(q->bus_request, _BUS_ERROR_DNS "NXDOMAIN", "'%s' not found", dns_query_string(q));
+
+        case DNS_TRANSACTION_NO_SOURCE:
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_SOURCE, "All suitable resolution sources turned off");
+
+        case DNS_TRANSACTION_STUB_LOOP:
+                return sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_STUB_LOOP, "Configured DNS server loops back to us");
 
         case DNS_TRANSACTION_RCODE_FAILURE: {
                 _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
@@ -80,7 +127,7 @@ static int reply_query_state(DnsQuery *q) {
                         sd_bus_error_setf(&error, n, "Could not resolve '%s', server or network returned error %s", dns_query_string(q), rc);
                 }
 
-                return sd_bus_reply_method_error(q->request, &error);
+                return sd_bus_reply_method_error(q->bus_request, &error);
         }
 
         case DNS_TRANSACTION_NULL:
@@ -136,6 +183,7 @@ static void bus_method_resolve_hostname_complete(DnsQuery *q) {
         _cleanup_(dns_resource_record_unrefp) DnsResourceRecord *canonical = NULL;
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
         _cleanup_free_ char *normalized = NULL;
+        DnsQuestion *question;
         DnsResourceRecord *rr;
         unsigned added = 0;
         int ifindex, r;
@@ -147,17 +195,17 @@ static void bus_method_resolve_hostname_complete(DnsQuery *q) {
                 goto finish;
         }
 
-        r = dns_query_process_cname(q);
+        r = dns_query_process_cname_many(q);
         if (r == -ELOOP) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
                 goto finish;
         }
         if (r < 0)
                 goto finish;
-        if (r == DNS_QUERY_RESTARTED) /* This was a cname, and the query was restarted. */
+        if (r == DNS_QUERY_CNAME) /* This was a cname, and the query was restarted. */
                 return;
 
-        r = sd_bus_message_new_method_return(q->request, &reply);
+        r = sd_bus_message_new_method_return(q->bus_request, &reply);
         if (r < 0)
                 goto finish;
 
@@ -165,10 +213,9 @@ static void bus_method_resolve_hostname_complete(DnsQuery *q) {
         if (r < 0)
                 goto finish;
 
-        DNS_ANSWER_FOREACH_IFINDEX(rr, ifindex, q->answer) {
-                DnsQuestion *question;
+        question = dns_query_question_for_protocol(q, q->answer_protocol);
 
-                question = dns_query_question_for_protocol(q, q->answer_protocol);
+        DNS_ANSWER_FOREACH_IFINDEX(rr, ifindex, q->answer) {
 
                 r = dns_question_matches_rr(question, rr, DNS_SEARCH_DOMAIN_NAME(q->answer_search_domain));
                 if (r < 0)
@@ -187,7 +234,7 @@ static void bus_method_resolve_hostname_complete(DnsQuery *q) {
         }
 
         if (added <= 0) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_SUCH_RR, "'%s' does not have any RR of the requested type", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_SUCH_RR, "'%s' does not have any RR of the requested type", dns_query_string(q));
                 goto finish;
         }
 
@@ -195,18 +242,18 @@ static void bus_method_resolve_hostname_complete(DnsQuery *q) {
         if (r < 0)
                 goto finish;
 
-        /* The key names are not necessarily normalized, make sure that they are when we return them to our bus
-         * clients. */
+        /* The key names are not necessarily normalized, make sure that they are when we return them to our
+         * bus clients. */
+        assert(canonical);
         r = dns_name_normalize(dns_resource_key_name(canonical->key), 0, &normalized);
         if (r < 0)
                 goto finish;
 
         /* Return the precise spelling and uppercasing and CNAME target reported by the server */
-        assert(canonical);
         r = sd_bus_message_append(
                         reply, "st",
                         normalized,
-                        SD_RESOLVED_FLAGS_MAKE(q->answer_protocol, q->answer_family, dns_query_fully_authenticated(q)));
+                        dns_query_reply_flags_make(q));
         if (r < 0)
                 goto finish;
 
@@ -215,23 +262,51 @@ static void bus_method_resolve_hostname_complete(DnsQuery *q) {
 finish:
         if (r < 0) {
                 log_error_errno(r, "Failed to send hostname reply: %m");
-                sd_bus_reply_method_errno(q->request, r, NULL);
+                sd_bus_reply_method_errno(q->bus_request, r, NULL);
         }
 
         dns_query_free(q);
 }
 
-static int check_ifindex_flags(int ifindex, uint64_t *flags, uint64_t ok, sd_bus_error *error) {
+static int validate_and_mangle_flags(
+                const char *name,
+                uint64_t *flags,
+                uint64_t ok,
+                sd_bus_error *error) {
+
         assert(flags);
 
-        if (ifindex < 0)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid interface index");
+        /* Checks that the client supplied interface index and flags parameter actually are valid and make
+         * sense in our method call context. Specifically:
+         *
+         * 1. Checks that the interface index is either 0 (meaning *all* interfaces) or positive
+         *
+         * 2. Only the protocols flags and a bunch of NO_XYZ flags are set, at most. Plus additional flags
+         *    specific to our method, passed in the "ok" parameter.
+         *
+         * 3. If zero protocol flags are specified it is automatically turned into *all* protocols. This way
+         *    clients can simply pass 0 as flags and all will work as it should. They can also use this so
+         *    that clients don't have to know all the protocols resolved implements, but can just specify 0
+         *    to mean "all supported protocols".
+         */
 
-        if (*flags & ~(SD_RESOLVED_PROTOCOLS_ALL|SD_RESOLVED_NO_CNAME|ok))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid flags parameter");
+        if (*flags & ~(SD_RESOLVED_PROTOCOLS_ALL|
+                       SD_RESOLVED_NO_CNAME|
+                       SD_RESOLVED_NO_VALIDATE|
+                       SD_RESOLVED_NO_SYNTHESIZE|
+                       SD_RESOLVED_NO_CACHE|
+                       SD_RESOLVED_NO_ZONE|
+                       SD_RESOLVED_NO_TRUST_ANCHOR|
+                       SD_RESOLVED_NO_NETWORK|
+                       ok))
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid flags parameter");
 
         if ((*flags & SD_RESOLVED_PROTOCOLS_ALL) == 0) /* If no protocol is enabled, enable all */
                 *flags |= SD_RESOLVED_PROTOCOLS_ALL;
+
+        /* Imply SD_RESOLVED_NO_SEARCH if permitted and name is dot suffixed. */
+        if (name && FLAGS_SET(ok, SD_RESOLVED_NO_SEARCH) && dns_name_dot_suffixed(name) > 0)
+                *flags |= SD_RESOLVED_NO_SEARCH;
 
         return 0;
 }
@@ -293,11 +368,37 @@ static int parse_as_address(sd_bus_message *m, int ifindex, const char *hostname
                 return r;
 
         r = sd_bus_message_append(reply, "st", canonical,
-                                  SD_RESOLVED_FLAGS_MAKE(dns_synthesize_protocol(flags), ff, true));
+                                  SD_RESOLVED_FLAGS_MAKE(dns_synthesize_protocol(flags), ff, true, true) |
+                                  SD_RESOLVED_SYNTHETIC);
         if (r < 0)
                 return r;
 
         return sd_bus_send(sd_bus_message_get_bus(m), reply, NULL);
+}
+
+void bus_client_log(sd_bus_message *m, const char *what) {
+        _cleanup_(sd_bus_creds_unrefp) sd_bus_creds *creds = NULL;
+        const char *comm = NULL;
+        uid_t uid = UID_INVALID;
+        pid_t pid = 0;
+        int r;
+
+        assert(m);
+        assert(what);
+
+        if (!DEBUG_LOGGING)
+                return;
+
+        r = sd_bus_query_sender_creds(m, SD_BUS_CREDS_PID|SD_BUS_CREDS_UID|SD_BUS_CREDS_COMM|SD_BUS_CREDS_AUGMENT, &creds);
+        if (r < 0)
+                return (void) log_debug_errno(r, "Failed to query client credentials, ignoring: %m");
+
+        (void) sd_bus_creds_get_uid(creds, &uid);
+        (void) sd_bus_creds_get_pid(creds, &pid);
+        (void) sd_bus_creds_get_comm(creds, &comm);
+
+        log_debug("D-Bus %s request from client PID " PID_FMT " (%s) with UID " UID_FMT,
+                  what, pid, strna(comm), uid);
 }
 
 static int bus_method_resolve_hostname(sd_bus_message *message, void *userdata, sd_bus_error *error) {
@@ -318,10 +419,13 @@ static int bus_method_resolve_hostname(sd_bus_message *message, void *userdata, 
         if (r < 0)
                 return r;
 
+        if (ifindex < 0)
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid interface index");
+
         if (!IN_SET(family, AF_INET, AF_INET6, AF_UNSPEC))
                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Unknown address family %i", family);
 
-        r = check_ifindex_flags(ifindex, &flags, SD_RESOLVED_NO_SEARCH, error);
+        r = validate_and_mangle_flags(hostname, &flags, SD_RESOLVED_NO_SEARCH, error);
         if (r < 0)
                 return r;
 
@@ -343,14 +447,15 @@ static int bus_method_resolve_hostname(sd_bus_message *message, void *userdata, 
         if (r < 0 && r != -EALREADY)
                 return r;
 
-        r = dns_query_new(m, &q, question_utf8, question_idna ?: question_utf8, ifindex, flags);
+        bus_client_log(message, "hostname resolution");
+
+        r = dns_query_new(m, &q, question_utf8, question_idna ?: question_utf8, NULL, ifindex, flags);
         if (r < 0)
                 return r;
 
-        q->request = sd_bus_message_ref(message);
+        q->bus_request = sd_bus_message_ref(message);
         q->request_family = family;
         q->complete = bus_method_resolve_hostname_complete;
-        q->suppress_unroutable_family = family == AF_UNSPEC;
 
         r = dns_query_bus_track(q, message);
         if (r < 0)
@@ -381,17 +486,17 @@ static void bus_method_resolve_address_complete(DnsQuery *q) {
                 goto finish;
         }
 
-        r = dns_query_process_cname(q);
+        r = dns_query_process_cname_many(q);
         if (r == -ELOOP) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
                 goto finish;
         }
         if (r < 0)
                 goto finish;
-        if (r == DNS_QUERY_RESTARTED) /* This was a cname, and the query was restarted. */
+        if (r == DNS_QUERY_CNAME) /* This was a cname, and the query was restarted. */
                 return;
 
-        r = sd_bus_message_new_method_return(q->request, &reply);
+        r = sd_bus_message_new_method_return(q->bus_request, &reply);
         if (r < 0)
                 goto finish;
 
@@ -425,7 +530,7 @@ static void bus_method_resolve_address_complete(DnsQuery *q) {
                 _cleanup_free_ char *ip = NULL;
 
                 (void) in_addr_to_string(q->request_family, &q->request_address, &ip);
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_SUCH_RR,
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_SUCH_RR,
                                                "Address '%s' does not have any RR of requested type", strnull(ip));
                 goto finish;
         }
@@ -434,7 +539,7 @@ static void bus_method_resolve_address_complete(DnsQuery *q) {
         if (r < 0)
                 goto finish;
 
-        r = sd_bus_message_append(reply, "t", SD_RESOLVED_FLAGS_MAKE(q->answer_protocol, q->answer_family, dns_query_fully_authenticated(q)));
+        r = sd_bus_message_append(reply, "t", dns_query_reply_flags_make(q));
         if (r < 0)
                 goto finish;
 
@@ -443,7 +548,7 @@ static void bus_method_resolve_address_complete(DnsQuery *q) {
 finish:
         if (r < 0) {
                 log_error_errno(r, "Failed to send address reply: %m");
-                sd_bus_reply_method_errno(q->request, r, NULL);
+                sd_bus_reply_method_errno(q->bus_request, r, NULL);
         }
 
         dns_query_free(q);
@@ -452,11 +557,10 @@ finish:
 static int bus_method_resolve_address(sd_bus_message *message, void *userdata, sd_bus_error *error) {
         _cleanup_(dns_question_unrefp) DnsQuestion *question = NULL;
         Manager *m = userdata;
+        union in_addr_union a;
         int family, ifindex;
         uint64_t flags;
-        const void *d;
         DnsQuery *q;
-        size_t sz;
         int r;
 
         assert(message);
@@ -464,39 +568,38 @@ static int bus_method_resolve_address(sd_bus_message *message, void *userdata, s
 
         assert_cc(sizeof(int) == sizeof(int32_t));
 
-        r = sd_bus_message_read(message, "ii", &ifindex, &family);
+        r = sd_bus_message_read(message, "i", &ifindex);
         if (r < 0)
                 return r;
 
-        if (!IN_SET(family, AF_INET, AF_INET6))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Unknown address family %i", family);
-
-        r = sd_bus_message_read_array(message, 'y', &d, &sz);
+        r = bus_message_read_in_addr_auto(message, error, &family, &a);
         if (r < 0)
                 return r;
-
-        if (sz != FAMILY_ADDRESS_SIZE(family))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid address size");
 
         r = sd_bus_message_read(message, "t", &flags);
         if (r < 0)
                 return r;
 
-        r = check_ifindex_flags(ifindex, &flags, 0, error);
+        if (ifindex < 0)
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid interface index");
+
+        r = validate_and_mangle_flags(NULL, &flags, 0, error);
         if (r < 0)
                 return r;
 
-        r = dns_question_new_reverse(&question, family, d);
+        r = dns_question_new_reverse(&question, family, &a);
         if (r < 0)
                 return r;
 
-        r = dns_query_new(m, &q, question, question, ifindex, flags|SD_RESOLVED_NO_SEARCH);
+        bus_client_log(message, "address resolution");
+
+        r = dns_query_new(m, &q, question, question, NULL, ifindex, flags|SD_RESOLVED_NO_SEARCH);
         if (r < 0)
                 return r;
 
-        q->request = sd_bus_message_ref(message);
+        q->bus_request = sd_bus_message_ref(message);
         q->request_family = family;
-        memcpy(&q->request_address, d, sz);
+        q->request_address = a;
         q->complete = bus_method_resolve_address_complete;
 
         r = dns_query_bus_track(q, message);
@@ -557,17 +660,17 @@ static void bus_method_resolve_record_complete(DnsQuery *q) {
                 goto finish;
         }
 
-        r = dns_query_process_cname(q);
+        r = dns_query_process_cname_many(q);
         if (r == -ELOOP) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
                 goto finish;
         }
         if (r < 0)
                 goto finish;
-        if (r == DNS_QUERY_RESTARTED) /* This was a cname, and the query was restarted. */
+        if (r == DNS_QUERY_CNAME) /* This was a cname, and the query was restarted. */
                 return;
 
-        r = sd_bus_message_new_method_return(q->request, &reply);
+        r = sd_bus_message_new_method_return(q->bus_request, &reply);
         if (r < 0)
                 goto finish;
 
@@ -592,7 +695,7 @@ static void bus_method_resolve_record_complete(DnsQuery *q) {
         }
 
         if (added <= 0) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_SUCH_RR, "Name '%s' does not have any RR of the requested type", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_SUCH_RR, "Name '%s' does not have any RR of the requested type", dns_query_string(q));
                 goto finish;
         }
 
@@ -600,7 +703,7 @@ static void bus_method_resolve_record_complete(DnsQuery *q) {
         if (r < 0)
                 goto finish;
 
-        r = sd_bus_message_append(reply, "t", SD_RESOLVED_FLAGS_MAKE(q->answer_protocol, q->answer_family, dns_query_fully_authenticated(q)));
+        r = sd_bus_message_append(reply, "t", dns_query_reply_flags_make(q));
         if (r < 0)
                 goto finish;
 
@@ -609,7 +712,7 @@ static void bus_method_resolve_record_complete(DnsQuery *q) {
 finish:
         if (r < 0) {
                 log_error_errno(r, "Failed to send record reply: %m");
-                sd_bus_reply_method_errno(q->request, r, NULL);
+                sd_bus_reply_method_errno(q->bus_request, r, NULL);
         }
 
         dns_query_free(q);
@@ -634,6 +737,9 @@ static int bus_method_resolve_record(sd_bus_message *message, void *userdata, sd
         if (r < 0)
                 return r;
 
+        if (ifindex < 0)
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid interface index");
+
         r = dns_name_is_valid(name);
         if (r < 0)
                 return r;
@@ -643,11 +749,11 @@ static int bus_method_resolve_record(sd_bus_message *message, void *userdata, sd
         if (!dns_type_is_valid_query(type))
                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Specified resource record type %" PRIu16 " may not be used in a query.", type);
         if (dns_type_is_zone_transer(type))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_NOT_SUPPORTED, "Zone transfers not permitted via this programming interface.");
+                return sd_bus_error_set(error, SD_BUS_ERROR_NOT_SUPPORTED, "Zone transfers not permitted via this programming interface.");
         if (dns_type_is_obsolete(type))
                 return sd_bus_error_setf(error, SD_BUS_ERROR_NOT_SUPPORTED, "Specified DNS resource record type %" PRIu16 " is obsolete.", type);
 
-        r = check_ifindex_flags(ifindex, &flags, 0, error);
+        r = validate_and_mangle_flags(name, &flags, 0, error);
         if (r < 0)
                 return r;
 
@@ -659,19 +765,19 @@ static int bus_method_resolve_record(sd_bus_message *message, void *userdata, sd
         if (!key)
                 return -ENOMEM;
 
-        r = dns_question_add(question, key);
+        r = dns_question_add(question, key, 0);
         if (r < 0)
                 return r;
 
-        r = dns_query_new(m, &q, question, question, ifindex, flags|SD_RESOLVED_NO_SEARCH);
+        bus_client_log(message, "resource record resolution");
+
+        /* Setting SD_RESOLVED_CLAMP_TTL: let's request that the TTL is fixed up for locally cached entries,
+         * after all we return it in the wire format blob. */
+        r = dns_query_new(m, &q, question, question, NULL, ifindex, flags|SD_RESOLVED_NO_SEARCH|SD_RESOLVED_CLAMP_TTL);
         if (r < 0)
                 return r;
 
-        /* Let's request that the TTL is fixed up for locally cached entries, after all we return it in the wire format
-         * blob */
-        q->clamp_ttl = true;
-
-        q->request = sd_bus_message_ref(message);
+        q->bus_request = sd_bus_message_ref(message);
         q->complete = bus_method_resolve_record_complete;
 
         r = dns_query_bus_track(q, message);
@@ -895,7 +1001,7 @@ static void resolve_service_all_complete(DnsQuery *q) {
                                 assert(bad->auxiliary_result != 0);
 
                                 if (bad->auxiliary_result == -ELOOP) {
-                                        r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(bad));
+                                        r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(bad));
                                         goto finish;
                                 }
 
@@ -908,7 +1014,7 @@ static void resolve_service_all_complete(DnsQuery *q) {
                 }
         }
 
-        r = sd_bus_message_new_method_return(q->request, &reply);
+        r = sd_bus_message_new_method_return(q->bus_request, &reply);
         if (r < 0)
                 goto finish;
 
@@ -917,6 +1023,7 @@ static void resolve_service_all_complete(DnsQuery *q) {
                 goto finish;
 
         question = dns_query_question_for_protocol(q, q->answer_protocol);
+
         DNS_ANSWER_FOREACH(rr, q->answer) {
                 r = dns_question_matches_rr(question, rr, NULL);
                 if (r < 0)
@@ -937,7 +1044,7 @@ static void resolve_service_all_complete(DnsQuery *q) {
         }
 
         if (added <= 0) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_SUCH_RR, "'%s' does not have any RR of the requested type", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_SUCH_RR, "'%s' does not have any RR of the requested type", dns_query_string(q));
                 goto finish;
         }
 
@@ -974,7 +1081,7 @@ static void resolve_service_all_complete(DnsQuery *q) {
                         reply,
                         "ssst",
                         name, type, domain,
-                        SD_RESOLVED_FLAGS_MAKE(q->answer_protocol, q->answer_family, dns_query_fully_authenticated(q)));
+                        dns_query_reply_flags_make(q));
         if (r < 0)
                 goto finish;
 
@@ -983,7 +1090,7 @@ static void resolve_service_all_complete(DnsQuery *q) {
 finish:
         if (r < 0) {
                 log_error_errno(r, "Failed to send service reply: %m");
-                sd_bus_reply_method_errno(q->request, r, NULL);
+                sd_bus_reply_method_errno(q->bus_request, r, NULL);
         }
 
         dns_query_free(q);
@@ -1000,8 +1107,8 @@ static void resolve_service_hostname_complete(DnsQuery *q) {
                 return;
         }
 
-        r = dns_query_process_cname(q);
-        if (r == DNS_QUERY_RESTARTED) /* This was a cname, and the query was restarted. */
+        r = dns_query_process_cname_many(q);
+        if (r == DNS_QUERY_CNAME) /* This was a cname, and the query was restarted. */
                 return;
 
         /* This auxiliary lookup is finished or failed, let's see if all are finished now. */
@@ -1026,7 +1133,7 @@ static int resolve_service_hostname(DnsQuery *q, DnsResourceRecord *rr, int ifin
         if (r < 0)
                 return r;
 
-        r = dns_query_new(q->manager, &aux, question, question, ifindex, q->flags|SD_RESOLVED_NO_SEARCH);
+        r = dns_query_new(q->manager, &aux, question, question, NULL, ifindex, q->flags|SD_RESOLVED_NO_SEARCH);
         if (r < 0)
                 return r;
 
@@ -1073,14 +1180,14 @@ static void bus_method_resolve_service_complete(DnsQuery *q) {
                 goto finish;
         }
 
-        r = dns_query_process_cname(q);
+        r = dns_query_process_cname_many(q);
         if (r == -ELOOP) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_CNAME_LOOP, "CNAME loop detected, or CNAME resolving disabled on '%s'", dns_query_string(q));
                 goto finish;
         }
         if (r < 0)
                 goto finish;
-        if (r == DNS_QUERY_RESTARTED) /* This was a cname, and the query was restarted. */
+        if (r == DNS_QUERY_CNAME) /* This was a cname, and the query was restarted. */
                 return;
 
         question = dns_query_question_for_protocol(q, q->answer_protocol);
@@ -1114,17 +1221,17 @@ static void bus_method_resolve_service_complete(DnsQuery *q) {
 
         if (has_root_domain && found <= 0) {
                 /* If there's exactly one SRV RR and it uses
-                 * the root domain as host name, then the
+                 * the root domain as hostname, then the
                  * service is explicitly not offered on the
                  * domain. Report this as a recognizable
                  * error. See RFC 2782, Section "Usage
                  * Rules". */
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_SUCH_SERVICE, "'%s' does not provide the requested service", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_SUCH_SERVICE, "'%s' does not provide the requested service", dns_query_string(q));
                 goto finish;
         }
 
         if (found <= 0) {
-                r = sd_bus_reply_method_errorf(q->request, BUS_ERROR_NO_SUCH_RR, "'%s' does not have any RR of the requested type", dns_query_string(q));
+                r = sd_bus_reply_method_errorf(q->bus_request, BUS_ERROR_NO_SUCH_RR, "'%s' does not have any RR of the requested type", dns_query_string(q));
                 goto finish;
         }
 
@@ -1135,7 +1242,7 @@ static void bus_method_resolve_service_complete(DnsQuery *q) {
 finish:
         if (r < 0) {
                 log_error_errno(r, "Failed to send service reply: %m");
-                sd_bus_reply_method_errno(q->request, r, NULL);
+                sd_bus_reply_method_errno(q->bus_request, r, NULL);
         }
 
         dns_query_free(q);
@@ -1159,6 +1266,9 @@ static int bus_method_resolve_service(sd_bus_message *message, void *userdata, s
         if (r < 0)
                 return r;
 
+        if (ifindex < 0)
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid interface index");
+
         if (!IN_SET(family, AF_INET, AF_INET6, AF_UNSPEC))
                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Unknown address family %i", family);
 
@@ -1179,9 +1289,9 @@ static int bus_method_resolve_service(sd_bus_message *message, void *userdata, s
                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid domain '%s'", domain);
 
         if (name && !type)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Service name cannot be specified without service type.");
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Service name cannot be specified without service type.");
 
-        r = check_ifindex_flags(ifindex, &flags, SD_RESOLVED_NO_TXT|SD_RESOLVED_NO_ADDRESS, error);
+        r = validate_and_mangle_flags(name, &flags, SD_RESOLVED_NO_TXT|SD_RESOLVED_NO_ADDRESS, error);
         if (r < 0)
                 return r;
 
@@ -1193,11 +1303,13 @@ static int bus_method_resolve_service(sd_bus_message *message, void *userdata, s
         if (r < 0)
                 return r;
 
-        r = dns_query_new(m, &q, question_utf8, question_idna, ifindex, flags|SD_RESOLVED_NO_SEARCH);
+        bus_client_log(message, "service resolution");
+
+        r = dns_query_new(m, &q, question_utf8, question_idna, NULL, ifindex, flags|SD_RESOLVED_NO_SEARCH);
         if (r < 0)
                 return r;
 
-        q->request = sd_bus_message_ref(message);
+        q->bus_request = sd_bus_message_ref(message);
         q->request_family = family;
         q->complete = bus_method_resolve_service_complete;
 
@@ -1216,19 +1328,26 @@ fail:
         return r;
 }
 
-int bus_dns_server_append(sd_bus_message *reply, DnsServer *s, bool with_ifindex) {
+int bus_dns_server_append(sd_bus_message *reply, DnsServer *s, bool with_ifindex, bool extended) {
         int r;
 
         assert(reply);
 
         if (!s) {
-                if (with_ifindex)
-                        return sd_bus_message_append(reply, "(iiay)", 0, AF_UNSPEC, 0);
-                else
-                        return sd_bus_message_append(reply, "(iay)", AF_UNSPEC, 0);
+                if (with_ifindex) {
+                        if (extended)
+                                return sd_bus_message_append(reply, "(iiayqs)", 0, AF_UNSPEC, 0, 0, NULL);
+                        else
+                                return sd_bus_message_append(reply, "(iiay)", 0, AF_UNSPEC, 0);
+                } else {
+                        if (extended)
+                                return sd_bus_message_append(reply, "(iayqs)", AF_UNSPEC, 0, 0, NULL);
+                        else
+                                return sd_bus_message_append(reply, "(iay)", AF_UNSPEC, 0);
+                }
         }
 
-        r = sd_bus_message_open_container(reply, 'r', with_ifindex ? "iiay" : "iay");
+        r = sd_bus_message_open_container(reply, 'r', with_ifindex ? (extended ? "iiayqs" : "iiay") : (extended ? "iayqs" : "iay"));
         if (r < 0)
                 return r;
 
@@ -1246,6 +1365,54 @@ int bus_dns_server_append(sd_bus_message *reply, DnsServer *s, bool with_ifindex
         if (r < 0)
                 return r;
 
+        if (extended) {
+                r = sd_bus_message_append(reply, "q", s->port);
+                if (r < 0)
+                        return r;
+
+                r = sd_bus_message_append(reply, "s", s->server_name);
+                if (r < 0)
+                        return r;
+        }
+
+        return sd_bus_message_close_container(reply);
+}
+
+static int bus_property_get_dns_servers_internal(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error,
+                bool extended) {
+
+        Manager *m = userdata;
+        DnsServer *s;
+        Link *l;
+        int r;
+
+        assert(reply);
+        assert(m);
+
+        r = sd_bus_message_open_container(reply, 'a', extended ? "(iiayqs)" : "(iiay)");
+        if (r < 0)
+                return r;
+
+        LIST_FOREACH(servers, s, m->dns_servers) {
+                r = bus_dns_server_append(reply, s, true, extended);
+                if (r < 0)
+                        return r;
+        }
+
+        HASHMAP_FOREACH(l, m->links)
+                LIST_FOREACH(servers, s, l->dns_servers) {
+                        r = bus_dns_server_append(reply, s, true, extended);
+                        if (r < 0)
+                                return r;
+                }
+
         return sd_bus_message_close_container(reply);
 }
 
@@ -1257,32 +1424,45 @@ static int bus_property_get_dns_servers(
                 sd_bus_message *reply,
                 void *userdata,
                 sd_bus_error *error) {
+        return bus_property_get_dns_servers_internal(bus, path, interface, property, reply, userdata, error, false);
+}
 
-        Manager *m = userdata;
-        DnsServer *s;
-        Iterator i;
-        Link *l;
+static int bus_property_get_dns_servers_ex(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error) {
+        return bus_property_get_dns_servers_internal(bus, path, interface, property, reply, userdata, error, true);
+}
+
+static int bus_property_get_fallback_dns_servers_internal(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error,
+                bool extended) {
+
+        DnsServer *s, **f = userdata;
         int r;
 
         assert(reply);
-        assert(m);
+        assert(f);
 
-        r = sd_bus_message_open_container(reply, 'a', "(iiay)");
+        r = sd_bus_message_open_container(reply, 'a', extended ? "(iiayqs)" : "(iiay)");
         if (r < 0)
                 return r;
 
-        LIST_FOREACH(servers, s, m->dns_servers) {
-                r = bus_dns_server_append(reply, s, true);
+        LIST_FOREACH(servers, s, *f) {
+                r = bus_dns_server_append(reply, s, true, extended);
                 if (r < 0)
                         return r;
         }
-
-        HASHMAP_FOREACH(l, m->links, i)
-                LIST_FOREACH(servers, s, l->dns_servers) {
-                        r = bus_dns_server_append(reply, s, true);
-                        if (r < 0)
-                                return r;
-                }
 
         return sd_bus_message_close_container(reply);
 }
@@ -1295,24 +1475,38 @@ static int bus_property_get_fallback_dns_servers(
                 sd_bus_message *reply,
                 void *userdata,
                 sd_bus_error *error) {
+        return bus_property_get_fallback_dns_servers_internal(bus, path, interface, property, reply, userdata, error, false);
+}
 
-        DnsServer *s, **f = userdata;
-        int r;
+static int bus_property_get_fallback_dns_servers_ex(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error) {
+        return bus_property_get_fallback_dns_servers_internal(bus, path, interface, property, reply, userdata, error, true);
+}
+
+static int bus_property_get_current_dns_server_internal(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error,
+                bool extended) {
+
+        DnsServer *s;
 
         assert(reply);
-        assert(f);
+        assert(userdata);
 
-        r = sd_bus_message_open_container(reply, 'a', "(iiay)");
-        if (r < 0)
-                return r;
+        s = *(DnsServer **) userdata;
 
-        LIST_FOREACH(servers, s, *f) {
-                r = bus_dns_server_append(reply, s, true);
-                if (r < 0)
-                        return r;
-        }
-
-        return sd_bus_message_close_container(reply);
+        return bus_dns_server_append(reply, s, true, extended);
 }
 
 static int bus_property_get_current_dns_server(
@@ -1323,15 +1517,18 @@ static int bus_property_get_current_dns_server(
                 sd_bus_message *reply,
                 void *userdata,
                 sd_bus_error *error) {
+        return bus_property_get_current_dns_server_internal(bus, path, interface, property, reply, userdata, error, false);
+}
 
-        DnsServer *s;
-
-        assert(reply);
-        assert(userdata);
-
-        s = *(DnsServer **) userdata;
-
-        return bus_dns_server_append(reply, s, true);
+static int bus_property_get_current_dns_server_ex(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error) {
+        return bus_property_get_current_dns_server_internal(bus, path, interface, property, reply, userdata, error, true);
 }
 
 static int bus_property_get_domains(
@@ -1345,7 +1542,6 @@ static int bus_property_get_domains(
 
         Manager *m = userdata;
         DnsSearchDomain *d;
-        Iterator i;
         Link *l;
         int r;
 
@@ -1362,7 +1558,7 @@ static int bus_property_get_domains(
                         return r;
         }
 
-        HASHMAP_FOREACH(l, m->links, i) {
+        HASHMAP_FOREACH(l, m->links) {
                 LIST_FOREACH(domains, d, l->search_domains) {
                         r = sd_bus_message_append(reply, "(isb)", l->ifindex, d->name, d->route_only);
                         if (r < 0)
@@ -1449,7 +1645,6 @@ static int bus_property_get_ntas(
 
         Manager *m = userdata;
         const char *domain;
-        Iterator i;
         int r;
 
         assert(reply);
@@ -1459,7 +1654,7 @@ static int bus_property_get_ntas(
         if (r < 0)
                 return r;
 
-        SET_FOREACH(domain, m->trust_anchor.negative_by_name, i) {
+        SET_FOREACH(domain, m->trust_anchor.negative_by_name) {
                 r = sd_bus_message_append(reply, "s", domain);
                 if (r < 0)
                         return r;
@@ -1473,12 +1668,36 @@ static BUS_DEFINE_PROPERTY_GET(bus_property_get_dnssec_supported, "b", Manager, 
 static BUS_DEFINE_PROPERTY_GET2(bus_property_get_dnssec_mode, "s", Manager, manager_get_dnssec_mode, dnssec_mode_to_string);
 static BUS_DEFINE_PROPERTY_GET2(bus_property_get_dns_over_tls_mode, "s", Manager, manager_get_dns_over_tls_mode, dns_over_tls_mode_to_string);
 
+static int bus_property_get_resolv_conf_mode(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error) {
+
+        int r;
+
+        assert(reply);
+
+        r = resolv_conf_mode();
+        if (r < 0) {
+                log_warning_errno(r, "Failed to test /etc/resolv.conf mode, ignoring: %m");
+                return sd_bus_message_append(reply, "s", NULL);
+        }
+
+        return sd_bus_message_append(reply, "s", resolv_conf_mode_to_string(r));
+}
+
 static int bus_method_reset_statistics(sd_bus_message *message, void *userdata, sd_bus_error *error) {
         Manager *m = userdata;
         DnsScope *s;
 
         assert(message);
         assert(m);
+
+        bus_client_log(message, "statistics reset");
 
         LIST_FOREACH(scopes, s, m->dns_scopes)
                 s->cache.n_hit = s->cache.n_miss = 0;
@@ -1494,9 +1713,6 @@ static int get_any_link(Manager *m, int ifindex, Link **ret, sd_bus_error *error
 
         assert(m);
         assert(ret);
-
-        if (ifindex <= 0)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid interface index");
 
         l = hashmap_get(m->links, INT_TO_PTR(ifindex));
         if (!l)
@@ -1514,8 +1730,7 @@ static int call_link_method(Manager *m, sd_bus_message *message, sd_bus_message_
         assert(message);
         assert(handler);
 
-        assert_cc(sizeof(int) == sizeof(int32_t));
-        r = sd_bus_message_read(message, "i", &ifindex);
+        r = bus_message_read_ifindex(message, error, &ifindex);
         if (r < 0)
                 return r;
 
@@ -1528,6 +1743,10 @@ static int call_link_method(Manager *m, sd_bus_message *message, sd_bus_message_
 
 static int bus_method_set_link_dns_servers(sd_bus_message *message, void *userdata, sd_bus_error *error) {
         return call_link_method(userdata, message, bus_link_method_set_dns_servers, error);
+}
+
+static int bus_method_set_link_dns_servers_ex(sd_bus_message *message, void *userdata, sd_bus_error *error) {
+        return call_link_method(userdata, message, bus_link_method_set_dns_servers_ex, error);
 }
 
 static int bus_method_set_link_domains(sd_bus_message *message, void *userdata, sd_bus_error *error) {
@@ -1571,8 +1790,7 @@ static int bus_method_get_link(sd_bus_message *message, void *userdata, sd_bus_e
         assert(message);
         assert(m);
 
-        assert_cc(sizeof(int) == sizeof(int32_t));
-        r = sd_bus_message_read(message, "i", &ifindex);
+        r = bus_message_read_ifindex(message, error, &ifindex);
         if (r < 0)
                 return r;
 
@@ -1593,7 +1811,9 @@ static int bus_method_flush_caches(sd_bus_message *message, void *userdata, sd_b
         assert(message);
         assert(m);
 
-        manager_flush_caches(m);
+        bus_client_log(message, "cache flush");
+
+        manager_flush_caches(m, LOG_INFO);
 
         return sd_bus_reply_method_return(message, NULL);
 }
@@ -1604,12 +1824,14 @@ static int bus_method_reset_server_features(sd_bus_message *message, void *userd
         assert(message);
         assert(m);
 
+        bus_client_log(message, "server feature reset");
+
         manager_reset_server_features(m);
 
         return sd_bus_reply_method_return(message, NULL);
 }
 
-static int on_bus_track(sd_bus_track *t, void *userdata) {
+static int dnssd_service_on_bus_track(sd_bus_track *t, void *userdata) {
         DnssdService *s = userdata;
 
         assert(t);
@@ -1639,7 +1861,7 @@ static int bus_method_register_service(sd_bus_message *message, void *userdata, 
         assert(m);
 
         if (m->mdns_support != RESOLVE_SUPPORT_YES)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_NOT_SUPPORTED, "Support for MulticastDNS is disabled");
+                return sd_bus_error_set(error, SD_BUS_ERROR_NOT_SUPPORTED, "Support for MulticastDNS is disabled");
 
         service = new0(DnssdService, 1);
         if (!service)
@@ -1706,7 +1928,7 @@ static int bus_method_register_service(sd_bus_message *message, void *userdata, 
                                 return r;
 
                         if (isempty(key))
-                                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Keys in DNS-SD TXT RRs can't be empty");
+                                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Keys in DNS-SD TXT RRs can't be empty");
 
                         if (!ascii_is_valid(key))
                                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "TXT key '%s' contains non-ASCII symbols", key);
@@ -1774,15 +1996,11 @@ static int bus_method_register_service(sd_bus_message *message, void *userdata, 
         if (r == 0)
                 return 1; /* Polkit will call us back */
 
-        r = hashmap_ensure_allocated(&m->dnssd_services, &string_hash_ops);
+        r = hashmap_ensure_put(&m->dnssd_services, &string_hash_ops, service->name, service);
         if (r < 0)
                 return r;
 
-        r = hashmap_put(m->dnssd_services, service->name, service);
-        if (r < 0)
-                return r;
-
-        r = sd_bus_track_new(sd_bus_message_get_bus(message), &bus_track, on_bus_track, service);
+        r = sd_bus_track_new(sd_bus_message_get_bus(message), &bus_track, dnssd_service_on_bus_track, service);
         if (r < 0)
                 return r;
 
@@ -1842,8 +2060,11 @@ static const sd_bus_vtable resolve_vtable[] = {
         SD_BUS_PROPERTY("MulticastDNS", "s", bus_property_get_resolve_support, offsetof(Manager, mdns_support), 0),
         SD_BUS_PROPERTY("DNSOverTLS", "s", bus_property_get_dns_over_tls_mode, 0, 0),
         SD_BUS_PROPERTY("DNS", "a(iiay)", bus_property_get_dns_servers, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("DNSEx", "a(iiayqs)", bus_property_get_dns_servers_ex, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
         SD_BUS_PROPERTY("FallbackDNS", "a(iiay)", bus_property_get_fallback_dns_servers, offsetof(Manager, fallback_dns_servers), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("FallbackDNSEx", "a(iiayqs)", bus_property_get_fallback_dns_servers_ex, offsetof(Manager, fallback_dns_servers), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("CurrentDNSServer", "(iiay)", bus_property_get_current_dns_server, offsetof(Manager, current_dns_server), SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("CurrentDNSServerEx", "(iiayqs)", bus_property_get_current_dns_server_ex, offsetof(Manager, current_dns_server), SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
         SD_BUS_PROPERTY("Domains", "a(isb)", bus_property_get_domains, 0, 0),
         SD_BUS_PROPERTY("TransactionStatistics", "(tt)", bus_property_get_transaction_statistics, 0, 0),
         SD_BUS_PROPERTY("CacheStatistics", "(ttt)", bus_property_get_cache_statistics, 0, 0),
@@ -1852,28 +2073,134 @@ static const sd_bus_vtable resolve_vtable[] = {
         SD_BUS_PROPERTY("DNSSECSupported", "b", bus_property_get_dnssec_supported, 0, 0),
         SD_BUS_PROPERTY("DNSSECNegativeTrustAnchors", "as", bus_property_get_ntas, 0, 0),
         SD_BUS_PROPERTY("DNSStubListener", "s", bus_property_get_dns_stub_listener_mode, offsetof(Manager, dns_stub_listener_mode), 0),
+        SD_BUS_PROPERTY("ResolvConfMode", "s", bus_property_get_resolv_conf_mode, 0, 0),
 
-        SD_BUS_METHOD("ResolveHostname", "isit", "a(iiay)st", bus_method_resolve_hostname, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ResolveAddress", "iiayt", "a(is)t", bus_method_resolve_address, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ResolveRecord", "isqqt", "a(iqqay)t", bus_method_resolve_record, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ResolveService", "isssit", "a(qqqsa(iiay)s)aayssst", bus_method_resolve_service, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ResetStatistics", NULL, NULL, bus_method_reset_statistics, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("FlushCaches", NULL, NULL, bus_method_flush_caches, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ResetServerFeatures", NULL, NULL, bus_method_reset_server_features, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("GetLink", "i", "o", bus_method_get_link, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkDNS", "ia(iay)", NULL, bus_method_set_link_dns_servers, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkDomains", "ia(sb)", NULL, bus_method_set_link_domains, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkDefaultRoute", "ib", NULL, bus_method_set_link_default_route, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkLLMNR", "is", NULL, bus_method_set_link_llmnr, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkMulticastDNS", "is", NULL, bus_method_set_link_mdns, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkDNSOverTLS", "is", NULL, bus_method_set_link_dns_over_tls, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkDNSSEC", "is", NULL, bus_method_set_link_dnssec, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLinkDNSSECNegativeTrustAnchors", "ias", NULL, bus_method_set_link_dnssec_negative_trust_anchors, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("RevertLink", "i", NULL, bus_method_revert_link, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ResolveHostname",
+                                SD_BUS_ARGS("i", ifindex, "s", name, "i", family, "t", flags),
+                                SD_BUS_RESULT("a(iiay)", addresses, "s", canonical, "t", flags),
+                                bus_method_resolve_hostname,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ResolveAddress",
+                                SD_BUS_ARGS("i",  ifindex, "i", family, "ay", address, "t", flags),
+                                SD_BUS_RESULT("a(is)", names, "t", flags),
+                                bus_method_resolve_address,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ResolveRecord",
+                                SD_BUS_ARGS("i", ifindex, "s", name, "q", class, "q", type, "t", flags),
+                                SD_BUS_RESULT("a(iqqay)", records, "t", flags),
+                                bus_method_resolve_record,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ResolveService",
+                                SD_BUS_ARGS("i", ifindex,
+                                            "s", name,
+                                            "s", type,
+                                            "s", domain,
+                                            "i", family,
+                                            "t", flags),
+                                SD_BUS_RESULT("a(qqqsa(iiay)s)", srv_data,
+                                              "aay", txt_data,
+                                              "s", canonical_name,
+                                              "s", canonical_type,
+                                              "s", canonical_domain,
+                                              "t", flags),
+                                bus_method_resolve_service,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("GetLink",
+                                SD_BUS_ARGS("i", ifindex),
+                                SD_BUS_RESULT("o", path),
+                                bus_method_get_link,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkDNS",
+                                SD_BUS_ARGS("i", ifindex, "a(iay)", addresses),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_dns_servers,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkDNSEx",
+                                SD_BUS_ARGS("i", ifindex, "a(iayqs)", addresses),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_dns_servers_ex,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkDomains",
+                                SD_BUS_ARGS("i", ifindex, "a(sb)", domains),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_domains,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkDefaultRoute",
+                                SD_BUS_ARGS("i", ifindex, "b", enable),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_default_route,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkLLMNR",
+                                SD_BUS_ARGS("i", ifindex, "s", mode),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_llmnr,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkMulticastDNS",
+                                SD_BUS_ARGS("i", ifindex, "s", mode),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_mdns,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkDNSOverTLS",
+                                SD_BUS_ARGS("i", ifindex, "s", mode),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_dns_over_tls,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkDNSSEC",
+                                SD_BUS_ARGS("i", ifindex, "s", mode),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_dnssec,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetLinkDNSSECNegativeTrustAnchors",
+                                SD_BUS_ARGS("i", ifindex, "as", names),
+                                SD_BUS_NO_RESULT,
+                                bus_method_set_link_dnssec_negative_trust_anchors,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("RevertLink",
+                                SD_BUS_ARGS("i", ifindex),
+                                SD_BUS_NO_RESULT,
+                                bus_method_revert_link,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("RegisterService",
+                                SD_BUS_ARGS("s", name,
+                                            "s", name_template,
+                                            "s", type,
+                                            "q", service_port,
+                                            "q", service_priority,
+                                            "q", service_weight,
+                                            "aa{say}", txt_datas),
+                                SD_BUS_RESULT("o", service_path),
+                                bus_method_register_service,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("UnregisterService",
+                                SD_BUS_ARGS("o", service_path),
+                                SD_BUS_NO_RESULT,
+                                bus_method_unregister_service,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ResetStatistics",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_NO_RESULT,
+                                bus_method_reset_statistics,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("FlushCaches",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_NO_RESULT,
+                                bus_method_flush_caches,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ResetServerFeatures",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_NO_RESULT,
+                                bus_method_reset_server_features,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
 
-        SD_BUS_METHOD("RegisterService", "sssqqqaa{say}", "o", bus_method_register_service, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("UnregisterService", "o", NULL, bus_method_unregister_service, SD_BUS_VTABLE_UNPRIVILEGED),
         SD_BUS_VTABLE_END,
+};
+
+const BusObjectImplementation manager_object = {
+        "/org/freedesktop/resolve1",
+        "org.freedesktop.resolve1.Manager",
+        .vtables = BUS_VTABLES(resolve_vtable),
+        .children = BUS_IMPLEMENTATIONS(&link_object,
+                                        &dnssd_object),
 };
 
 static int match_prepare_for_sleep(sd_bus_message *message, void *userdata, sd_bus_error *ret_error) {
@@ -1885,7 +2212,7 @@ static int match_prepare_for_sleep(sd_bus_message *message, void *userdata, sd_b
 
         r = sd_bus_message_read(message, "b", &b);
         if (r < 0) {
-                log_debug_errno(r, "Failed to parse PrepareForSleep signal: %m");
+                bus_log_parse_error(r);
                 return 0;
         }
 
@@ -1910,25 +2237,13 @@ int manager_connect_bus(Manager *m) {
         if (r < 0)
                 return log_error_errno(r, "Failed to connect to system bus: %m");
 
-        r = sd_bus_add_object_vtable(m->bus, NULL, "/org/freedesktop/resolve1", "org.freedesktop.resolve1.Manager", resolve_vtable, m);
+        r = bus_add_implementation(m->bus, &manager_object, m);
         if (r < 0)
-                return log_error_errno(r, "Failed to register object: %m");
+                return r;
 
-        r = sd_bus_add_fallback_vtable(m->bus, NULL, "/org/freedesktop/resolve1/link", "org.freedesktop.resolve1.Link", link_vtable, link_object_find, m);
+        r = bus_log_control_api_register(m->bus);
         if (r < 0)
-                return log_error_errno(r, "Failed to register link objects: %m");
-
-        r = sd_bus_add_node_enumerator(m->bus, NULL, "/org/freedesktop/resolve1/link", link_node_enumerator, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to register link enumerator: %m");
-
-        r = sd_bus_add_fallback_vtable(m->bus, NULL, "/org/freedesktop/resolve1/dnssd", "org.freedesktop.resolve1.DnssdService", dnssd_vtable, dnssd_object_find, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to register dnssd objects: %m");
-
-        r = sd_bus_add_node_enumerator(m->bus, NULL, "/org/freedesktop/resolve1/dnssd", dnssd_node_enumerator, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to register dnssd enumerator: %m");
+                return r;
 
         r = sd_bus_request_name_async(m->bus, NULL, "org.freedesktop.resolve1", 0, NULL, NULL);
         if (r < 0)
@@ -1956,6 +2271,9 @@ int manager_connect_bus(Manager *m) {
 
 int _manager_send_changed(Manager *manager, const char *property, ...) {
         assert(manager);
+
+        if (sd_bus_is_ready(manager->bus) <= 0)
+                return 0;
 
         char **l = strv_from_stdarg_alloca(property);
 

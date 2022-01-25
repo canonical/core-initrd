@@ -1,5 +1,6 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
+#include <sched.h>
 #include <sys/mount.h>
 #include <unistd.h>
 
@@ -14,6 +15,7 @@
 #include "rm-rf.h"
 #include "string-util.h"
 #include "tests.h"
+#include "tmpfile-util.h"
 
 static void test_mount_propagation_flags(const char *name, int ret, unsigned long expected) {
         long unsigned flags;
@@ -38,7 +40,6 @@ static void test_mount_propagation_flags(const char *name, int ret, unsigned lon
 static void test_mnt_id(void) {
         _cleanup_fclose_ FILE *f = NULL;
         _cleanup_hashmap_free_free_ Hashmap *h = NULL;
-        Iterator i;
         char *p;
         void *k;
         int r;
@@ -72,7 +73,7 @@ static void test_mnt_id(void) {
                 path = NULL;
         }
 
-        HASHMAP_FOREACH_KEY(p, k, h, i) {
+        HASHMAP_FOREACH_KEY(p, k, h) {
                 int mnt_id = PTR_TO_INT(k), mnt_id2;
 
                 r = path_get_mnt_id(p, &mnt_id2);
@@ -256,8 +257,49 @@ static void test_path_is_mount_point(void) {
         assert_se(rm_rf(tmp_dir, REMOVE_ROOT|REMOVE_PHYSICAL) == 0);
 }
 
+static void test_fd_is_mount_point(void) {
+        _cleanup_close_ int fd = -1;
+
+        log_info("/* %s */", __func__);
+
+        fd = open("/", O_RDONLY|O_CLOEXEC|O_DIRECTORY|O_NOCTTY);
+        assert_se(fd >= 0);
+
+        /* Not allowed, since "/" is a path, not a plain filename */
+        assert_se(fd_is_mount_point(fd, "/", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, ".", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "./", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "..", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "../", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "/proc", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "/proc/", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "proc/sys", 0) == -EINVAL);
+        assert_se(fd_is_mount_point(fd, "proc/sys/", 0) == -EINVAL);
+
+        /* This one definitely is a mount point */
+        assert_se(fd_is_mount_point(fd, "proc", 0) > 0);
+        assert_se(fd_is_mount_point(fd, "proc/", 0) > 0);
+
+        /* /root's entire reason for being is to be on the root file system (i.e. not in /home/ which
+         * might be split off), so that the user can always log in, so it cannot be a mount point unless
+         * the system is borked. Let's allow for it to be missing though. */
+        assert_se(IN_SET(fd_is_mount_point(fd, "root", 0), -ENOENT, 0));
+        assert_se(IN_SET(fd_is_mount_point(fd, "root/", 0), -ENOENT, 0));
+}
+
 int main(int argc, char *argv[]) {
         test_setup_logging(LOG_DEBUG);
+
+        /* let's move into our own mount namespace with all propagation from the host turned off, so that
+         * /proc/self/mountinfo is static and constant for the whole time our test runs. */
+        if (unshare(CLONE_NEWNS) < 0) {
+                if (!ERRNO_IS_PRIVILEGE(errno))
+                        return log_error_errno(errno, "Failed to detach mount namespace: %m");
+
+                log_notice("Lacking privilege to create separate mount namespace, proceeding in originating mount namespace.");
+        } else
+                assert_se(mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL) >= 0);
 
         test_mount_propagation_flags("shared", 0, MS_SHARED);
         test_mount_propagation_flags("slave", 0, MS_SLAVE);
@@ -269,6 +311,7 @@ int main(int argc, char *argv[]) {
 
         test_mnt_id();
         test_path_is_mount_point();
+        test_fd_is_mount_point();
 
         return 0;
 }

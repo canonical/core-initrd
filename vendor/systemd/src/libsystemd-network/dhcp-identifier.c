@@ -1,6 +1,7 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <linux/if_infiniband.h>
+#include <net/ethernet.h>
 #include <net/if_arp.h>
 
 #include "sd-device.h"
@@ -8,14 +9,14 @@
 
 #include "dhcp-identifier.h"
 #include "dhcp6-protocol.h"
-#include "network-internal.h"
+#include "network-util.h"
 #include "siphash24.h"
 #include "sparse-endian.h"
+#include "stat-util.h"
 #include "stdio-util.h"
 #include "udev-util.h"
 #include "virt.h"
 
-#define SYSTEMD_PEN    43793
 #define HASH_KEY       SD_ID128_MAKE(80,11,8c,c2,fe,4a,03,ee,3e,d6,0c,6f,36,39,14,09)
 #define APPLICATION_ID SD_ID128_MAKE(a5,0a,d1,12,bf,60,45,77,a2,fb,74,1a,b1,95,5b,03)
 #define USEC_2000       ((usec_t) 946684800000000) /* 2000-01-01 00:00:00 UTC */
@@ -27,11 +28,10 @@ int dhcp_validate_duid_len(uint16_t duid_type, size_t duid_len, bool strict) {
         if (duid_len > MAX_DUID_LEN)
                 return -EINVAL;
 
-        if (!strict) {
+        if (!strict)
                 /* Strict validation is not requested. We only ensure that the
                  * DUID is not too long. */
                 return 0;
-        }
 
         switch (duid_type) {
         case DUID_TYPE_LLT:
@@ -161,37 +161,39 @@ int dhcp_identifier_set_iaid(
                 const uint8_t *mac,
                 size_t mac_len,
                 bool legacy_unstable_byteorder,
+                bool use_mac,
                 void *_id) {
+
         /* name is a pointer to memory in the sd_device struct, so must
          * have the same scope */
         _cleanup_(sd_device_unrefp) sd_device *device = NULL;
         const char *name = NULL;
-        uint64_t id;
         uint32_t id32;
+        uint64_t id;
+        int r;
 
-        if (detect_container() <= 0) {
-                /* not in a container, udev will be around */
-                char ifindex_str[1 + DECIMAL_STR_MAX(int)];
-                int r;
+        if (path_is_read_only_fs("/sys") <= 0 && !use_mac) {
+                /* udev should be around */
 
-                xsprintf(ifindex_str, "n%d", ifindex);
-                if (sd_device_new_from_device_id(&device, ifindex_str) >= 0) {
-                        r = sd_device_get_is_initialized(device);
-                        if (r < 0)
-                                return r;
-                        if (r == 0)
-                                /* not yet ready */
-                                return -EBUSY;
+                r = sd_device_new_from_ifindex(&device, ifindex);
+                if (r < 0)
+                        return r;
 
-                        r = device_is_renaming(device);
-                        if (r < 0)
-                                return r;
-                        if (r > 0)
-                                /* device is under renaming */
-                                return -EBUSY;
+                r = sd_device_get_is_initialized(device);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        /* not yet ready */
+                        return -EBUSY;
 
-                        name = net_get_name_persistent(device);
-                }
+                r = device_is_renaming(device);
+                if (r < 0)
+                        return r;
+                if (r > 0)
+                        /* device is under renaming */
+                        return -EBUSY;
+
+                name = net_get_name_persistent(device);
         }
 
         if (name)

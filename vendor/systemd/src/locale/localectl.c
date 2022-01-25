@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <ftw.h>
 #include <getopt.h>
@@ -8,7 +8,8 @@
 #include "sd-bus.h"
 
 #include "bus-error.h"
-#include "bus-util.h"
+#include "bus-locator.h"
+#include "bus-map-properties.h"
 #include "fd-util.h"
 #include "fileio.h"
 #include "kbd-util.h"
@@ -24,6 +25,9 @@
 #include "terminal-util.h"
 #include "verbs.h"
 #include "virt.h"
+
+/* Enough time for locale-gen to finish server-side (in case it is in use) */
+#define LOCALE_SLOW_BUS_CALL_TIMEOUT_USEC (2*USEC_PER_MINUTE)
 
 static PagerFlags arg_pager_flags = 0;
 static bool arg_ask_password = true;
@@ -51,7 +55,6 @@ static void status_info_clear(StatusInfo *info) {
 static void print_overridden_variables(void) {
         _cleanup_(locale_variables_freep) char *variables[_VARIABLE_LC_MAX] = {};
         bool print_warning = true;
-        LocaleVariable j;
         int r;
 
         if (arg_transport != BUS_TRANSPORT_LOCAL)
@@ -78,7 +81,7 @@ static void print_overridden_variables(void) {
                 return;
         }
 
-        for (j = 0; j < _VARIABLE_LC_MAX; j++)
+        for (LocaleVariable j = 0; j < _VARIABLE_LC_MAX; j++)
                 if (variables[j]) {
                         if (print_warning) {
                                 log_warning("Warning: Settings on kernel command line override system locale settings in /etc/locale.conf.\n"
@@ -163,13 +166,7 @@ static int set_locale(int argc, char **argv, void *userdata) {
 
         polkit_agent_open_if_enabled(arg_transport, arg_ask_password);
 
-        r = sd_bus_message_new_method_call(
-                        bus,
-                        &m,
-                        "org.freedesktop.locale1",
-                        "/org/freedesktop/locale1",
-                        "org.freedesktop.locale1",
-                        "SetLocale");
+        r = bus_message_new_method_call(bus, &m, bus_locale, "SetLocale");
         if (r < 0)
                 return bus_log_create_error(r);
 
@@ -181,9 +178,10 @@ static int set_locale(int argc, char **argv, void *userdata) {
         if (r < 0)
                 return bus_log_create_error(r);
 
-        r = sd_bus_call(bus, m, 0, &error, NULL);
+        /* We use a longer timeout for the method call in case localed is running locale-gen */
+        r = sd_bus_call(bus, m, LOCALE_SLOW_BUS_CALL_TIMEOUT_USEC, &error, NULL);
         if (r < 0)
-                return log_error_errno(r, "Failed to issue method call: %s", bus_error_message(&error, -r));
+                return log_error_errno(r, "Failed to issue method call: %s", bus_error_message(&error, r));
 
         return 0;
 }
@@ -215,17 +213,15 @@ static int set_vconsole_keymap(int argc, char **argv, void *userdata) {
         map = argv[1];
         toggle_map = argc > 2 ? argv[2] : "";
 
-        r = sd_bus_call_method(
+        r = bus_call_method(
                         bus,
-                        "org.freedesktop.locale1",
-                        "/org/freedesktop/locale1",
-                        "org.freedesktop.locale1",
+                        bus_locale,
                         "SetVConsoleKeyboard",
                         &error,
                         NULL,
                         "ssbb", map, toggle_map, arg_convert, arg_ask_password);
         if (r < 0)
-                return log_error_errno(r, "Failed to set keymap: %s", bus_error_message(&error, -r));
+                return log_error_errno(r, "Failed to set keymap: %s", bus_error_message(&error, r));
 
         return 0;
 }
@@ -258,18 +254,16 @@ static int set_x11_keymap(int argc, char **argv, void *userdata) {
         variant = argc > 3 ? argv[3] : "";
         options = argc > 4 ? argv[4] : "";
 
-        r = sd_bus_call_method(
+        r = bus_call_method(
                         bus,
-                        "org.freedesktop.locale1",
-                        "/org/freedesktop/locale1",
-                        "org.freedesktop.locale1",
+                        bus_locale,
                         "SetX11Keyboard",
                         &error,
                         NULL,
                         "ssssbb", layout, model, variant, options,
                                   arg_convert, arg_ask_password);
         if (r < 0)
-                return log_error_errno(r, "Failed to set keymap: %s", bus_error_message(&error, -r));
+                return log_error_errno(r, "Failed to set keymap: %s", bus_error_message(&error, r));
 
         return 0;
 }
@@ -406,12 +400,11 @@ static int help(void) {
                "  -H --host=[USER@]HOST    Operate on remote host\n"
                "  -M --machine=CONTAINER   Operate on local container\n"
                "     --no-convert          Don't convert keyboard mappings\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , ansi_highlight()
-               , ansi_normal()
-               , link
-        );
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               ansi_highlight(),
+               ansi_normal(),
+               link);
 
         return 0;
 }
@@ -512,9 +505,7 @@ static int run(int argc, char *argv[]) {
         int r;
 
         setlocale(LC_ALL, "");
-        log_show_color(true);
-        log_parse_environment();
-        log_open();
+        log_setup();
 
         r = parse_argv(argc, argv);
         if (r <= 0)
@@ -522,7 +513,7 @@ static int run(int argc, char *argv[]) {
 
         r = bus_connect_transport(arg_transport, arg_host, false, &bus);
         if (r < 0)
-                return log_error_errno(r, "Failed to create bus connection: %m");
+                return bus_log_connect_error(r);
 
         return localectl_main(bus, argc, argv);
 }

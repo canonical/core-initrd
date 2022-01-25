@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
 #pragma once
 
 typedef struct Wireguard Wireguard;
@@ -61,10 +63,8 @@ extern const NetDevVTable wireguard_vtable;
 CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_allowed_ips);
 CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_endpoint);
 CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_listen_port);
-
-CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_public_key);
+CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_peer_key);
 CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_private_key);
 CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_private_key_file);
-CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_preshared_key);
 CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_preshared_key_file);
 CONFIG_PARSER_PROTOTYPE(config_parse_wireguard_keepalive);

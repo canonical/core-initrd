@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "conf-parser.h"
 #include "fd-util.h"
@@ -335,37 +335,41 @@ static void test_config_parse(unsigned i, const char *s) {
                          ConfigItemLookup lookup,
                          const void *table,
                          ConfigParseFlags flags,
-                         void *userdata)
+                         void *userdata,
+                         usec_t *ret_mtime)
         */
 
         r = config_parse(NULL, name, f,
-                         "Section\0-NoWarnSection\0",
+                         "Section\0"
+                         "-NoWarnSection\0",
                          config_item_table_lookup, items,
-                         CONFIG_PARSE_WARN, NULL);
+                         CONFIG_PARSE_WARN,
+                         NULL,
+                         NULL);
 
         switch (i) {
         case 0 ... 4:
-                assert_se(r == 0);
+                assert_se(r == 1);
                 assert_se(streq(setting1, "1"));
                 break;
 
         case 5 ... 10:
-                assert_se(r == 0);
+                assert_se(r == 1);
                 assert_se(streq(setting1, "1 2 3"));
                 break;
 
         case 11:
-                assert_se(r == 0);
+                assert_se(r == 1);
                 assert_se(streq(setting1, "1\\\\ \\\\2"));
                 break;
 
         case 12:
-                assert_se(r == 0);
+                assert_se(r == 1);
                 assert_se(streq(setting1, x1000("ABCD")));
                 break;
 
         case 13 ... 14:
-                assert_se(r == 0);
+                assert_se(r == 1);
                 assert_se(streq(setting1, x1000("ABCD") " foobar"));
                 break;
 
@@ -375,7 +379,7 @@ static void test_config_parse(unsigned i, const char *s) {
                 break;
 
         case 17:
-                assert_se(r == 0);
+                assert_se(r == 1);
                 assert_se(streq(setting1, "2"));
                 break;
         }

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "def.h"
@@ -89,7 +89,8 @@ int config_parse_servers(
         else {
                 r = manager_parse_server_string(m, ltype, rvalue);
                 if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r, "Failed to parse NTP server string '%s'. Ignoring.", rvalue);
+                        log_syntax(unit, LOG_WARNING, filename, line, r,
+                                   "Failed to parse NTP server string '%s', ignoring: %m", rvalue);
                         return 0;
                 }
         }
@@ -102,11 +103,14 @@ int manager_parse_config_file(Manager *m) {
 
         assert(m);
 
-        r = config_parse_many_nulstr(PKGSYSCONFDIR "/timesyncd.conf",
-                                     CONF_PATHS_NULSTR("systemd/timesyncd.conf.d"),
-                                     "Time\0",
-                                     config_item_perf_lookup, timesyncd_gperf_lookup,
-                                     CONFIG_PARSE_WARN, m);
+        r = config_parse_many_nulstr(
+                        PKGSYSCONFDIR "/timesyncd.conf",
+                        CONF_PATHS_NULSTR("systemd/timesyncd.conf.d"),
+                        "Time\0",
+                        config_item_perf_lookup, timesyncd_gperf_lookup,
+                        CONFIG_PARSE_WARN,
+                        m,
+                        NULL);
         if (r < 0)
                 return r;
 
@@ -118,6 +122,11 @@ int manager_parse_config_file(Manager *m) {
         if (m->poll_interval_max_usec < m->poll_interval_min_usec) {
                 log_warning("PollIntervalMaxSec= is smaller than PollIntervalMinSec=. Using default value.");
                 m->poll_interval_max_usec = MAX(NTP_POLL_INTERVAL_MAX_USEC, m->poll_interval_min_usec * 32);
+        }
+
+        if (m->connection_retry_usec < 1 * USEC_PER_SEC) {
+                log_warning("Invalid ConnectionRetrySec=. Using default value.");
+                m->connection_retry_usec = DEFAULT_CONNECTION_RETRY_USEC;
         }
 
         return r;

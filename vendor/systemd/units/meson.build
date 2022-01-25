@@ -1,4 +1,6 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+with_runlevels = conf.get('HAVE_SYSV_COMPAT') == 1
 
 units = [
         ['basic.target',                        ''],
@@ -8,6 +10,9 @@ units = [
         ['cryptsetup-pre.target',               'HAVE_LIBCRYPTSETUP'],
         ['cryptsetup.target',                   'HAVE_LIBCRYPTSETUP',
          'sysinit.target.wants/'],
+        ['veritysetup-pre.target',              'HAVE_LIBCRYPTSETUP'],
+        ['veritysetup.target',                  'HAVE_LIBCRYPTSETUP',
+         'sysinit.target.wants/'],
         ['dev-hugepages.mount',                 '',
          'sysinit.target.wants/'],
         ['dev-mqueue.mount',                    '',
@@ -15,24 +20,26 @@ units = [
         ['emergency.target',                    ''],
         ['exit.target',                         ''],
         ['final.target',                        ''],
+        ['first-boot-complete.target',          ''],
         ['getty.target',                        '',
          'multi-user.target.wants/'],
         ['getty-pre.target',                    ''],
         ['graphical.target',                    '',
-         'runlevel5.target default.target'],
+         'default.target' + (with_runlevels ? ' runlevel5.target' : '')],
         ['halt.target',                         ''],
         ['hibernate.target',                    'ENABLE_HIBERNATE'],
         ['hybrid-sleep.target',                 'ENABLE_HIBERNATE'],
         ['suspend-then-hibernate.target',       'ENABLE_HIBERNATE'],
-        ['initrd-cleanup.service',              ''],
-        ['initrd-fs.target',                    ''],
-        ['initrd-parse-etc.service',            ''],
-        ['initrd-root-device.target',           ''],
-        ['initrd-root-fs.target',               ''],
-        ['initrd-switch-root.service',          ''],
-        ['initrd-switch-root.target',           ''],
-        ['initrd-udevadm-cleanup-db.service',   ''],
-        ['initrd.target',                       ''],
+        ['initrd-cleanup.service',              'ENABLE_INITRD'],
+        ['initrd-fs.target',                    'ENABLE_INITRD'],
+        ['initrd-parse-etc.service',            'ENABLE_INITRD'],
+        ['initrd-root-device.target',           'ENABLE_INITRD'],
+        ['initrd-root-fs.target',               'ENABLE_INITRD'],
+        ['initrd-switch-root.service',          'ENABLE_INITRD'],
+        ['initrd-switch-root.target',           'ENABLE_INITRD'],
+        ['initrd-udevadm-cleanup-db.service',   'ENABLE_INITRD'],
+        ['initrd-usr-fs.target',                'ENABLE_INITRD'],
+        ['initrd.target',                       'ENABLE_INITRD'],
         ['kexec.target',                        ''],
         ['ldconfig.service',                    'ENABLE_LDCONFIG',
          'sysinit.target.wants/'],
@@ -42,7 +49,7 @@ units = [
         ['machines.target',                     'ENABLE_MACHINED'],
         ['modprobe@.service',                   ''],
         ['multi-user.target',                   '',
-         'runlevel2.target runlevel3.target runlevel4.target'],
+         (with_runlevels ? 'runlevel2.target runlevel3.target runlevel4.target' : '')],
         ['network-online.target',               ''],
         ['network-pre.target',                  ''],
         ['network.target',                      ''],
@@ -50,18 +57,21 @@ units = [
         ['nss-user-lookup.target',              ''],
         ['paths.target',                        ''],
         ['poweroff.target',                     '',
-         'runlevel0.target'],
+         (with_runlevels ? 'runlevel0.target' : '')],
         ['printer.target',                      ''],
         ['proc-sys-fs-binfmt_misc.automount',   'ENABLE_BINFMT',
          'sysinit.target.wants/'],
         ['proc-sys-fs-binfmt_misc.mount',       'ENABLE_BINFMT'],
         ['reboot.target',                       '',
-         'runlevel6.target ctrl-alt-del.target'],
-        ['remote-cryptsetup.target',            'HAVE_LIBCRYPTSETUP'],
+         'ctrl-alt-del.target' + (with_runlevels ? ' runlevel6.target' : '')],
+        ['remote-cryptsetup.target',            'HAVE_LIBCRYPTSETUP',
+         'initrd-root-device.target.wants/'],
+        ['remote-veritysetup.target',           'HAVE_LIBCRYPTSETUP',
+         'initrd-root-device.target.wants/'],
         ['remote-fs-pre.target',                ''],
         ['remote-fs.target',                    ''],
         ['rescue.target',                       '',
-         'runlevel1.target'],
+         (with_runlevels ? 'runlevel1.target' : '')],
         ['rpcbind.target',                      ''],
         ['shutdown.target',                     ''],
         ['sigpwr.target',                       ''],
@@ -100,7 +110,8 @@ units = [
         ['systemd-firstboot.service',           'ENABLE_FIRSTBOOT',
          'sysinit.target.wants/'],
         ['systemd-halt.service',                ''],
-        ['systemd-initctl.socket',              '',
+        ['systemd-homed-activate.service',      'ENABLE_HOMED'],
+        ['systemd-initctl.socket',              'HAVE_SYSV_COMPAT',
          'sockets.target.wants/'],
         ['systemd-journal-catalog-update.service', '',
          'sysinit.target.wants/'],
@@ -123,6 +134,7 @@ units = [
         ['systemd-poweroff.service',            ''],
         ['systemd-reboot.service',              ''],
         ['systemd-rfkill.socket',               'ENABLE_RFKILL'],
+        ['systemd-sysext.service',              'ENABLE_SYSEXT'],
         ['systemd-sysusers.service',            'ENABLE_SYSUSERS',
          'sysinit.target.wants/'],
         ['systemd-tmpfiles-clean.service',      'ENABLE_TMPFILES'],
@@ -139,27 +151,32 @@ units = [
          'sysinit.target.wants/'],
         ['systemd-udevd-kernel.socket',         '',
          'sockets.target.wants/'],
-        ['systemd-userdbd.socket',              'ENABLE_USERDB',
-         'sockets.target.wants/'],
+        ['systemd-userdbd.socket',              'ENABLE_USERDB'],
         ['time-set.target',                     ''],
         ['time-sync.target',                    ''],
         ['timers.target',                       ''],
         ['tmp.mount',                           '',
          'local-fs.target.wants/'],
         ['umount.target',                       ''],
+        ['usb-gadget.target',                   ''],
         ['user.slice',                          ''],
         ['var-lib-machines.mount',              'ENABLE_MACHINED',
          'remote-fs.target.wants/ machines.target.wants/'],
 ]
 
 in_units = [
+        ['console-getty.service',                ''],
+        ['container-getty@.service',             ''],
         ['debug-shell.service',                  ''],
         ['emergency.service',                    ''],
+        ['getty@.service',                       '',
+         'autovt@.service'],
         ['kmod-static-nodes.service',            'HAVE_KMOD ENABLE_TMPFILES',
          'sysinit.target.wants/'],
         ['quotaon.service',                      'ENABLE_QUOTACHECK'],
         ['rc-local.service',                     'HAVE_SYSV_COMPAT'],
         ['rescue.service',                       ''],
+        ['serial-getty@.service',                ''],
         ['systemd-backlight@.service',           'ENABLE_BACKLIGHT'],
         ['systemd-binfmt.service',               'ENABLE_BINFMT',
          'sysinit.target.wants/'],
@@ -179,7 +196,7 @@ in_units = [
          'sysinit.target.wants/'],
         ['systemd-importd.service',              'ENABLE_IMPORTD',
          'dbus-org.freedesktop.import1.service'],
-        ['systemd-initctl.service',               ''],
+        ['systemd-initctl.service',              'HAVE_SYSV_COMPAT'],
         ['systemd-journal-gatewayd.service',     'ENABLE_REMOTE HAVE_MICROHTTPD'],
         ['systemd-journal-remote.service',       'ENABLE_REMOTE HAVE_MICROHTTPD'],
         ['systemd-journal-upload.service',       'ENABLE_REMOTE HAVE_LIBCURL'],
@@ -198,11 +215,12 @@ in_units = [
         ['systemd-networkd.service',             'ENABLE_NETWORKD'],
         ['systemd-networkd-wait-online.service', 'ENABLE_NETWORKD'],
         ['systemd-nspawn@.service',              ''],
+        ['systemd-oomd.service',                 'ENABLE_OOMD',
+         'dbus-org.freedesktop.oom1.service'],
         ['systemd-portabled.service',            'ENABLE_PORTABLED',
          'dbus-org.freedesktop.portable1.service'],
         ['systemd-userdbd.service',              'ENABLE_USERDB'],
-        ['systemd-homed.service',                'ENABLE_HOMED',
-         'multi-user.target.wants/ dbus-org.freedesktop.home1.service'],
+        ['systemd-homed.service',                'ENABLE_HOMED'],
         ['systemd-quotacheck.service',           'ENABLE_QUOTACHECK'],
         ['systemd-random-seed.service',          'ENABLE_RANDOMSEED',
          'sysinit.target.wants/'],
@@ -227,20 +245,14 @@ in_units = [
         ['systemd-user-sessions.service',        'HAVE_PAM',
          'multi-user.target.wants/'],
         ['systemd-vconsole-setup.service',       'ENABLE_VCONSOLE'],
-        ['systemd-volatile-root.service',        ''],
+        ['systemd-volatile-root.service',        'ENABLE_INITRD'],
         ['systemd-repart.service',               'ENABLE_REPART',
          'sysinit.target.wants/ initrd-root-fs.target.wants/'],
         ['user-runtime-dir@.service',            ''],
         ['user@.service',                        ''],
 ]
 
-m4_units = [
-        ['console-getty.service',              ''],
-        ['container-getty@.service',           ''],
-        ['getty@.service',                     '',
-         'autovt@.service '],
-        ['serial-getty@.service',              ''],
-]
+add_wants = []
 
 foreach tuple : in_units
         file = tuple[0]
@@ -250,47 +262,18 @@ foreach tuple : in_units
         install = ((conds.get(0, '') == '' or conf.get(conds[0]) == 1) and
                    (conds.get(1, '') == '' or conf.get(conds[1]) == 1))
 
-        gen1 = configure_file(
-                input : file + '.in',
-                output : file + '.tmp',
-                configuration : substs)
-        gen2 = custom_target(
+        custom_target(
                 file,
-                input : gen1,
+                input : file + '.in',
                 output : file,
-                command : [sed, '/^## /d', '@INPUT@'],
+                command : [meson_render_jinja2, config_h, '@INPUT@'],
                 capture : true,
                 install : install,
                 install_dir : systemunitdir)
 
         if install and tuple.length() > 2
                 foreach target : tuple[2].split()
-                        meson.add_install_script('meson-add-wants.sh', systemunitdir, target, file)
-                endforeach
-        endif
-endforeach
-
-foreach tuple : m4_units
-        file = tuple[0]
-        input = tuple.get(3, file + '.m4')
-
-        # we do this here because install_data does not accept custom_target output
-        conds = tuple[1].split(' ')
-        install = ((conds.get(0, '') == '' or conf.get(conds[0]) == 1) and
-                   (conds.get(1, '') == '' or conf.get(conds[1]) == 1))
-
-        custom_target(
-                file,
-                input : input,
-                output: file,
-                command : [meson_apply_m4, config_h, '@INPUT@'],
-                capture : true,
-                install : install,
-                install_dir : systemunitdir)
-
-        if tuple.length() > 2 and install
-                foreach target : tuple[2].split()
-                        meson.add_install_script('meson-add-wants.sh', systemunitdir, target, file)
+                        add_wants += [systemunitdir, target, file]
                 endforeach
         endif
 endforeach
@@ -309,21 +292,24 @@ foreach tuple : units
 
                 if tuple.length() > 2
                         foreach target : tuple[2].split()
-                                meson.add_install_script(
-                                        'meson-add-wants.sh', systemunitdir, target, file)
+                                add_wants += [systemunitdir, target, file]
                         endforeach
                 endif
         endif
 endforeach
+
+meson.add_install_script('meson-add-wants.sh', add_wants)
 
 install_data('user-.slice.d/10-defaults.conf',
              install_dir : systemunitdir + '/user-.slice.d')
 
 ############################################################
 
-meson.add_install_script(meson_make_symlink,
-                         join_paths(pkgsysconfdir, 'user'),
-                         join_paths(sysconfdir, 'xdg/systemd/user'))
+if install_sysconfdir
+        meson.add_install_script(meson_make_symlink,
+                                 join_paths(pkgsysconfdir, 'user'),
+                                 join_paths(sysconfdir, 'xdg/systemd/user'))
+endif
 meson.add_install_script(meson_make_symlink,
                          join_paths(dbussystemservicedir, 'org.freedesktop.systemd1.service'),
                          join_paths(dbussessionservicedir, 'org.freedesktop.systemd1.service'))
@@ -331,8 +317,7 @@ if conf.get('HAVE_SYSV_COMPAT') == 1
         foreach i : [1, 2, 3, 4, 5]
                 meson.add_install_script(
                         'sh', '-c',
-                        mkdir_p
-                        .format(join_paths(systemunitdir, 'runlevel@0@.target.wants'.format(i))))
+                        mkdir_p.format(join_paths(systemunitdir, 'runlevel@0@.target.wants'.format(i))))
         endforeach
 endif
 

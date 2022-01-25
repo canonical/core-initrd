@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -39,18 +39,6 @@ int proc_cmdline(char **ret) {
                 return read_one_line_file("/proc/cmdline", ret);
 }
 
-/* In SecureBoot mode this is probably not what you want. As your cmdline is
- * cryptographically signed like when using Type #2 EFI Unified Kernel Images
- * (https://systemd.io/BOOT_LOADER_SPECIFICATION/) The user's intention is then
- * that the cmdline should not be modified.  You want to make sure that the
- * system starts up as exactly specified in the signed artifact. */
-static int systemd_options_variable(char **line) {
-        if (is_efi_secure_boot())
-                return -ENODATA;
-
-        return systemd_efi_options_variable(line);
-}
-
 static int proc_cmdline_extract_first(const char **p, char **ret_word, ProcCmdlineFlags flags) {
         const char *q = *p;
         int r;
@@ -59,7 +47,7 @@ static int proc_cmdline_extract_first(const char **p, char **ret_word, ProcCmdli
                 _cleanup_free_ char *word = NULL;
                 const char *c;
 
-                r = extract_first_word(&q, &word, NULL, EXTRACT_UNQUOTE|EXTRACT_RELAX);
+                r = extract_first_word(&q, &word, NULL, EXTRACT_UNQUOTE|EXTRACT_RELAX|EXTRACT_RETAIN_ESCAPE);
                 if (r < 0)
                         return r;
                 if (r == 0)
@@ -131,15 +119,20 @@ int proc_cmdline_parse(proc_cmdline_parse_t parse_item, void *data, ProcCmdlineF
 
         /* We parse the EFI variable first, because later settings have higher priority. */
 
-        r = systemd_options_variable(&line);
-        if (r < 0 && r != -ENODATA)
-                log_debug_errno(r, "Failed to get SystemdOptions EFI variable, ignoring: %m");
+        if (!FLAGS_SET(flags, PROC_CMDLINE_IGNORE_EFI_OPTIONS)) {
+                r = systemd_efi_options_variable(&line);
+                if (r < 0) {
+                        if (r != -ENODATA)
+                                log_debug_errno(r, "Failed to get SystemdOptions EFI variable, ignoring: %m");
+                } else {
+                        r = proc_cmdline_parse_given(line, parse_item, data, flags);
+                        if (r < 0)
+                                return r;
 
-        r = proc_cmdline_parse_given(line, parse_item, data, flags);
-        if (r < 0)
-                return r;
+                        line = mfree(line);
+                }
+        }
 
-        line = mfree(line);
         r = proc_cmdline(&line);
         if (r < 0)
                 return r;
@@ -230,7 +223,7 @@ static int cmdline_get_key(const char *line, const char *key, ProcCmdlineFlags f
 }
 
 int proc_cmdline_get_key(const char *key, ProcCmdlineFlags flags, char **ret_value) {
-        _cleanup_free_ char *line = NULL;
+        _cleanup_free_ char *line = NULL, *v = NULL;
         int r;
 
         /* Looks for a specific key on the kernel command line and (with lower priority) the EFI variable.
@@ -257,14 +250,27 @@ int proc_cmdline_get_key(const char *key, ProcCmdlineFlags flags, char **ret_val
         if (r < 0)
                 return r;
 
-        r = cmdline_get_key(line, key, flags, ret_value);
-        if (r != 0) /* Either error or true if found. */
+        if (FLAGS_SET(flags, PROC_CMDLINE_IGNORE_EFI_OPTIONS)) /* Shortcut */
+                return cmdline_get_key(line, key, flags, ret_value);
+
+        r = cmdline_get_key(line, key, flags, ret_value ? &v : NULL);
+        if (r < 0)
                 return r;
+        if (r > 0) {
+                if (ret_value)
+                        *ret_value = TAKE_PTR(v);
+
+                return r;
+        }
 
         line = mfree(line);
-        r = systemd_options_variable(&line);
-        if (r == -ENODATA)
+        r = systemd_efi_options_variable(&line);
+        if (r == -ENODATA) {
+                if (ret_value)
+                        *ret_value = NULL;
+
                 return false; /* Not found */
+        }
         if (r < 0)
                 return r;
 
@@ -280,17 +286,17 @@ int proc_cmdline_get_bool(const char *key, bool *ret) {
         r = proc_cmdline_get_key(key, PROC_CMDLINE_VALUE_OPTIONAL, &v);
         if (r < 0)
                 return r;
-        if (r == 0) {
+        if (r == 0) { /* key not specified at all */
                 *ret = false;
                 return 0;
         }
 
-        if (v) { /* parameter passed */
+        if (v) { /* key with parameter passed */
                 r = parse_boolean(v);
                 if (r < 0)
                         return r;
                 *ret = r;
-        } else /* no parameter passed */
+        } else /* key without parameter passed */
                 *ret = true;
 
         return 1;
@@ -298,6 +304,7 @@ int proc_cmdline_get_bool(const char *key, bool *ret) {
 
 int proc_cmdline_get_key_many_internal(ProcCmdlineFlags flags, ...) {
         _cleanup_free_ char *line = NULL;
+        bool processing_efi = true;
         const char *p;
         va_list ap;
         int r, ret = 0;
@@ -308,9 +315,11 @@ int proc_cmdline_get_key_many_internal(ProcCmdlineFlags flags, ...) {
 
         /* This call may clobber arguments on failure! */
 
-        r = proc_cmdline(&line);
-        if (r < 0)
-                return r;
+        if (!FLAGS_SET(flags, PROC_CMDLINE_IGNORE_EFI_OPTIONS)) {
+                r = systemd_efi_options_variable(&line);
+                if (r < 0 && r != -ENODATA)
+                        log_debug_errno(r, "Failed to get SystemdOptions EFI variable, ignoring: %m");
+        }
 
         p = line;
         for (;;) {
@@ -319,8 +328,22 @@ int proc_cmdline_get_key_many_internal(ProcCmdlineFlags flags, ...) {
                 r = proc_cmdline_extract_first(&p, &word, flags);
                 if (r < 0)
                         return r;
-                if (r == 0)
+                if (r == 0) {
+                        /* We finished with this command line. If this was the EFI one, then let's proceed with the regular one */
+                        if (processing_efi) {
+                                processing_efi = false;
+
+                                line = mfree(line);
+                                r = proc_cmdline(&line);
+                                if (r < 0)
+                                        return r;
+
+                                p = line;
+                                continue;
+                        }
+
                         break;
+                }
 
                 va_start(ap, flags);
 

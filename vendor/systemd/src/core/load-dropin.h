@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include "dropin.h"
@@ -13,7 +13,7 @@ static inline int unit_find_dropin_paths(Unit *u, char ***paths) {
                                            u->manager->lookup_paths.search_path,
                                            u->manager->unit_path_cache,
                                            ".d", ".conf",
-                                           u->names,
+                                           u->id, u->aliases,
                                            paths);
 }
 

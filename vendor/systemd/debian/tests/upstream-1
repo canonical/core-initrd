@@ -1,0 +1,4 @@
+#!/bin/sh
+# run upstream system integration tests's 1st part
+
+env SELECTED_TESTS="TEST-[0-2]?-*" debian/tests/upstream

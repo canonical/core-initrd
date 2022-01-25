@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+
+/* SPDX-License-Identifier: LGPL-2.1-or-later
  * Copyright © 2019 VMware, Inc. */
 
 #include <linux/pkt_sched.h>
@@ -12,8 +12,8 @@
 #include "parse-util.h"
 #include "qdisc.h"
 #include "string-util.h"
+#include "strv.h"
 #include "tc-util.h"
-#include "util.h"
 
 static int token_bucket_filter_fill_message(Link *link, QDisc *qdisc, sd_netlink_message *req) {
         uint32_t rtab[256], ptab[256];
@@ -136,50 +136,110 @@ int config_parse_token_bucket_filter_size(
         r = qdisc_new_static(QDISC_KIND_TBF, network, filename, section_line, &qdisc);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r < 0)
-                return log_syntax(unit, LOG_ERR, filename, line, r,
-                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "More than one kind of queueing discipline, ignoring assignment: %m");
+                return 0;
+        }
 
         tbf = TBF(qdisc);
 
         if (isempty(rvalue)) {
-                if (streq(lvalue, "Rate"))
-                        tbf->rate = 0;
-                else if (streq(lvalue, "Burst"))
+                if (STR_IN_SET(lvalue, "BurstBytes", "Burst"))
                         tbf->burst = 0;
-                else if (streq(lvalue, "LimitSize"))
+                else if (STR_IN_SET(lvalue, "LimitBytes", "LimitSize"))
                         tbf->limit = 0;
                 else if (streq(lvalue, "MTUBytes"))
                         tbf->mtu = 0;
                 else if (streq(lvalue, "MPUBytes"))
                         tbf->mpu = 0;
-                else if (streq(lvalue, "PeakRate"))
-                        tbf->peak_rate = 0;
+                else
+                        assert_not_reached("unknown lvalue");
 
-                qdisc = NULL;
+                TAKE_PTR(qdisc);
                 return 0;
         }
 
-        r = parse_size(rvalue, 1000, &k);
+        r = parse_size(rvalue, 1024, &k);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse '%s=', ignoring assignment: %s",
                            lvalue, rvalue);
                 return 0;
         }
 
-        if (streq(lvalue, "Rate"))
-                tbf->rate = k / 8;
-        else if (streq(lvalue, "Burst"))
+        if (STR_IN_SET(lvalue, "BurstBytes", "Burst"))
                 tbf->burst = k;
-        else if (streq(lvalue, "LimitSize"))
+        else if (STR_IN_SET(lvalue, "LimitBytes", "LimitSize"))
                 tbf->limit = k;
         else if (streq(lvalue, "MPUBytes"))
                 tbf->mpu = k;
         else if (streq(lvalue, "MTUBytes"))
                 tbf->mtu = k;
+        else
+                assert_not_reached("unknown lvalue");
+
+        TAKE_PTR(qdisc);
+
+        return 0;
+}
+
+int config_parse_token_bucket_filter_rate(
+                const char *unit,
+                const char *filename,
+                unsigned line,
+                const char *section,
+                unsigned section_line,
+                const char *lvalue,
+                int ltype,
+                const char *rvalue,
+                void *data,
+                void *userdata) {
+
+        _cleanup_(qdisc_free_or_set_invalidp) QDisc *qdisc = NULL;
+        Network *network = data;
+        TokenBucketFilter *tbf;
+        uint64_t k, *p;
+        int r;
+
+        assert(filename);
+        assert(lvalue);
+        assert(rvalue);
+        assert(data);
+
+        r = qdisc_new_static(QDISC_KIND_TBF, network, filename, section_line, &qdisc);
+        if (r == -ENOMEM)
+                return log_oom();
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "More than one kind of queueing discipline, ignoring assignment: %m");
+                return 0;
+        }
+
+        tbf = TBF(qdisc);
+        if (streq(lvalue, "Rate"))
+                p = &tbf->rate;
         else if (streq(lvalue, "PeakRate"))
-                tbf->peak_rate = k / 8;
+                p = &tbf->peak_rate;
+        else
+                assert_not_reached("unknown lvalue");
+
+        if (isempty(rvalue)) {
+                *p = 0;
+
+                TAKE_PTR(qdisc);
+                return 0;
+        }
+
+        r = parse_size(rvalue, 1000, &k);
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "Failed to parse '%s=', ignoring assignment: %s",
+                           lvalue, rvalue);
+                return 0;
+        }
+
+        *p = k / 8;
 
         qdisc = NULL;
 
@@ -212,9 +272,11 @@ int config_parse_token_bucket_filter_latency(
         r = qdisc_new_static(QDISC_KIND_TBF, network, filename, section_line, &qdisc);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r < 0)
-                return log_syntax(unit, LOG_ERR, filename, line, r,
-                                  "More than one kind of queueing discipline, ignoring assignment: %m");
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "More than one kind of queueing discipline, ignoring assignment: %m");
+                return 0;
+        }
 
         tbf = TBF(qdisc);
 
@@ -227,7 +289,7 @@ int config_parse_token_bucket_filter_latency(
 
         r = parse_sec(rvalue, &u);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse '%s=', ignoring assignment: %s",
                            lvalue, rvalue);
                 return 0;

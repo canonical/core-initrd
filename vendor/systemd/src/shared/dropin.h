@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include "hashmap.h"
@@ -21,5 +21,6 @@ int unit_file_find_dropin_paths(
                 Set *unit_path_cache,
                 const char *dir_suffix,
                 const char *file_suffix,
-                const Set *names,
+                const char *name,
+                const Set *aliases,
                 char ***paths);

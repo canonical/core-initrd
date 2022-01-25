@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <getopt.h>
 
@@ -43,13 +43,12 @@ static int help(void) {
                "     --version    Show package version\n"
                "  -s --strict     When updating, return non-zero exit value on any parsing error\n"
                "     --usr        Generate in " UDEVLIBEXECDIR " instead of /etc/udev\n"
-               "  -r --root=PATH  Alternative root path in the filesystem\n\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , ansi_highlight()
-               , ansi_normal()
-               , link
-        );
+               "  -r --root=PATH  Alternative root path in the filesystem\n"
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               ansi_highlight(),
+               ansi_normal(),
+               link);
 
         return 0;
 }
@@ -125,7 +124,9 @@ static int run(int argc, char *argv[]) {
         if (r <= 0)
                 return r;
 
-        mac_selinux_init();
+        r = mac_selinux_init();
+        if (r < 0)
+                return r;
 
         return hwdb_main(argc, argv);
 }

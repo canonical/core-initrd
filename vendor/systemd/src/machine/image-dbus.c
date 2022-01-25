@@ -1,13 +1,14 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <sys/file.h>
 #include <sys/mount.h>
 
 #include "alloc-util.h"
+#include "bus-get-properties.h"
 #include "bus-label.h"
 #include "bus-polkit.h"
-#include "bus-util.h"
 #include "copy.h"
+#include "discover-image.h"
 #include "dissect-image.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -15,9 +16,9 @@
 #include "image-dbus.h"
 #include "io-util.h"
 #include "loop-util.h"
-#include "machine-image.h"
 #include "missing_capability.h"
 #include "mount-util.h"
+#include "os-util.h"
 #include "process-util.h"
 #include "raw-clone.h"
 #include "strv.h"
@@ -40,7 +41,7 @@ int bus_image_method_remove(
         assert(image);
 
         if (m->n_operations >= OPERATIONS_MAX)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_LIMITS_EXCEEDED, "Too many ongoing operations.");
+                return sd_bus_error_set(error, SD_BUS_ERROR_LIMITS_EXCEEDED, "Too many ongoing operations.");
 
         r = bus_verify_polkit_async(
                         message,
@@ -145,7 +146,7 @@ int bus_image_method_clone(
         assert(m);
 
         if (m->n_operations >= OPERATIONS_MAX)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_LIMITS_EXCEEDED, "Too many ongoing operations.");
+                return sd_bus_error_set(error, SD_BUS_ERROR_LIMITS_EXCEEDED, "Too many ongoing operations.");
 
         r = sd_bus_message_read(message, "sb", &new_name, &read_only);
         if (r < 0)
@@ -251,7 +252,7 @@ int bus_image_method_set_limit(
         if (r < 0)
                 return r;
         if (!FILE_SIZE_VALID_OR_INFINITY(limit))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "New limit out of range");
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "New limit out of range");
 
         r = bus_verify_polkit_async(
                         message,
@@ -354,30 +355,6 @@ int bus_image_method_get_os_release(
         return bus_reply_pair_array(message, image->os_release);
 }
 
-const sd_bus_vtable image_vtable[] = {
-        SD_BUS_VTABLE_START(0),
-        SD_BUS_PROPERTY("Name", "s", NULL, offsetof(Image, name), 0),
-        SD_BUS_PROPERTY("Path", "s", NULL, offsetof(Image, path), 0),
-        SD_BUS_PROPERTY("Type", "s", property_get_type,  offsetof(Image, type), 0),
-        SD_BUS_PROPERTY("ReadOnly", "b", bus_property_get_bool, offsetof(Image, read_only), 0),
-        SD_BUS_PROPERTY("CreationTimestamp", "t", NULL, offsetof(Image, crtime), 0),
-        SD_BUS_PROPERTY("ModificationTimestamp", "t", NULL, offsetof(Image, mtime), 0),
-        SD_BUS_PROPERTY("Usage", "t", NULL, offsetof(Image, usage), 0),
-        SD_BUS_PROPERTY("Limit", "t", NULL, offsetof(Image, limit), 0),
-        SD_BUS_PROPERTY("UsageExclusive", "t", NULL, offsetof(Image, usage_exclusive), 0),
-        SD_BUS_PROPERTY("LimitExclusive", "t", NULL, offsetof(Image, limit_exclusive), 0),
-        SD_BUS_METHOD("Remove", NULL, NULL, bus_image_method_remove, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("Rename", "s", NULL, bus_image_method_rename, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("Clone", "sb", NULL, bus_image_method_clone, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("MarkReadOnly", "b", NULL, bus_image_method_mark_read_only, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("SetLimit", "t", NULL, bus_image_method_set_limit, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("GetHostname", NULL, "s", bus_image_method_get_hostname, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("GetMachineID", NULL, "ay", bus_image_method_get_machine_id, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("GetMachineInfo", NULL, "a{ss}", bus_image_method_get_machine_info, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("GetOSRelease", NULL, "a{ss}", bus_image_method_get_os_release, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_VTABLE_END
-};
-
 static int image_flush_cache(sd_event_source *s, void *userdata) {
         Manager *m = userdata;
 
@@ -388,7 +365,7 @@ static int image_flush_cache(sd_event_source *s, void *userdata) {
         return 0;
 }
 
-int image_object_find(sd_bus *bus, const char *path, const char *interface, void *userdata, void **found, sd_bus_error *error) {
+static int image_object_find(sd_bus *bus, const char *path, const char *interface, void *userdata, void **found, sd_bus_error *error) {
         _cleanup_free_ char *e = NULL;
         Manager *m = userdata;
         Image *image = NULL;
@@ -414,10 +391,6 @@ int image_object_find(sd_bus *bus, const char *path, const char *interface, void
                 return 1;
         }
 
-        r = hashmap_ensure_allocated(&m->image_cache, &image_hash_ops);
-        if (r < 0)
-                return r;
-
         if (!m->image_cache_defer_event) {
                 r = sd_event_add_defer(m->event, &m->image_cache_defer_event, image_flush_cache, m);
                 if (r < 0)
@@ -432,7 +405,7 @@ int image_object_find(sd_bus *bus, const char *path, const char *interface, void
         if (r < 0)
                 return r;
 
-        r = image_find(IMAGE_MACHINE, e, &image);
+        r = image_find(IMAGE_MACHINE, e, NULL, &image);
         if (r == -ENOENT)
                 return 0;
         if (r < 0)
@@ -440,7 +413,7 @@ int image_object_find(sd_bus *bus, const char *path, const char *interface, void
 
         image->userdata = m;
 
-        r = hashmap_put(m->image_cache, image->name, image);
+        r = hashmap_ensure_put(&m->image_cache, &image_hash_ops, image->name, image);
         if (r < 0) {
                 image_unref(image);
                 return r;
@@ -462,11 +435,10 @@ char *image_bus_path(const char *name) {
         return strjoin("/org/freedesktop/machine1/image/", e);
 }
 
-int image_node_enumerator(sd_bus *bus, const char *path, void *userdata, char ***nodes, sd_bus_error *error) {
+static int image_node_enumerator(sd_bus *bus, const char *path, void *userdata, char ***nodes, sd_bus_error *error) {
         _cleanup_hashmap_free_ Hashmap *images = NULL;
         _cleanup_strv_free_ char **l = NULL;
         Image *image;
-        Iterator i;
         int r;
 
         assert(bus);
@@ -477,11 +449,11 @@ int image_node_enumerator(sd_bus *bus, const char *path, void *userdata, char **
         if (!images)
                 return -ENOMEM;
 
-        r = image_discover(IMAGE_MACHINE, images);
+        r = image_discover(IMAGE_MACHINE, NULL, images);
         if (r < 0)
                 return r;
 
-        HASHMAP_FOREACH(image, images, i) {
+        HASHMAP_FOREACH(image, images) {
                 char *p;
 
                 p = image_bus_path(image->name);
@@ -497,3 +469,34 @@ int image_node_enumerator(sd_bus *bus, const char *path, void *userdata, char **
 
         return 1;
 }
+
+const sd_bus_vtable image_vtable[] = {
+        SD_BUS_VTABLE_START(0),
+        SD_BUS_PROPERTY("Name", "s", NULL, offsetof(Image, name), 0),
+        SD_BUS_PROPERTY("Path", "s", NULL, offsetof(Image, path), 0),
+        SD_BUS_PROPERTY("Type", "s", property_get_type,  offsetof(Image, type), 0),
+        SD_BUS_PROPERTY("ReadOnly", "b", bus_property_get_bool, offsetof(Image, read_only), 0),
+        SD_BUS_PROPERTY("CreationTimestamp", "t", NULL, offsetof(Image, crtime), 0),
+        SD_BUS_PROPERTY("ModificationTimestamp", "t", NULL, offsetof(Image, mtime), 0),
+        SD_BUS_PROPERTY("Usage", "t", NULL, offsetof(Image, usage), 0),
+        SD_BUS_PROPERTY("Limit", "t", NULL, offsetof(Image, limit), 0),
+        SD_BUS_PROPERTY("UsageExclusive", "t", NULL, offsetof(Image, usage_exclusive), 0),
+        SD_BUS_PROPERTY("LimitExclusive", "t", NULL, offsetof(Image, limit_exclusive), 0),
+        SD_BUS_METHOD("Remove", NULL, NULL, bus_image_method_remove, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("Rename", "s", NULL, bus_image_method_rename, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("Clone", "sb", NULL, bus_image_method_clone, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("MarkReadOnly", "b", NULL, bus_image_method_mark_read_only, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("SetLimit", "t", NULL, bus_image_method_set_limit, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("GetHostname", NULL, "s", bus_image_method_get_hostname, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("GetMachineID", NULL, "ay", bus_image_method_get_machine_id, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("GetMachineInfo", NULL, "a{ss}", bus_image_method_get_machine_info, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD("GetOSRelease", NULL, "a{ss}", bus_image_method_get_os_release, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_VTABLE_END
+};
+
+const BusObjectImplementation image_object = {
+        "/org/freedesktop/machine1/image",
+        "org.freedesktop.machine1.Image",
+        .fallback_vtables = BUS_FALLBACK_VTABLES({image_vtable, image_object_find}),
+        .node_enumerator = image_node_enumerator,
+};

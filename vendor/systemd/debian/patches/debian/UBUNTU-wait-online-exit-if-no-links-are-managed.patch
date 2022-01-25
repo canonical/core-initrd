@@ -8,18 +8,18 @@ Subject: wait-online: exit, if no links are managed.
  1 file changed, 6 insertions(+), 1 deletion(-)
 
 diff --git a/src/network/wait-online/manager.c b/src/network/wait-online/manager.c
-index 40a29f1..5c9d025 100644
+index e1df034..1fddb43 100644
 --- a/src/network/wait-online/manager.c
 +++ b/src/network/wait-online/manager.c
-@@ -66,6 +66,7 @@ static int manager_link_is_online(Manager *m, Link *l, LinkOperationalStateRange
+@@ -100,6 +100,7 @@ static int manager_link_is_online(Manager *m, Link *l, LinkOperationalStateRange
  
  bool manager_configured(Manager *m) {
          bool one_ready = false;
 +        bool none_managed = true;
-         Iterator i;
          const char *ifname;
          void *p;
-@@ -117,13 +118,17 @@ bool manager_configured(Manager *m) {
+         Link *l;
+@@ -150,13 +151,17 @@ bool manager_configured(Manager *m) {
                                                                           _LINK_OPERSTATE_INVALID });
                  if (r < 0 && !m->any)
                          return false;

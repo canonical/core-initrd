@@ -37,17 +37,8 @@ enable_udev() {
   invoke-rc.d udev start
 }
 
-update_initramfs() {
-  [ -x /usr/sbin/update-initramfs -a -e /etc/initramfs-tools/initramfs.conf ] \
-    || return 0
-  update-initramfs -u
-}
-
 upgrade_fixes() {
-  # new Default-Stop (see #791944)
-  if dpkg --compare-versions "$2" lt-nl "239-8"; then
-    update-rc.d -f udev remove
-  fi
+  :
 }
 
 update_hwdb() {
@@ -59,13 +50,12 @@ case "$1" in
     # update/create hwdb before we (re)start udev
     update_hwdb
 
-    # Add new system group used by udev rules
+    # Add new system groups used by udev rules
     addgroup --quiet --system input
+    addgroup --quiet --system sgx
 
     # Make /dev/kvm accessible to kvm group
-    # The || getenv ... part can be dropped in 21.04 to give users a cycle
-    # to act on error message.
-    addgroup --quiet --system kvm || getent group kvm > /dev/null
+    addgroup --quiet --system kvm
 
     # Make /dev/dri/renderD* accessible to render group
     addgroup --quiet --system render
@@ -85,8 +75,6 @@ case "$1" in
 	fi
       fi
     fi
-
-    update_initramfs
     ;;
 
     triggered)
@@ -96,4 +84,3 @@ case "$1" in
 esac
 
 #DEBHELPER#
-

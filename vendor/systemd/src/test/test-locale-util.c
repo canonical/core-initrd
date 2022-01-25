@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "kbd-util.h"
 #include "locale-util.h"
@@ -36,6 +36,28 @@ static void test_locale_is_valid(void) {
         assert_se(!locale_is_valid("\x01gar\x02 bage\x03"));
 }
 
+static void test_locale_is_installed(void) {
+        log_info("/* %s */", __func__);
+
+        /* Always available */
+        assert_se(locale_is_installed("POSIX") > 0);
+        assert_se(locale_is_installed("C") > 0);
+
+        /* Might, or might not be installed. */
+        assert_se(locale_is_installed("en_EN.utf8") >= 0);
+        assert_se(locale_is_installed("fr_FR.utf8") >= 0);
+        assert_se(locale_is_installed("fr_FR@euro") >= 0);
+        assert_se(locale_is_installed("fi_FI") >= 0);
+
+        /* Definitely not valid */
+        assert_se(locale_is_installed("") == 0);
+        assert_se(locale_is_installed("/usr/bin/foo") == 0);
+        assert_se(locale_is_installed("\x01gar\x02 bage\x03") == 0);
+
+        /* Definitely not installed */
+        assert_se(locale_is_installed("zz_ZZ") == 0);
+}
+
 static void test_keymaps(void) {
         _cleanup_strv_free_ char **kmaps = NULL;
         char **p;
@@ -67,7 +89,7 @@ static void test_keymaps(void) {
 
 #define dump_glyph(x) log_info(STRINGIFY(x) ": %s", special_glyph(x))
 static void dump_special_glyphs(void) {
-        assert_cc(SPECIAL_GLYPH_DEPRESSED_SMILEY + 1 == _SPECIAL_GLYPH_MAX);
+        assert_cc(SPECIAL_GLYPH_TOUCH + 1 == _SPECIAL_GLYPH_MAX);
 
         log_info("/* %s */", __func__);
 
@@ -79,12 +101,16 @@ static void dump_special_glyphs(void) {
         dump_glyph(SPECIAL_GLYPH_TREE_SPACE);
         dump_glyph(SPECIAL_GLYPH_TRIANGULAR_BULLET);
         dump_glyph(SPECIAL_GLYPH_BLACK_CIRCLE);
+        dump_glyph(SPECIAL_GLYPH_WHITE_CIRCLE);
+        dump_glyph(SPECIAL_GLYPH_MULTIPLICATION_SIGN);
+        dump_glyph(SPECIAL_GLYPH_CIRCLE_ARROW);
         dump_glyph(SPECIAL_GLYPH_BULLET);
         dump_glyph(SPECIAL_GLYPH_ARROW);
         dump_glyph(SPECIAL_GLYPH_ELLIPSIS);
         dump_glyph(SPECIAL_GLYPH_MU);
         dump_glyph(SPECIAL_GLYPH_CHECK_MARK);
         dump_glyph(SPECIAL_GLYPH_CROSS_MARK);
+        dump_glyph(SPECIAL_GLYPH_EXTERNAL_LINK);
         dump_glyph(SPECIAL_GLYPH_ECSTATIC_SMILEY);
         dump_glyph(SPECIAL_GLYPH_HAPPY_SMILEY);
         dump_glyph(SPECIAL_GLYPH_SLIGHTLY_HAPPY_SMILEY);
@@ -92,11 +118,14 @@ static void dump_special_glyphs(void) {
         dump_glyph(SPECIAL_GLYPH_SLIGHTLY_UNHAPPY_SMILEY);
         dump_glyph(SPECIAL_GLYPH_UNHAPPY_SMILEY);
         dump_glyph(SPECIAL_GLYPH_DEPRESSED_SMILEY);
+        dump_glyph(SPECIAL_GLYPH_LOCK_AND_KEY);
+        dump_glyph(SPECIAL_GLYPH_TOUCH);
 }
 
 int main(int argc, char *argv[]) {
         test_get_locales();
         test_locale_is_valid();
+        test_locale_is_installed();
         test_keymaps();
 
         dump_special_glyphs();

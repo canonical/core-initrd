@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="sd_bus_message_new_signal"
           xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -45,7 +45,7 @@
     parameter. The signal will be sent to path <parameter>path</parameter>, on the interface
     <parameter>interface</parameter>, member <parameter>member</parameter>. When this message is
     sent, no reply is expected. See
-    <citerefentry><refentrytitle>sd_bus_message_new_call</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+    <citerefentry><refentrytitle>sd_bus_message_new_method_call</refentrytitle><manvolnum>1</manvolnum></citerefentry>
     for a short description of the meaning of the <parameter>path</parameter>,
     <parameter>interface</parameter>, and <parameter>member</parameter> parameters.
     </para>
@@ -113,7 +113,8 @@
 
     <para>
       <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
-      <citerefentry><refentrytitle>sd-bus</refentrytitle><manvolnum>3</manvolnum></citerefentry>
+      <citerefentry><refentrytitle>sd-bus</refentrytitle><manvolnum>3</manvolnum></citerefentry>,
+      <citerefentry><refentrytitle>sd_bus_emit_signal</refentrytitle><manvolnum>3</manvolnum></citerefentry>
     </para>
   </refsect1>
 

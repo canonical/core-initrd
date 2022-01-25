@@ -6,6 +6,11 @@ fi
 
 if ! grep -E -q "^[^[:space:]]+ /dev devtmpfs" /proc/mounts; then
     mount -n -o mode=0755 -t devtmpfs devtmpfs /dev
+    # Setup a few /dev symlinks, see #975018
+    [ ! -h /dev/fd ] && ln -s /proc/self/fd /dev/fd
+    [ ! -h /dev/stdin ] && ln -s /proc/self/fd/0 /dev/stdin
+    [ ! -h /dev/stdout ] && ln -s /proc/self/fd/1 /dev/stdout
+    [ ! -h /dev/stderr ] && ln -s /proc/self/fd/2 /dev/stderr
 fi
 
 # This covers the same case as lib/modprobe.d/scsi-mod-scan-sync.conf

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <sys/mount.h>
 
@@ -26,7 +26,7 @@ int home_prepare_directory(UserRecord *h, bool already_activated, HomeSetup *set
 
 int home_activate_directory(
                 UserRecord *h,
-                char ***pkcs11_decrypted_passwords,
+                PasswordCache *cache,
                 UserRecord **ret_home) {
 
         _cleanup_(user_record_unrefp) UserRecord *new_home = NULL, *header_home = NULL;
@@ -44,11 +44,11 @@ int home_activate_directory(
         assert_se(hdo = user_record_home_directory(h));
         hd = strdupa(hdo);
 
-        r = home_prepare(h, false, pkcs11_decrypted_passwords, &setup, &header_home);
+        r = home_prepare(h, false, cache, &setup, &header_home);
         if (r < 0)
                 return r;
 
-        r = home_refresh(h, &setup, header_home, pkcs11_decrypted_passwords, NULL, &new_home);
+        r = home_refresh(h, &setup, header_home, cache, NULL, &new_home);
         if (r < 0)
                 return r;
 
@@ -61,13 +61,13 @@ int home_activate_directory(
         /* Create a mount point (even if the directory is already placed correctly), as a way to indicate
          * this mount point is now "activated". Moreover, we want to set per-user
          * MS_NOSUID/MS_NOEXEC/MS_NODEV. */
-        r = mount_verbose(LOG_ERR, ip, hd, NULL, MS_BIND, NULL);
+        r = mount_nofollow_verbose(LOG_ERR, ip, hd, NULL, MS_BIND, NULL);
         if (r < 0)
                 return r;
 
-        r = mount_verbose(LOG_ERR, NULL, hd, NULL, MS_BIND|MS_REMOUNT|user_record_mount_flags(h), NULL);
+        r = mount_nofollow_verbose(LOG_ERR, NULL, hd, NULL, MS_BIND|MS_REMOUNT|user_record_mount_flags(h), NULL);
         if (r < 0) {
-                (void) umount_verbose(hd);
+                (void) umount_verbose(LOG_ERR, hd, UMOUNT_NOFOLLOW);
                 return r;
         }
 
@@ -158,7 +158,7 @@ int home_create_directory_or_subvolume(UserRecord *h, UserRecord **ret_home) {
         if (r < 0)
                 return r;
 
-        r = user_record_clone(h, USER_RECORD_LOAD_MASK_SECRET, &new_home);
+        r = user_record_clone(h, USER_RECORD_LOAD_MASK_SECRET|USER_RECORD_PERMISSIVE, &new_home);
         if (r < 0)
                 return log_error_errno(r, "Failed to clone record: %m");
 
@@ -193,7 +193,7 @@ int home_create_directory_or_subvolume(UserRecord *h, UserRecord **ret_home) {
 int home_resize_directory(
                 UserRecord *h,
                 bool already_activated,
-                char ***pkcs11_decrypted_passwords,
+                PasswordCache *cache,
                 HomeSetup *setup,
                 UserRecord **ret_home) {
 
@@ -205,11 +205,11 @@ int home_resize_directory(
         assert(ret_home);
         assert(IN_SET(user_record_storage(h), USER_DIRECTORY, USER_SUBVOLUME, USER_FSCRYPT));
 
-        r = home_prepare(h, already_activated, pkcs11_decrypted_passwords, setup, NULL);
+        r = home_prepare(h, already_activated, cache, setup, NULL);
         if (r < 0)
                 return r;
 
-        r = home_load_embedded_identity(h, setup->root_fd, NULL, USER_RECONCILE_REQUIRE_NEWER_OR_EQUAL, pkcs11_decrypted_passwords, &embedded_home, &new_home);
+        r = home_load_embedded_identity(h, setup->root_fd, NULL, USER_RECONCILE_REQUIRE_NEWER_OR_EQUAL, cache, &embedded_home, &new_home);
         if (r < 0)
                 return r;
 

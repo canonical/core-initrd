@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (52) jammy; urgency=medium
+
+  * Initial jammy release
+
+ -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Mon, 13 Dec 2021 11:09:08 +0100
+
 ubuntu-core-initramfs (51) focal; urgency=medium
 
   * Initial Release.

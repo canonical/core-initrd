@@ -1,4 +1,6 @@
-Description: skip disk/by-uuid for bcache devices
+From: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+Date: Tue, 28 Jul 2020 14:16:35 +0200
+Subject: skip disk/by-uuid for bcache devices
 
 blkid reports bcache superblock dev.uuid as a filesystem UUID but it actually
 is not a filesystem, it's the UUID of the backing device, which is maintained
@@ -35,13 +37,16 @@ Bug-Ubuntu: https://bugs.launchpad.net/bugs/1861941
 Forwarded: https://github.com/systemd/systemd/pull/16317
 Reviewed-by: Rafael David Tinoco <rafaeldtinoco@ubuntu.com>
 Last-Update: 2020-07-23
-
 ---
-This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+ rules.d/60-persistent-storage.rules | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/rules.d/60-persistent-storage.rules b/rules.d/60-persistent-storage.rules
+index 6ac17f2..a2417cd 100644
 --- a/rules.d/60-persistent-storage.rules
 +++ b/rules.d/60-persistent-storage.rules
-@@ -109,8 +109,11 @@ KERNEL=="sr*", ENV{DISK_EJECT_REQUEST}!=
- KERNEL!="sr*", IMPORT{builtin}="blkid"
+@@ -110,8 +110,11 @@ KERNEL=="sr*", ENV{DISK_EJECT_REQUEST}!="?*", ENV{ID_CDROM_MEDIA_TRACK_COUNT_DAT
+ KERNEL!="sr*|mmcblk[0-9]boot[0-9]", IMPORT{builtin}="blkid"
  
  # by-label/by-uuid links (filesystem metadata)
 +# Skip bcache backing devices, handled in 69-bcache.rules

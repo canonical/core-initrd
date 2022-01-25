@@ -31,10 +31,15 @@ while read file; do
       # This is needed for text consoles on OLPC XO-1, and it used to be
       # built-in anyway.
       ;;
-    viafb) ;; # Needed by OLPC XO-1.5
+    viafb)
+      # Needed by OLPC XO-1.5.
+      ;;
+    hyperv_fb)
+      # Needed for graphical support on Hyper-V platforms, see LP: #1359933.
+      ;;
     *)
       /sbin/modinfo $file | grep -q '^alias: *pci:' \
-	&& echo blacklist $name || true
+        && echo blacklist $name || true
       ;;
   esac
 done
@@ -45,4 +50,3 @@ if diff --unified=0 $BL $BL.tmp; then
 else
   printf "\n\n\n$BL.tmp has changes!\n\n\n\n"
 fi
-

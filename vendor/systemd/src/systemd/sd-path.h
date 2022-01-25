@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #ifndef foosdpathhfoo
 #define foosdpathhfoo
 
@@ -78,11 +78,43 @@ enum {
         SD_PATH_SEARCH_STATE_FACTORY,
         SD_PATH_SEARCH_CONFIGURATION,
 
+        /* Various systemd paths, generally mirroring systemd.pc — Except we drop the "dir" suffix (and
+         * replaces "path" by "search"), since this API is about dirs/paths anyway, and contains "path"
+         * already in the prefix */
+        SD_PATH_SYSTEMD_UTIL,
+        SD_PATH_SYSTEMD_SYSTEM_UNIT,
+        SD_PATH_SYSTEMD_SYSTEM_PRESET,
+        SD_PATH_SYSTEMD_SYSTEM_CONF,
+        SD_PATH_SYSTEMD_USER_UNIT,
+        SD_PATH_SYSTEMD_USER_PRESET,
+        SD_PATH_SYSTEMD_USER_CONF,
+
+        SD_PATH_SYSTEMD_SEARCH_SYSTEM_UNIT,
+        SD_PATH_SYSTEMD_SEARCH_USER_UNIT,
+
+        SD_PATH_SYSTEMD_SYSTEM_GENERATOR,
+        SD_PATH_SYSTEMD_USER_GENERATOR,
+        SD_PATH_SYSTEMD_SEARCH_SYSTEM_GENERATOR,
+        SD_PATH_SYSTEMD_SEARCH_USER_GENERATOR,
+
+        SD_PATH_SYSTEMD_SLEEP,
+        SD_PATH_SYSTEMD_SHUTDOWN,
+
+        SD_PATH_TMPFILES,
+        SD_PATH_SYSUSERS,
+        SD_PATH_SYSCTL,
+        SD_PATH_BINFMT,
+        SD_PATH_MODULES_LOAD,
+        SD_PATH_CATALOG,
+
+        /* systemd-networkd search paths */
+        SD_PATH_SYSTEMD_SEARCH_NETWORK,
+
         _SD_PATH_MAX,
 };
 
-int sd_path_home(uint64_t type, const char *suffix, char **path);
-int sd_path_search(uint64_t type, const char *suffix, char ***paths);
+int sd_path_lookup(uint64_t type, const char *suffix, char **path);
+int sd_path_lookup_strv(uint64_t type, const char *suffix, char ***paths);
 
 _SD_END_DECLARATIONS;
 

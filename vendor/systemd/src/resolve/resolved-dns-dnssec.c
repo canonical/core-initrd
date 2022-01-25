@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "dns-domain.h"
@@ -35,7 +35,6 @@
 uint16_t dnssec_keytag(DnsResourceRecord *dnskey, bool mask_revoke) {
         const uint8_t *p;
         uint32_t sum, f;
-        size_t i;
 
         /* The algorithm from RFC 4034, Appendix B. */
 
@@ -51,61 +50,12 @@ uint16_t dnssec_keytag(DnsResourceRecord *dnskey, bool mask_revoke) {
 
         p = dnskey->dnskey.key;
 
-        for (i = 0; i < dnskey->dnskey.key_size; i++)
+        for (size_t i = 0; i < dnskey->dnskey.key_size; i++)
                 sum += (i & 1) == 0 ? (uint32_t) p[i] << 8 : (uint32_t) p[i];
 
         sum += (sum >> 16) & UINT32_C(0xFFFF);
 
         return sum & UINT32_C(0xFFFF);
-}
-
-int dnssec_canonicalize(const char *n, char *buffer, size_t buffer_max) {
-        size_t c = 0;
-        int r;
-
-        /* Converts the specified hostname into DNSSEC canonicalized
-         * form. */
-
-        if (buffer_max < 2)
-                return -ENOBUFS;
-
-        for (;;) {
-                r = dns_label_unescape(&n, buffer, buffer_max, 0);
-                if (r < 0)
-                        return r;
-                if (r == 0)
-                        break;
-
-                if (buffer_max < (size_t) r + 2)
-                        return -ENOBUFS;
-
-                /* The DNSSEC canonical form is not clear on what to
-                 * do with dots appearing in labels, the way DNS-SD
-                 * does it. Refuse it for now. */
-
-                if (memchr(buffer, '.', r))
-                        return -EINVAL;
-
-                ascii_strlower_n(buffer, (size_t) r);
-                buffer[r] = '.';
-
-                buffer += r + 1;
-                c += r + 1;
-
-                buffer_max -= r + 1;
-        }
-
-        if (c <= 0) {
-                /* Not even a single label: this is the root domain name */
-
-                assert(buffer_max > 2);
-                buffer[0] = '.';
-                buffer[1] = 0;
-
-                return 1;
-        }
-
-        return (int) c;
 }
 
 #if HAVE_GCRYPT
@@ -532,14 +482,14 @@ static int dnssec_rrsig_prepare(DnsResourceRecord *rrsig) {
         const char *name;
         int r;
 
-        /* Checks whether the specified RRSIG RR is somewhat valid, and initializes the .n_skip_labels_source and
-         * .n_skip_labels_signer fields so that we can use them later on. */
+        /* Checks whether the specified RRSIG RR is somewhat valid, and initializes the .n_skip_labels_source
+         * and .n_skip_labels_signer fields so that we can use them later on. */
 
         assert(rrsig);
         assert(rrsig->key->type == DNS_TYPE_RRSIG);
 
         /* Check if this RRSIG RR is already prepared */
-        if (rrsig->n_skip_labels_source != (unsigned) -1)
+        if (rrsig->n_skip_labels_source != UINT8_MAX)
                 return 0;
 
         if (rrsig->rrsig.inception > rrsig->rrsig.expiration)
@@ -572,6 +522,7 @@ static int dnssec_rrsig_prepare(DnsResourceRecord *rrsig) {
         if (r == 0)
                 return -EINVAL;
 
+        assert(n_key_labels < UINT8_MAX); /* UINT8_MAX/-1 means unsigned. */
         rrsig->n_skip_labels_source = n_key_labels - rrsig->rrsig.labels;
         rrsig->n_skip_labels_signer = n_key_labels - n_signer_labels;
 
@@ -653,13 +604,11 @@ static void dnssec_fix_rrset_ttl(
                 DnsResourceRecord *rrsig,
                 usec_t realtime) {
 
-        unsigned k;
-
         assert(list);
         assert(n > 0);
         assert(rrsig);
 
-        for (k = 0; k < n; k++) {
+        for (unsigned k = 0; k < n; k++) {
                 DnsResourceRecord *rr = list[k];
 
                 /* Pick the TTL as the minimum of the RR's TTL, the
@@ -689,7 +638,7 @@ int dnssec_verify_rrset(
         const char *source, *name;
         _cleanup_(gcry_md_closep) gcry_md_hd_t md = NULL;
         int r, md_algorithm;
-        size_t k, n = 0;
+        size_t n = 0;
         size_t sig_size = 0;
         _cleanup_free_ char *sig_data = NULL;
         _cleanup_fclose_ FILE *f = NULL;
@@ -819,7 +768,7 @@ int dnssec_verify_rrset(
         if (r < 0)
                 return r;
 
-        for (k = 0; k < n; k++) {
+        for (size_t k = 0; k < n; k++) {
                 size_t l;
 
                 rr = list[k];
@@ -856,7 +805,9 @@ int dnssec_verify_rrset(
         case DNSSEC_ALGORITHM_ED448:
                 *result = DNSSEC_UNSUPPORTED_ALGORITHM;
                 return 0;
-        default:
+        default: {
+                gcry_error_t err;
+
                 /* OK, the RRs are now in canonical order. Let's calculate the digest */
                 md_algorithm = algorithm_to_gcrypt_md(rrsig->rrsig.algorithm);
                 if (md_algorithm == -EOPNOTSUPP) {
@@ -866,8 +817,8 @@ int dnssec_verify_rrset(
                 if (md_algorithm < 0)
                         return md_algorithm;
 
-                gcry_md_open(&md, md_algorithm, 0);
-                if (!md)
+                err = gcry_md_open(&md, md_algorithm, 0);
+                if (gcry_err_code(err) != GPG_ERR_NO_ERROR || !md)
                         return -EIO;
 
                 hash_size = gcry_md_get_algo_dlen(md_algorithm);
@@ -878,6 +829,7 @@ int dnssec_verify_rrset(
                 hash = gcry_md_read(md, 0);
                 if (!hash)
                         return -EIO;
+        }
         }
 
         switch (rrsig->rrsig.algorithm) {
@@ -1138,6 +1090,7 @@ static int digest_to_gcrypt_md(uint8_t algorithm) {
 int dnssec_verify_dnskey_by_ds(DnsResourceRecord *dnskey, DnsResourceRecord *ds, bool mask_revoke) {
         uint8_t wire_format[DNS_WIRE_FORMAT_HOSTNAME_MAX];
         _cleanup_(gcry_md_closep) gcry_md_hd_t md = NULL;
+        gcry_error_t err;
         size_t hash_size;
         int md_algorithm, r;
         void *result;
@@ -1179,8 +1132,8 @@ int dnssec_verify_dnskey_by_ds(DnsResourceRecord *dnskey, DnsResourceRecord *ds,
         if (r < 0)
                 return r;
 
-        gcry_md_open(&md, md_algorithm, 0);
-        if (!md)
+        err = gcry_md_open(&md, md_algorithm, 0);
+        if (gcry_err_code(err) != GPG_ERR_NO_ERROR || !md)
                 return -EIO;
 
         gcry_md_write(md, wire_format, r);
@@ -1253,11 +1206,11 @@ static int nsec3_hash_to_gcrypt_md(uint8_t algorithm) {
 
 int dnssec_nsec3_hash(DnsResourceRecord *nsec3, const char *name, void *ret) {
         uint8_t wire_format[DNS_WIRE_FORMAT_HOSTNAME_MAX];
-        gcry_md_hd_t md = NULL;
+        _cleanup_(gcry_md_closep) gcry_md_hd_t md = NULL;
+        gcry_error_t err;
         size_t hash_size;
         int algorithm;
         void *result;
-        unsigned k;
         int r;
 
         assert(nsec3);
@@ -1288,20 +1241,18 @@ int dnssec_nsec3_hash(DnsResourceRecord *nsec3, const char *name, void *ret) {
         if (r < 0)
                 return r;
 
-        gcry_md_open(&md, algorithm, 0);
-        if (!md)
+        err = gcry_md_open(&md, algorithm, 0);
+        if (gcry_err_code(err) != GPG_ERR_NO_ERROR || !md)
                 return -EIO;
 
         gcry_md_write(md, wire_format, r);
         gcry_md_write(md, nsec3->nsec3.salt, nsec3->nsec3.salt_size);
 
         result = gcry_md_read(md, 0);
-        if (!result) {
-                r = -EIO;
-                goto finish;
-        }
+        if (!result)
+                return -EIO;
 
-        for (k = 0; k < nsec3->nsec3.iterations; k++) {
+        for (unsigned k = 0; k < nsec3->nsec3.iterations; k++) {
                 uint8_t tmp[hash_size];
                 memcpy(tmp, result, hash_size);
 
@@ -1310,18 +1261,12 @@ int dnssec_nsec3_hash(DnsResourceRecord *nsec3, const char *name, void *ret) {
                 gcry_md_write(md, nsec3->nsec3.salt, nsec3->nsec3.salt_size);
 
                 result = gcry_md_read(md, 0);
-                if (!result) {
-                        r = -EIO;
-                        goto finish;
-                }
+                if (!result)
+                        return -EIO;
         }
 
         memcpy(ret, result, hash_size);
-        r = (int) hash_size;
-
-finish:
-        gcry_md_close(md);
-        return r;
+        return (int) hash_size;
 }
 
 static int nsec3_is_good(DnsResourceRecord *rr, DnsResourceRecord *nsec3) {
@@ -1346,10 +1291,10 @@ static int nsec3_is_good(DnsResourceRecord *rr, DnsResourceRecord *nsec3) {
 
         /* Ignore NSEC3 RRs generated from wildcards. If these NSEC3 RRs weren't correctly signed we can't make this
          * check (since rr->n_skip_labels_source is -1), but that's OK, as we won't trust them anyway in that case. */
-        if (!IN_SET(rr->n_skip_labels_source, 0, (unsigned) -1))
+        if (!IN_SET(rr->n_skip_labels_source, 0, UINT8_MAX))
                 return 0;
         /* Ignore NSEC3 RRs that are located anywhere else than one label below the zone */
-        if (!IN_SET(rr->n_skip_labels_signer, 1, (unsigned) -1))
+        if (!IN_SET(rr->n_skip_labels_signer, 1, UINT8_MAX))
                 return 0;
 
         if (!nsec3)
@@ -1429,7 +1374,7 @@ static int nsec3_hashed_domain_make(DnsResourceRecord *nsec3, const char *domain
  * matches the wildcard domain.
  *
  * Based on this we can prove either the existence of the record in @key, or NXDOMAIN or NODATA, or
- * that there is no proof either way. The latter is the case if a the proof of non-existence of a given
+ * that there is no proof either way. The latter is the case if a proof of non-existence of a given
  * name uses an NSEC3 record with the opt-out bit set. Lastly, if we are given insufficient NSEC3 records
  * to conclude anything we indicate this by returning NO_RR. */
 static int dnssec_test_nsec3(DnsAnswer *answer, DnsResourceKey *key, DnssecNsecResult *result, bool *authenticated, uint32_t *ttl) {
@@ -1862,6 +1807,8 @@ int dnssec_nsec_test(DnsAnswer *answer, DnsResourceKey *key, DnssecNsecResult *r
 
                 /* The following checks only make sense for NSEC RRs that are not expanded from a wildcard */
                 r = dns_resource_record_is_synthetic(rr);
+                if (r == -ENODATA) /* No signing RR known. */
+                        continue;
                 if (r < 0)
                         return r;
                 if (r > 0)
@@ -2287,24 +2234,24 @@ int dnssec_test_positive_wildcard(
 #endif
 
 static const char* const dnssec_result_table[_DNSSEC_RESULT_MAX] = {
-        [DNSSEC_VALIDATED] = "validated",
-        [DNSSEC_VALIDATED_WILDCARD] = "validated-wildcard",
-        [DNSSEC_INVALID] = "invalid",
-        [DNSSEC_SIGNATURE_EXPIRED] = "signature-expired",
+        [DNSSEC_VALIDATED]             = "validated",
+        [DNSSEC_VALIDATED_WILDCARD]    = "validated-wildcard",
+        [DNSSEC_INVALID]               = "invalid",
+        [DNSSEC_SIGNATURE_EXPIRED]     = "signature-expired",
         [DNSSEC_UNSUPPORTED_ALGORITHM] = "unsupported-algorithm",
-        [DNSSEC_NO_SIGNATURE] = "no-signature",
-        [DNSSEC_MISSING_KEY] = "missing-key",
-        [DNSSEC_UNSIGNED] = "unsigned",
-        [DNSSEC_FAILED_AUXILIARY] = "failed-auxiliary",
-        [DNSSEC_NSEC_MISMATCH] = "nsec-mismatch",
-        [DNSSEC_INCOMPATIBLE_SERVER] = "incompatible-server",
+        [DNSSEC_NO_SIGNATURE]          = "no-signature",
+        [DNSSEC_MISSING_KEY]           = "missing-key",
+        [DNSSEC_UNSIGNED]              = "unsigned",
+        [DNSSEC_FAILED_AUXILIARY]      = "failed-auxiliary",
+        [DNSSEC_NSEC_MISMATCH]         = "nsec-mismatch",
+        [DNSSEC_INCOMPATIBLE_SERVER]   = "incompatible-server",
 };
 DEFINE_STRING_TABLE_LOOKUP(dnssec_result, DnssecResult);
 
 static const char* const dnssec_verdict_table[_DNSSEC_VERDICT_MAX] = {
-        [DNSSEC_SECURE] = "secure",
-        [DNSSEC_INSECURE] = "insecure",
-        [DNSSEC_BOGUS] = "bogus",
+        [DNSSEC_SECURE]        = "secure",
+        [DNSSEC_INSECURE]      = "insecure",
+        [DNSSEC_BOGUS]         = "bogus",
         [DNSSEC_INDETERMINATE] = "indeterminate",
 };
 DEFINE_STRING_TABLE_LOOKUP(dnssec_verdict, DnssecVerdict);

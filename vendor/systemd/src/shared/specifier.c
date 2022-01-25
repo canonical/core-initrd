@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <stdbool.h>
@@ -9,10 +9,14 @@
 #include "sd-id128.h"
 
 #include "alloc-util.h"
+#include "architecture.h"
+#include "fd-util.h"
 #include "format-util.h"
 #include "fs-util.h"
 #include "hostname-util.h"
+#include "id128-util.h"
 #include "macro.h"
+#include "os-util.h"
 #include "specifier.h"
 #include "string-util.h"
 #include "strv.h"
@@ -27,23 +31,23 @@
  * and "%" used for escaping. */
 #define POSSIBLE_SPECIFIERS ALPHANUMERICAL "%"
 
-int specifier_printf(const char *text, const Specifier table[], const void *userdata, char **_ret) {
-        size_t l, allocated = 0;
-        _cleanup_free_ char *ret = NULL;
-        char *t;
-        const char *f;
+int specifier_printf(const char *text, size_t max_length, const Specifier table[], const char *root, const void *userdata, char **ret) {
+        _cleanup_free_ char *result = NULL;
         bool percent = false;
+        const char *f;
+        size_t l;
+        char *t;
         int r;
 
         assert(text);
         assert(table);
 
         l = strlen(text);
-        if (!GREEDY_REALLOC(ret, allocated, l + 1))
+        if (!GREEDY_REALLOC(result, l + 1))
                 return -ENOMEM;
-        t = ret;
+        t = result;
 
-        for (f = text; *f; f++, l--)
+        for (f = text; *f != '\0'; f++, l--) {
                 if (percent) {
                         if (*f == '%')
                                 *(t++) = '%';
@@ -58,17 +62,17 @@ int specifier_printf(const char *text, const Specifier table[], const void *user
                                         _cleanup_free_ char *w = NULL;
                                         size_t k, j;
 
-                                        r = i->lookup(i->specifier, i->data, userdata, &w);
+                                        r = i->lookup(i->specifier, i->data, root, userdata, &w);
                                         if (r < 0)
                                                 return r;
 
-                                        j = t - ret;
+                                        j = t - result;
                                         k = strlen(w);
 
-                                        if (!GREEDY_REALLOC(ret, allocated, j + k + l + 1))
+                                        if (!GREEDY_REALLOC(result, j + k + l + 1))
                                                 return -ENOMEM;
-                                        memcpy(ret + j, w, k);
-                                        t = ret + j + k;
+                                        memcpy(result + j, w, k);
+                                        t = result + j + k;
                                 } else if (strchr(POSSIBLE_SPECIFIERS, *f))
                                         /* Oops, an unknown specifier. */
                                         return -EBADSLT;
@@ -84,25 +88,25 @@ int specifier_printf(const char *text, const Specifier table[], const void *user
                 else
                         *(t++) = *f;
 
-        /* If string ended with a stray %, also end with % */
-        if (percent)
-                *(t++) = '%';
-        *(t++) = 0;
-
-        /* Try to deallocate unused bytes, but don't sweat it too much */
-        if ((size_t)(t - ret) < allocated) {
-                t = realloc(ret, t - ret);
-                if (t)
-                        ret = t;
+                if ((size_t) (t - result) > max_length)
+                        return -ENAMETOOLONG;
         }
 
-        *_ret = TAKE_PTR(ret);
+        /* If string ended with a stray %, also end with % */
+        if (percent) {
+                *(t++) = '%';
+                if ((size_t) (t - result) > max_length)
+                        return -ENAMETOOLONG;
+        }
+        *(t++) = 0;
+
+        *ret = TAKE_PTR(result);
         return 0;
 }
 
 /* Generic handler for simple string replacements */
 
-int specifier_string(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_string(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         char *n;
 
         n = strdup(strempty(data));
@@ -113,16 +117,25 @@ int specifier_string(char specifier, const void *data, const void *userdata, cha
         return 0;
 }
 
-int specifier_machine_id(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_machine_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         sd_id128_t id;
         char *n;
         int r;
 
-        r = sd_id128_get_machine(&id);
+        if (root) {
+                _cleanup_close_ int fd = -1;
+
+                fd = chase_symlinks_and_open("/etc/machine-id", root, CHASE_PREFIX_ROOT, O_RDONLY|O_CLOEXEC|O_NOCTTY, NULL);
+                if (fd < 0)
+                        return fd;
+
+                r = id128_read_fd(fd, ID128_PLAIN, &id);
+        } else
+                r = sd_id128_get_machine(&id);
         if (r < 0)
                 return r;
 
-        n = new(char, 33);
+        n = new(char, SD_ID128_STRING_MAX);
         if (!n)
                 return -ENOMEM;
 
@@ -130,7 +143,7 @@ int specifier_machine_id(char specifier, const void *data, const void *userdata,
         return 0;
 }
 
-int specifier_boot_id(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_boot_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         sd_id128_t id;
         char *n;
         int r;
@@ -139,7 +152,7 @@ int specifier_boot_id(char specifier, const void *data, const void *userdata, ch
         if (r < 0)
                 return r;
 
-        n = new(char, 33);
+        n = new(char, SD_ID128_STRING_MAX);
         if (!n)
                 return -ENOMEM;
 
@@ -147,7 +160,7 @@ int specifier_boot_id(char specifier, const void *data, const void *userdata, ch
         return 0;
 }
 
-int specifier_host_name(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_host_name(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         char *n;
 
         n = gethostname_malloc();
@@ -158,7 +171,18 @@ int specifier_host_name(char specifier, const void *data, const void *userdata, 
         return 0;
 }
 
-int specifier_kernel_release(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_short_host_name(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        char *n;
+
+        n = gethostname_short_malloc();
+        if (!n)
+                return -ENOMEM;
+
+        *ret = n;
+        return 0;
+}
+
+int specifier_kernel_release(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         struct utsname uts;
         char *n;
         int r;
@@ -175,7 +199,61 @@ int specifier_kernel_release(char specifier, const void *data, const void *userd
         return 0;
 }
 
-int specifier_group_name(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_architecture(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        char *t;
+
+        t = strdup(architecture_to_string(uname_architecture()));
+        if (!t)
+                return -ENOMEM;
+
+        *ret = t;
+        return 0;
+}
+
+static int specifier_os_release_common(const char *field, const char *root, char **ret) {
+        char *t = NULL;
+        int r;
+
+        r = parse_os_release(root, field, &t);
+        if (r < 0)
+                return r;
+        if (!t) {
+                /* fields in /etc/os-release might quite possibly be missing, even if everything is entirely
+                 * valid otherwise. Let's hence return "" in that case. */
+                t = strdup("");
+                if (!t)
+                        return -ENOMEM;
+        }
+
+        *ret = t;
+        return 0;
+}
+
+int specifier_os_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        return specifier_os_release_common("ID", root, ret);
+}
+
+int specifier_os_version_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        return specifier_os_release_common("VERSION_ID", root, ret);
+}
+
+int specifier_os_build_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        return specifier_os_release_common("BUILD_ID", root, ret);
+}
+
+int specifier_os_variant_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        return specifier_os_release_common("VARIANT_ID", root, ret);
+}
+
+int specifier_os_image_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        return specifier_os_release_common("IMAGE_ID", root, ret);
+}
+
+int specifier_os_image_version(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        return specifier_os_release_common("IMAGE_VERSION", root, ret);
+}
+
+int specifier_group_name(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         char *t;
 
         t = gid_to_name(getgid());
@@ -186,14 +264,14 @@ int specifier_group_name(char specifier, const void *data, const void *userdata,
         return 0;
 }
 
-int specifier_group_id(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_group_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         if (asprintf(ret, UID_FMT, getgid()) < 0)
                 return -ENOMEM;
 
         return 0;
 }
 
-int specifier_user_name(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_user_name(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         char *t;
 
         /* If we are UID 0 (root), this will not result in NSS, otherwise it might. This is good, as we want to be able
@@ -211,7 +289,7 @@ int specifier_user_name(char specifier, const void *data, const void *userdata, 
         return 0;
 }
 
-int specifier_user_id(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_user_id(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
 
         if (asprintf(ret, UID_FMT, getuid()) < 0)
                 return -ENOMEM;
@@ -219,7 +297,7 @@ int specifier_user_id(char specifier, const void *data, const void *userdata, ch
         return 0;
 }
 
-int specifier_user_home(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_user_home(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
 
         /* On PID 1 (which runs as root) this will not result in NSS,
          * which is good. See above */
@@ -227,7 +305,7 @@ int specifier_user_home(char specifier, const void *data, const void *userdata, 
         return get_home_dir(ret);
 }
 
-int specifier_user_shell(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_user_shell(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
 
         /* On PID 1 (which runs as root) this will not result in NSS,
          * which is good. See above */
@@ -235,15 +313,18 @@ int specifier_user_shell(char specifier, const void *data, const void *userdata,
         return get_shell(ret);
 }
 
-int specifier_tmp_dir(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_tmp_dir(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         const char *p;
         char *copy;
         int r;
 
-        r = tmp_dir(&p);
-        if (r < 0)
-                return r;
-
+        if (root) /* If root dir is set, don't honour $TMP or similar */
+                p = "/tmp";
+        else {
+                r = tmp_dir(&p);
+                if (r < 0)
+                        return r;
+        }
         copy = strdup(p);
         if (!copy)
                 return -ENOMEM;
@@ -252,15 +333,18 @@ int specifier_tmp_dir(char specifier, const void *data, const void *userdata, ch
         return 0;
 }
 
-int specifier_var_tmp_dir(char specifier, const void *data, const void *userdata, char **ret) {
+int specifier_var_tmp_dir(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         const char *p;
         char *copy;
         int r;
 
-        r = var_tmp_dir(&p);
-        if (r < 0)
-                return r;
-
+        if (root)
+                p = "/var/tmp";
+        else {
+                r = var_tmp_dir(&p);
+                if (r < 0)
+                        return r;
+        }
         copy = strdup(p);
         if (!copy)
                 return -ENOMEM;
@@ -297,3 +381,9 @@ int specifier_escape_strv(char **l, char ***ret) {
 
         return 0;
 }
+
+const Specifier system_and_tmp_specifier_table[] = {
+        COMMON_SYSTEM_SPECIFIERS,
+        COMMON_TMP_SPECIFIERS,
+        {}
+};

@@ -1,10 +1,11 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 
 #include "alloc-util.h"
 #include "dbus-slice.h"
 #include "dbus-unit.h"
+#include "fd-util.h"
 #include "log.h"
 #include "serialize.h"
 #include "slice.h"
@@ -46,25 +47,20 @@ static void slice_set_state(Slice *t, SliceState state) {
 }
 
 static int slice_add_parent_slice(Slice *s) {
-        Unit *u = UNIT(s), *parent;
+        Unit *u = UNIT(s);
         _cleanup_free_ char *a = NULL;
         int r;
 
         assert(s);
 
-        if (UNIT_ISSET(u->slice))
+        if (UNIT_GET_SLICE(u))
                 return 0;
 
         r = slice_build_parent_slice(u->id, &a);
         if (r <= 0) /* 0 means root slice */
                 return r;
 
-        r = manager_load_unit(u->manager, a, NULL, NULL, &parent);
-        if (r < 0)
-                return r;
-
-        unit_ref_set(&u->slice, u, parent);
-        return 0;
+        return unit_add_dependency_by_name(u, UNIT_IN_SLICE, a, true, UNIT_DEPENDENCY_IMPLICIT);
 }
 
 static int slice_add_default_dependencies(Slice *s) {
@@ -93,19 +89,15 @@ static int slice_verify(Slice *s) {
         assert(s);
         assert(UNIT(s)->load_state == UNIT_LOADED);
 
-        if (!slice_name_is_valid(UNIT(s)->id)) {
-                log_unit_error(UNIT(s), "Slice name %s is not valid. Refusing.", UNIT(s)->id);
-                return -ENOEXEC;
-        }
+        if (!slice_name_is_valid(UNIT(s)->id))
+                return log_unit_error_errno(UNIT(s), SYNTHETIC_ERRNO(ENOEXEC), "Slice name %s is not valid. Refusing.", UNIT(s)->id);
 
         r = slice_build_parent_slice(UNIT(s)->id, &parent);
         if (r < 0)
                 return log_unit_error_errno(UNIT(s), r, "Failed to determine parent slice: %m");
 
-        if (parent ? !unit_has_name(UNIT_DEREF(UNIT(s)->slice), parent) : UNIT_ISSET(UNIT(s)->slice)) {
-                log_unit_error(UNIT(s), "Located outside of parent slice. Refusing.");
-                return -ENOEXEC;
-        }
+        if (parent ? !unit_has_name(UNIT_GET_SLICE(UNIT(s)), parent) : !!UNIT_GET_SLICE(UNIT(s)))
+                return log_unit_error_errno(UNIT(s), SYNTHETIC_ERRNO(ENOEXEC), "Located outside of parent slice. Refusing.");
 
         return 0;
 }
@@ -187,6 +179,14 @@ static int slice_load(Unit *u) {
         r = slice_add_default_dependencies(s);
         if (r < 0)
                 return r;
+
+        if (!u->description) {
+                _cleanup_free_ char *tmp = NULL;
+
+                r = unit_name_to_path(u->id, &tmp);
+                if (r >= 0)  /* Failure is ignored… */
+                        u->description = strjoin("Slice ", tmp);
+        }
 
         return slice_verify(s);
 }
@@ -347,6 +347,73 @@ static void slice_enumerate_perpetual(Manager *m) {
                 (void) slice_make_perpetual(m, SPECIAL_SYSTEM_SLICE, NULL);
 }
 
+static bool slice_freezer_action_supported_by_children(Unit *s) {
+        Unit *member;
+        int r;
+
+        assert(s);
+
+        UNIT_FOREACH_DEPENDENCY(member, s, UNIT_ATOM_SLICE_OF) {
+
+                if (member->type == UNIT_SLICE) {
+                        r = slice_freezer_action_supported_by_children(member);
+                        if (!r)
+                                return r;
+                }
+
+                if (!UNIT_VTABLE(member)->freeze)
+                        return false;
+        }
+
+        return true;
+}
+
+static int slice_freezer_action(Unit *s, FreezerAction action) {
+        Unit *member;
+        int r;
+
+        assert(s);
+        assert(IN_SET(action, FREEZER_FREEZE, FREEZER_THAW));
+
+        if (!slice_freezer_action_supported_by_children(s)) {
+                log_unit_warning(s, "Requested freezer operation is not supported by all children of the slice");
+                return 0;
+        }
+
+        UNIT_FOREACH_DEPENDENCY(member, s, UNIT_ATOM_SLICE_OF) {
+                if (action == FREEZER_FREEZE)
+                        r = UNIT_VTABLE(member)->freeze(member);
+                else
+                        r = UNIT_VTABLE(member)->thaw(member);
+                if (r < 0)
+                        return r;
+        }
+
+        r = unit_cgroup_freezer_action(s, action);
+        if (r < 0)
+                return r;
+
+        return 1;
+}
+
+static int slice_freeze(Unit *s) {
+        assert(s);
+
+        return slice_freezer_action(s, FREEZER_FREEZE);
+}
+
+static int slice_thaw(Unit *s) {
+        assert(s);
+
+        return slice_freezer_action(s, FREEZER_THAW);
+}
+
+static bool slice_can_freeze(Unit *s) {
+        assert(s);
+
+        return slice_freezer_action_supported_by_children(s);
+}
+
 const UnitVTable slice_vtable = {
         .object_size = sizeof(Slice),
         .cgroup_context_offset = offsetof(Slice, cgroup_context),
@@ -358,6 +425,7 @@ const UnitVTable slice_vtable = {
         .private_section = "Slice",
 
         .can_transient = true,
+        .can_set_managed_oom = true,
 
         .init = slice_init,
         .load = slice_load,
@@ -371,13 +439,16 @@ const UnitVTable slice_vtable = {
 
         .kill = slice_kill,
 
+        .freeze = slice_freeze,
+        .thaw = slice_thaw,
+        .can_freeze = slice_can_freeze,
+
         .serialize = slice_serialize,
         .deserialize_item = slice_deserialize_item,
 
         .active_state = slice_active_state,
         .sub_state_to_string = slice_sub_state_to_string,
 
-        .bus_vtable = bus_slice_vtable,
         .bus_set_property = bus_slice_set_property,
         .bus_commit_properties = bus_slice_commit_properties,
 

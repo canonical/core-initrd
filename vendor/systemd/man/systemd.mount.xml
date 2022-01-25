@@ -1,7 +1,7 @@
 <?xml version='1.0'?> <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="systemd.mount">
   <refentryinfo>
@@ -34,9 +34,9 @@
     this unit type. See
     <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
     for the common options of all unit configuration files. The common
-    configuration items are configured in the generic <literal>[Unit]</literal> and
-    <literal>[Install]</literal> sections. The mount specific configuration options are
-    configured in the <literal>[Mount]</literal> section.</para>
+    configuration items are configured in the generic [Unit] and
+    [Install] sections. The mount specific configuration options are
+    configured in the [Mount] section.</para>
 
     <para>Additional options are listed in
     <citerefentry><refentrytitle>systemd.exec</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
@@ -204,7 +204,11 @@
         system that merges multiple mount points). See
         <varname>After=</varname> and <varname>Requires=</varname> in
         <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
-        for details.</para></listitem>
+        for details.</para>
+
+        <para>Note that this option always applies to the created mount unit
+        only regardless whether <option>x-systemd.automount</option> has been
+        specified.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -223,7 +227,11 @@
         unit.
         See <varname>Before=</varname> and <varname>After=</varname> in
         <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>
-        for details.</para></listitem>
+        for details.</para>
+
+        <para>Note that these options always apply to the created mount unit
+        only regardless whether <option>x-systemd.automount</option> has been
+        specified.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -360,6 +368,17 @@
       </varlistentry>
 
       <varlistentry>
+        <term><option>x-systemd.rw-only</option></term>
+
+        <listitem><para>If a mount operation fails to mount the file system
+        read-write, it normally tries mounting the file system read-only instead.
+        This option disables that behaviour, and causes the mount to fail
+        immediately instead. This option is translated into the
+        <varname>ReadWriteOnly=</varname> setting in a unit file.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><option>_netdev</option></term>
 
         <listitem><para>Normally the file system type is used to determine if a
@@ -411,13 +430,13 @@
 
     <para>If a mount point is configured in both
     <filename>/etc/fstab</filename> and a unit file that is stored
-    below <filename>/usr</filename>, the former will take precedence.
-    If the unit file is stored below <filename>/etc</filename>, it
+    below <filename>/usr/</filename>, the former will take precedence.
+    If the unit file is stored below <filename>/etc/</filename>, it
     will take precedence. This means: native unit files take
     precedence over traditional configuration files, but this is
     superseded by the rule that configuration in
-    <filename>/etc</filename> will always take precedence over
-    configuration in <filename>/usr</filename>.</para>
+    <filename>/etc/</filename> will always take precedence over
+    configuration in <filename>/usr/</filename>.</para>
   </refsect1>
 
   <refsect1>
@@ -444,9 +463,9 @@
         created. (See
         <citerefentry><refentrytitle>systemd.device</refentrytitle><manvolnum>5</manvolnum></citerefentry>
         for more information.) This option is mandatory. Note that the usual specifier expansion is applied
-        to this setting, literal percent characters should hence be written as <literal>%%</literal>. If this
-        mount is a bind mount and the specified path does not exist yet it is created as
-        directory.</para></listitem>
+        to this setting, literal percent characters should hence be written as <literal
+        class='specifiers'>%%</literal>. If this mount is a bind mount and the specified path does not exist
+        yet it is created as directory.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -469,7 +488,7 @@
 
         <listitem><para>Mount options to use when mounting. This takes a comma-separated list of options. This setting
         is optional. Note that the usual specifier expansion is applied to this setting, literal percent characters
-        should hence be written as <literal>%%</literal>.</para></listitem>
+        should hence be written as <literal class='specifiers'>%%</literal>.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -494,6 +513,19 @@
         This corresponds with
         <citerefentry project='man-pages'><refentrytitle>umount</refentrytitle><manvolnum>8</manvolnum></citerefentry>'s
         <parameter>-l</parameter> switch. Defaults to
+        off.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>ReadWriteOnly=</varname></term>
+
+        <listitem><para>Takes a boolean argument. If false, a mount
+        point that shall be mounted read-write but cannot be mounted
+        so is retried to be mounted read-only. If true the operation
+        will fail immediately after the read-write mount attempt did
+        not succeed. This corresponds with
+        <citerefentry project='man-pages'><refentrytitle>mount</refentrytitle><manvolnum>8</manvolnum></citerefentry>'s
+        <parameter>-w</parameter> switch. Defaults to
         off.</para></listitem>
       </varlistentry>
 

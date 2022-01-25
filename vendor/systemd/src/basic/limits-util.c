@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "cgroup-util.h"
@@ -41,6 +41,11 @@ uint64_t physical_memory(void) {
         }
         if (r > 0) {
                 r = cg_get_attribute("memory", root, "memory.max", &value);
+                if (r == -ENOENT) /* Field does not exist on the system's top-level cgroup, hence don't
+                                   * complain. (Note that it might exist on our own root though, if we live
+                                   * in a cgroup namespace, hence check anyway instead of not even
+                                   * trying.) */
+                        return mem;
                 if (r < 0) {
                         log_debug_errno(r, "Failed to read memory.max cgroup attribute, ignoring cgroup memory limit: %m");
                         return mem;
@@ -72,7 +77,13 @@ uint64_t physical_memory(void) {
 }
 
 uint64_t physical_memory_scale(uint64_t v, uint64_t max) {
-        uint64_t p, m, ps, r;
+        uint64_t p, m, ps;
+
+        /* Shortcut two special cases */
+        if (v == 0)
+                return 0;
+        if (v == max)
+                return physical_memory();
 
         assert(max > 0);
 
@@ -85,17 +96,16 @@ uint64_t physical_memory_scale(uint64_t v, uint64_t max) {
         p = physical_memory() / ps;
         assert(p > 0);
 
-        m = p * v;
-        if (m / p != v)
+        if (v > UINT64_MAX / p)
                 return UINT64_MAX;
 
+        m = p * v;
         m /= max;
 
-        r = m * ps;
-        if (r / ps != m)
+        if (m > UINT64_MAX / ps)
                 return UINT64_MAX;
 
-        return r;
+        return m * ps;
 }
 
 uint64_t system_tasks_max(void) {
@@ -120,16 +130,9 @@ uint64_t system_tasks_max(void) {
         if (r < 0)
                 log_debug_errno(r, "Failed to determine cgroup root path, ignoring: %m");
         else {
-                _cleanup_free_ char *value = NULL;
-
-                r = cg_get_attribute("pids", root, "pids.max", &value);
+                r = cg_get_attribute_as_uint64("pids", root, "pids.max", &b);
                 if (r < 0)
                         log_debug_errno(r, "Failed to read pids.max attribute of cgroup root, ignoring: %m");
-                else if (!streq(value, "max")) {
-                        r = safe_atou64(value, &b);
-                        if (r < 0)
-                                log_debug_errno(r, "Failed to parse pids.max attribute of cgroup root, ignoring: %m");
-                }
         }
 
         return MIN3(TASKS_MAX,
@@ -140,6 +143,12 @@ uint64_t system_tasks_max(void) {
 uint64_t system_tasks_max_scale(uint64_t v, uint64_t max) {
         uint64_t t, m;
 
+        /* Shortcut two special cases */
+        if (v == 0)
+                return 0;
+        if (v == max)
+                return system_tasks_max();
+
         assert(max > 0);
 
         /* Multiply the system's task value by the fraction v/max. Hence, if max==100 this calculates percentages
@@ -148,9 +157,9 @@ uint64_t system_tasks_max_scale(uint64_t v, uint64_t max) {
         t = system_tasks_max();
         assert(t > 0);
 
-        m = t * v;
-        if (m / t != v) /* overflow? */
+        if (v > UINT64_MAX / t) /* overflow? */
                 return UINT64_MAX;
 
+        m = t * v;
         return m / max;
 }

@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "dns-domain.h"
-#include "errno-util.h"
 #include "home-util.h"
 #include "libcrypt-util.h"
 #include "memory-util.h"
@@ -17,7 +16,7 @@ bool suitable_user_name(const char *name) {
          * restrictive, so that we can change the rules server-side without having to update things
          * client-side too. */
 
-        if (!valid_user_group_name(name))
+        if (!valid_user_group_name(name, 0))
                 return false;
 
         /* We generally rely on NSS to tell us which users not to care for, but let's filter out some
@@ -62,6 +61,12 @@ int suitable_image_path(const char *path) {
         return !empty_or_root(path) &&
                 path_is_valid(path) &&
                 path_is_absolute(path);
+}
+
+bool supported_fstype(const char *fstype) {
+        /* Limit the set of supported file systems a bit, as protection against little tested kernel file
+         * systems. Also, we only support the resize ioctls for these file systems. */
+        return STR_IN_SET(fstype, "ext4", "btrfs", "xfs");
 }
 
 int split_user_name_realm(const char *t, char **ret_user_name, char **ret_realm) {
@@ -124,37 +129,7 @@ int bus_message_append_secret(sd_bus_message *m, UserRecord *secret) {
         if (r < 0)
                 return r;
 
+        (void) sd_bus_message_sensitive(m);
+
         return sd_bus_message_append(m, "s", formatted);
-}
-
-int test_password_one(const char *hashed_password, const char *password) {
-        struct crypt_data cc = {};
-        const char *k;
-        bool b;
-
-        errno = 0;
-        k = crypt_r(password, hashed_password, &cc);
-        if (!k) {
-                explicit_bzero_safe(&cc, sizeof(cc));
-                return errno_or_else(EINVAL);
-        }
-
-        b = streq(k, hashed_password);
-        explicit_bzero_safe(&cc, sizeof(cc));
-        return b;
-}
-
-int test_password_many(char **hashed_password, const char *password) {
-        char **hpw;
-        int r;
-
-        STRV_FOREACH(hpw, hashed_password) {
-                r = test_password_one(*hpw, password);
-                if (r < 0)
-                        return r;
-                if (r > 0)
-                        return true;
-        }
-
-        return false;
 }

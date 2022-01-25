@@ -1,8 +1,12 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 libnspawn_core_sources = files('''
+        nspawn-bind-user.c
+        nspawn-bind-user.h
         nspawn-cgroup.c
         nspawn-cgroup.h
+        nspawn-creds.c
+        nspawn-creds.h
         nspawn-def.h
         nspawn-expose-ports.c
         nspawn-expose-ports.h
@@ -24,6 +28,7 @@ libnspawn_core_sources = files('''
         nspawn-setuid.h
         nspawn-stub-pid1.c
         nspawn-stub-pid1.h
+        nspawn.h
 '''.split())
 
 nspawn_gperf_c = custom_target(
@@ -44,6 +49,8 @@ libnspawn_core = static_library(
 
 systemd_nspawn_sources = files('nspawn.c')
 
+############################################################
+
 tests += [
         [['src/nspawn/test-nspawn-tables.c'],
          [libnspawn_core,
@@ -54,5 +61,17 @@ tests += [
          [libnspawn_core,
           libshared],
          [libacl],
-         '', 'manual'],
+         [], '', 'manual'],
+]
+
+fuzzers += [
+        [['src/nspawn/fuzz-nspawn-settings.c'],
+         [libshared,
+          libnspawn_core],
+         [libseccomp]],
+
+        [['src/nspawn/fuzz-nspawn-oci.c'],
+         [libshared,
+          libnspawn_core],
+         [libseccomp]],
 ]

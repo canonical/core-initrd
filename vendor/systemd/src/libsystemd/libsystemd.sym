@@ -1,5 +1,5 @@
 /***
-  SPDX-License-Identifier: LGPL-2.1+
+  SPDX-License-Identifier: LGPL-2.1-or-later
 
   systemd is free software; you can redistribute it and/or modify it
   under the terms of the GNU Lesser General Public License as published by
@@ -697,3 +697,68 @@ global:
         sd_event_source_send_child_signal;
         sd_journal_open_namespace;
 } LIBSYSTEMD_243;
+
+LIBSYSTEMD_246 {
+global:
+        sd_bus_interface_name_is_valid;
+        sd_bus_service_name_is_valid;
+        sd_bus_member_name_is_valid;
+        sd_bus_object_path_is_valid;
+
+        sd_bus_call_methodv;
+        sd_bus_call_method_asyncv;
+        sd_bus_emit_signalv;
+        sd_bus_reply_method_errnofv;
+        sd_bus_reply_method_errorfv;
+        sd_bus_reply_method_returnv;
+        sd_bus_set_propertyv;
+
+        sd_path_lookup;
+        sd_path_lookup_strv;
+
+        sd_notify_barrier;
+
+        sd_journal_enumerate_available_data;
+        sd_journal_enumerate_available_unique;
+} LIBSYSTEMD_245;
+
+LIBSYSTEMD_247 {
+global:
+        sd_event_add_time_relative;
+        sd_event_source_set_time_relative;
+        sd_event_source_get_exit_on_failure;
+        sd_event_source_set_exit_on_failure;
+
+        sd_bus_error_has_names_sentinel;
+
+        sd_device_get_current_tag_first;
+        sd_device_get_current_tag_next;
+        sd_device_has_current_tag;
+        sd_device_set_sysattr_valuef;
+} LIBSYSTEMD_246;
+
+LIBSYSTEMD_248 {
+global:
+        sd_bus_open_user_machine;
+        sd_bus_message_send;
+
+        sd_event_source_set_ratelimit;
+        sd_event_source_get_ratelimit;
+        sd_event_source_is_ratelimited;
+
+        sd_device_get_action;
+        sd_device_get_seqnum;
+        sd_device_new_from_stat_rdev;
+        sd_device_trigger;
+} LIBSYSTEMD_247;
+
+LIBSYSTEMD_249 {
+global:
+        sd_device_monitor_filter_add_match_sysattr;
+        sd_device_monitor_filter_add_match_parent;
+        sd_device_get_usec_initialized;
+        sd_device_trigger_with_uuid;
+        sd_device_get_trigger_uuid;
+        sd_device_new_from_ifname;
+        sd_device_new_from_ifindex;
+} LIBSYSTEMD_248;

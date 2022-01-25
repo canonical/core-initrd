@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -53,17 +53,17 @@ static int getnameinfo_handler(sd_resolve_query *q, int ret, const char *host, c
 int main(int argc, char *argv[]) {
         _cleanup_(sd_resolve_query_unrefp) sd_resolve_query *q1 = NULL, *q2 = NULL;
         _cleanup_(sd_resolve_unrefp) sd_resolve *resolve = NULL;
-        int r = 0;
+        int r;
 
         struct addrinfo hints = {
-                .ai_family = PF_UNSPEC,
+                .ai_family = AF_UNSPEC,
                 .ai_socktype = SOCK_STREAM,
                 .ai_flags = AI_CANONNAME
         };
 
         struct sockaddr_in sa = {
                 .sin_family = AF_INET,
-                .sin_port = htons(80)
+                .sin_port = htobe16(80)
         };
 
         assert_se(sd_resolve_default(&resolve) >= 0);

@@ -1,13 +1,14 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /***
   Copyright © 2013 Intel Corporation. All rights reserved.
 ***/
 
 #include <errno.h>
+#include <net/if.h>
+#include <net/if_arp.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <net/if.h>
 
 #include "sd-dhcp-client.h"
 #include "sd-event.h"
@@ -22,6 +23,7 @@
 #include "util.h"
 
 static uint8_t mac_addr[] = {'A', 'B', 'C', '1', '2', '3'};
+static uint8_t bcast_addr[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
 typedef int (*test_callback_recv_t)(size_t size, DHCPMessage *dhcp);
 
@@ -70,40 +72,29 @@ static void test_request_basic(sd_event *e) {
         assert_se(sd_dhcp_client_set_hostname(client, "~host") == -EINVAL);
         assert_se(sd_dhcp_client_set_hostname(client, "~host.domain") == -EINVAL);
 
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_SUBNET_MASK) == -EEXIST);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_ROUTER) == -EEXIST);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_SUBNET_MASK) == 0);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_ROUTER) == 0);
         /* This PRL option is not set when using Anonymize, but in this test
          * Anonymize settings are not being used. */
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_HOST_NAME) == -EEXIST);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_DOMAIN_NAME) == -EEXIST);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_DOMAIN_NAME_SERVER) == -EEXIST);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_HOST_NAME) == 0);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_DOMAIN_NAME) == 0);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_DOMAIN_NAME_SERVER) == 0);
 
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_PAD) == -EINVAL);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_END) == -EINVAL);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_MESSAGE_TYPE) == -EINVAL);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_OVERLOAD) == -EINVAL);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_PARAMETER_REQUEST_LIST)
-                        == -EINVAL);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_PAD) == -EINVAL);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_END) == -EINVAL);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_MESSAGE_TYPE) == -EINVAL);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_OVERLOAD) == -EINVAL);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_PARAMETER_REQUEST_LIST) == -EINVAL);
 
         /* RFC7844: option 33 (SD_DHCP_OPTION_STATIC_ROUTE) is set in the
          * default PRL when using Anonymize, so it is changed to other option
          * that is not set by default, to check that it was set successfully.
          * Options not set by default (using or not anonymize) are option 17
          * (SD_DHCP_OPTION_ROOT_PATH) and 42 (SD_DHCP_OPTION_NTP_SERVER) */
+        assert_se(sd_dhcp_client_set_request_option(client, 17) == 1);
         assert_se(sd_dhcp_client_set_request_option(client, 17) == 0);
-        assert_se(sd_dhcp_client_set_request_option(client, 17) == -EEXIST);
-        assert_se(sd_dhcp_client_set_request_option(client, 42) == 0);
-        assert_se(sd_dhcp_client_set_request_option(client, 17) == -EEXIST);
+        assert_se(sd_dhcp_client_set_request_option(client, 42) == 1);
+        assert_se(sd_dhcp_client_set_request_option(client, 17) == 0);
 
         sd_dhcp_client_unref(client);
 }
@@ -125,19 +116,15 @@ static void test_request_anonymize(sd_event *e) {
         r = sd_dhcp_client_attach_event(client, e, 0);
         assert_se(r >= 0);
 
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_NETBIOS_NAMESERVER) == -EEXIST);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_NETBIOS_NAMESERVER) == 0);
         /* This PRL option is not set when using Anonymize */
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_HOST_NAME) == 0);
-        assert_se(sd_dhcp_client_set_request_option(client,
-                                        SD_DHCP_OPTION_PARAMETER_REQUEST_LIST)
-                        == -EINVAL);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_HOST_NAME) == 1);
+        assert_se(sd_dhcp_client_set_request_option(client, SD_DHCP_OPTION_PARAMETER_REQUEST_LIST) == -EINVAL);
 
         /* RFC7844: option 101 (SD_DHCP_OPTION_NEW_TZDB_TIMEZONE) is not set in the
          * default PRL when using Anonymize, */
+        assert_se(sd_dhcp_client_set_request_option(client, 101) == 1);
         assert_se(sd_dhcp_client_set_request_option(client, 101) == 0);
-        assert_se(sd_dhcp_client_set_request_option(client, 101) == -EEXIST);
 
         sd_dhcp_client_unref(client);
 }
@@ -158,20 +145,11 @@ static void test_checksum(void) {
 static void test_dhcp_identifier_set_iaid(void) {
         uint32_t iaid_legacy;
         be32_t iaid;
-        int ifindex;
 
-        for (;;) {
-                char ifname[IFNAMSIZ];
-
-                /* try to find an ifindex which does not exist. I causes dhcp_identifier_set_iaid()
-                 * to hash the MAC address. */
-                pseudo_random_bytes(&ifindex, sizeof(ifindex));
-                if (ifindex > 0 && !if_indextoname(ifindex, ifname))
-                        break;
-        }
-
-        assert_se(dhcp_identifier_set_iaid(ifindex, mac_addr, sizeof(mac_addr), true, &iaid_legacy) >= 0);
-        assert_se(dhcp_identifier_set_iaid(ifindex, mac_addr, sizeof(mac_addr), false, &iaid) >= 0);
+        assert_se(dhcp_identifier_set_iaid(42, mac_addr, sizeof(mac_addr), /* legacy = */ true,
+                                           /* use_mac = */ true, &iaid_legacy) >= 0);
+        assert_se(dhcp_identifier_set_iaid(42, mac_addr, sizeof(mac_addr), /* legacy = */ false,
+                                           /* use_mac = */ true, &iaid) >= 0);
 
         /* we expect, that the MAC address was hashed. The legacy value is in native
          * endianness. */
@@ -193,7 +171,7 @@ static int check_options(uint8_t code, uint8_t len, const void *option, void *us
                 size_t duid_len;
 
                 assert_se(dhcp_identifier_set_duid_en(&duid, &duid_len) >= 0);
-                assert_se(dhcp_identifier_set_iaid(42, mac_addr, ETH_ALEN, true, &iaid) >= 0);
+                assert_se(dhcp_identifier_set_iaid(42, mac_addr, ETH_ALEN, true, /* use_mac = */ true, &iaid) >= 0);
 
                 assert_se(len == sizeof(uint8_t) + sizeof(uint32_t) + duid_len);
                 assert_se(len == 19);
@@ -257,10 +235,11 @@ int dhcp_network_send_raw_socket(int s, const union sockaddr_union *link, const 
 }
 
 int dhcp_network_bind_raw_socket(
-                int index,
+                int ifindex,
                 union sockaddr_union *link,
                 uint32_t id,
                 const uint8_t *addr, size_t addr_len,
+                const uint8_t *bcaddr, size_t bcaddr_len,
                 uint16_t arp_type, uint16_t port) {
 
         if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0, test_fd) < 0)
@@ -310,7 +289,8 @@ static void test_discover_message(sd_event *e) {
         assert_se(r >= 0);
 
         assert_se(sd_dhcp_client_set_ifindex(client, 42) >= 0);
-        assert_se(sd_dhcp_client_set_mac(client, mac_addr, ETH_ALEN, ARPHRD_ETHER) >= 0);
+        assert_se(sd_dhcp_client_set_mac(client, mac_addr, bcast_addr, ETH_ALEN, ARPHRD_ETHER) >= 0);
+        dhcp_client_set_test_mode(client, true);
 
         assert_se(sd_dhcp_client_set_request_option(client, 248) >= 0);
 
@@ -320,7 +300,7 @@ static void test_discover_message(sd_event *e) {
 
         assert_se(IN_SET(res, 0, -EINPROGRESS));
 
-        sd_event_run(e, (uint64_t) -1);
+        sd_event_run(e, UINT64_MAX);
 
         sd_dhcp_client_stop(client);
         sd_dhcp_client_unref(client);
@@ -513,7 +493,6 @@ static int test_addr_acq_recv_discover(size_t size, DHCPMessage *discover) {
 }
 
 static void test_addr_acq(sd_event *e) {
-        usec_t time_now = now(clock_boottime_or_monotonic());
         sd_dhcp_client *client;
         int res, r;
 
@@ -528,16 +507,18 @@ static void test_addr_acq(sd_event *e) {
         assert_se(r >= 0);
 
         assert_se(sd_dhcp_client_set_ifindex(client, 42) >= 0);
-        assert_se(sd_dhcp_client_set_mac(client, mac_addr, ETH_ALEN, ARPHRD_ETHER) >= 0);
+        assert_se(sd_dhcp_client_set_mac(client, mac_addr, bcast_addr, ETH_ALEN, ARPHRD_ETHER) >= 0);
+        dhcp_client_set_test_mode(client, true);
 
         assert_se(sd_dhcp_client_set_callback(client, test_addr_acq_acquired, e) >= 0);
 
         callback_recv = test_addr_acq_recv_discover;
 
-        assert_se(sd_event_add_time(e, &test_hangcheck,
-                                    clock_boottime_or_monotonic(),
-                                    time_now + 2 * USEC_PER_SEC, 0,
-                                    test_dhcp_hangcheck, NULL) >= 0);
+        assert_se(sd_event_add_time_relative(
+                                  e, &test_hangcheck,
+                                  clock_boottime_or_monotonic(),
+                                  2 * USEC_PER_SEC, 0,
+                                  test_dhcp_hangcheck, NULL) >= 0);
 
         res = sd_dhcp_client_start(client);
         assert_se(IN_SET(res, 0, -EINPROGRESS));

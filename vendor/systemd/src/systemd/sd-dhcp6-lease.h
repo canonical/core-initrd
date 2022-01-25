@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #ifndef foosddhcp6leasehfoo
 #define foosddhcp6leasehfoo
 
@@ -39,11 +39,11 @@ int sd_dhcp6_lease_get_pd(sd_dhcp6_lease *lease, struct in6_addr *prefix,
                           uint32_t *lifetime_preferred,
                           uint32_t *lifetime_valid);
 
-int sd_dhcp6_lease_get_dns(sd_dhcp6_lease *lease, struct in6_addr **addrs);
+int sd_dhcp6_lease_get_dns(sd_dhcp6_lease *lease, const struct in6_addr **addrs);
 int sd_dhcp6_lease_get_domains(sd_dhcp6_lease *lease, char ***domains);
-int sd_dhcp6_lease_get_ntp_addrs(sd_dhcp6_lease *lease,
-                                 struct in6_addr **addrs);
+int sd_dhcp6_lease_get_ntp_addrs(sd_dhcp6_lease *lease, const struct in6_addr **addrs);
 int sd_dhcp6_lease_get_ntp_fqdn(sd_dhcp6_lease *lease, char ***ntp_fqdn);
+int sd_dhcp6_lease_get_fqdn(sd_dhcp6_lease *lease, const char **fqdn);
 
 sd_dhcp6_lease *sd_dhcp6_lease_ref(sd_dhcp6_lease *lease);
 sd_dhcp6_lease *sd_dhcp6_lease_unref(sd_dhcp6_lease *lease);

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #if HAVE_SELINUX
 #include <selinux/selinux.h>
@@ -55,6 +55,7 @@
 #include "string-table.h"
 #include "string-util.h"
 #include "syslog-util.h"
+#include "user-record.h"
 #include "user-util.h"
 
 #define USER_JOURNALS_MAX 1024
@@ -143,7 +144,7 @@ static int cache_space_refresh(Server *s, JournalStorage *storage) {
 
         ts = now(CLOCK_MONOTONIC);
 
-        if (space->timestamp != 0 && space->timestamp + RECHECK_SPACE_USEC > ts)
+        if (space->timestamp != 0 && usec_add(space->timestamp, RECHECK_SPACE_USEC) > ts)
                 return 0;
 
         r = determine_path_usage(s, storage->path, &vfs_used, &vfs_avail);
@@ -241,22 +242,21 @@ void server_space_usage_message(Server *s, JournalStorage *storage) {
 
 static bool uid_for_system_journal(uid_t uid) {
 
-        /* Returns true if the specified UID shall get its data stored in the system journal*/
+        /* Returns true if the specified UID shall get its data stored in the system journal. */
 
         return uid_is_system(uid) || uid_is_dynamic(uid) || uid == UID_NOBODY;
 }
 
 static void server_add_acls(JournalFile *f, uid_t uid) {
-#if HAVE_ACL
-        int r;
-#endif
         assert(f);
 
 #if HAVE_ACL
+        int r;
+
         if (uid_for_system_journal(uid))
                 return;
 
-        r = add_acls_for_user(f->fd, uid);
+        r = fd_add_uid_acl_permission(f->fd, uid, ACL_READ);
         if (r < 0)
                 log_warning_errno(r, "Failed to set ACL on %s, ignoring: %m", f->path);
 #endif
@@ -415,6 +415,13 @@ static JournalFile* find_journal(Server *s, uid_t uid) {
         if (s->runtime_journal)
                 return s->runtime_journal;
 
+        /* If we are not in persistent mode, then we need return NULL immediately rather than opening a
+         * persistent journal of any sort.
+         *
+         * Fixes https://github.com/systemd/systemd/issues/20390 */
+        if (!IN_SET(s->storage, STORAGE_AUTO, STORAGE_PERSISTENT))
+                return NULL;
+
         if (uid_for_system_journal(uid))
                 return s->system_journal;
 
@@ -474,10 +481,9 @@ static int do_rotate(
 
 static void server_process_deferred_closes(Server *s) {
         JournalFile *f;
-        Iterator i;
 
         /* Perform any deferred closes which aren't still offlining. */
-        SET_FOREACH(f, s->deferred_closes, i) {
+        SET_FOREACH(f, s->deferred_closes) {
                 if (journal_file_is_offlining(f))
                         continue;
 
@@ -610,7 +616,6 @@ static int vacuum_offline_user_journals(Server *s) {
 
 void server_rotate(Server *s) {
         JournalFile *f;
-        Iterator i;
         void *k;
         int r;
 
@@ -621,7 +626,7 @@ void server_rotate(Server *s) {
         (void) do_rotate(s, &s->system_journal, "system", s->seal, 0);
 
         /* Then, rotate all user journals we have open (keeping them open) */
-        ORDERED_HASHMAP_FOREACH_KEY(f, k, s->user_journals, i) {
+        ORDERED_HASHMAP_FOREACH_KEY(f, k, s->user_journals) {
                 r = do_rotate(s, &f, "user", s->seal, PTR_TO_UID(k));
                 if (r >= 0)
                         ordered_hashmap_replace(s->user_journals, k, f);
@@ -640,7 +645,6 @@ void server_rotate(Server *s) {
 
 void server_sync(Server *s) {
         JournalFile *f;
-        Iterator i;
         int r;
 
         if (s->system_journal) {
@@ -649,7 +653,7 @@ void server_sync(Server *s) {
                         log_warning_errno(r, "Failed to sync system journal, ignoring: %m");
         }
 
-        ORDERED_HASHMAP_FOREACH(f, s->user_journals, i) {
+        ORDERED_HASHMAP_FOREACH(f, s->user_journals) {
                 r = journal_file_set_offline(f, false);
                 if (r < 0)
                         log_warning_errno(r, "Failed to sync user journal, ignoring: %m");
@@ -1209,7 +1213,7 @@ finish:
         server_driver_message(s, 0, NULL,
                               LOG_MESSAGE("Time spent on flushing to %s is %s for %u entries.",
                                           s->system_storage.path,
-                                          format_timespan(ts, sizeof(ts), now(CLOCK_MONOTONIC) - start, 0),
+                                          format_timespan(ts, sizeof(ts), usec_sub_unsigned(now(CLOCK_MONOTONIC), start), 0),
                                           n),
                               NULL);
 
@@ -1257,32 +1261,28 @@ int server_process_datagram(
                 uint32_t revents,
                 void *userdata) {
 
+        size_t label_len = 0, m;
         Server *s = userdata;
         struct ucred *ucred = NULL;
         struct timeval *tv = NULL;
         struct cmsghdr *cmsg;
         char *label = NULL;
-        size_t label_len = 0, m;
         struct iovec iovec;
         ssize_t n;
         int *fds = NULL, v = 0;
         size_t n_fds = 0;
 
-        union {
-                struct cmsghdr cmsghdr;
-
-                /* We use NAME_MAX space for the SELinux label
-                 * here. The kernel currently enforces no
-                 * limit, but according to suggestions from
-                 * the SELinux people this will change and it
-                 * will probably be identical to NAME_MAX. For
-                 * now we use that, but this should be updated
-                 * one day when the final limit is known. */
-                uint8_t buf[CMSG_SPACE(sizeof(struct ucred)) +
-                            CMSG_SPACE(sizeof(struct timeval)) +
-                            CMSG_SPACE(sizeof(int)) + /* fd */
-                            CMSG_SPACE(NAME_MAX)]; /* selinux label */
-        } control = {};
+        /* We use NAME_MAX space for the SELinux label here. The kernel currently enforces no limit, but
+         * according to suggestions from the SELinux people this will change and it will probably be
+         * identical to NAME_MAX. For now we use that, but this should be updated one day when the final
+         * limit is known.
+         *
+         * Here, we need to explicitly initialize the buffer with zero, as glibc has a bug in
+         * __convert_scm_timestamps(), which assumes the buffer is initialized. See #20741. */
+        CMSG_BUFFER_TYPE(CMSG_SPACE(sizeof(struct ucred)) +
+                         CMSG_SPACE_TIMEVAL +
+                         CMSG_SPACE(sizeof(int)) + /* fd */
+                         CMSG_SPACE(NAME_MAX) /* selinux label */) control = {};
 
         union sockaddr_union sa = {};
 
@@ -1312,34 +1312,40 @@ int server_process_datagram(
                             (size_t) LINE_MAX,
                             ALIGN(sizeof(struct nlmsghdr)) + ALIGN((size_t) MAX_AUDIT_MESSAGE_LENGTH)) + 1);
 
-        if (!GREEDY_REALLOC(s->buffer, s->buffer_size, m))
+        if (!GREEDY_REALLOC(s->buffer, m))
                 return log_oom();
 
-        iovec = IOVEC_MAKE(s->buffer, s->buffer_size - 1); /* Leave room for trailing NUL we add later */
+        iovec = IOVEC_MAKE(s->buffer, MALLOC_ELEMENTSOF(s->buffer) - 1); /* Leave room for trailing NUL we add later */
 
-        n = recvmsg(fd, &msghdr, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
-        if (n < 0) {
-                if (IN_SET(errno, EINTR, EAGAIN))
-                        return 0;
-
-                return log_error_errno(errno, "recvmsg() failed: %m");
+        n = recvmsg_safe(fd, &msghdr, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
+        if (IN_SET(n, -EINTR, -EAGAIN))
+                return 0;
+        if (n == -EXFULL) {
+                log_warning("Got message with truncated control data (too many fds sent?), ignoring.");
+                return 0;
         }
+        if (n < 0)
+                return log_error_errno(n, "recvmsg() failed: %m");
 
         CMSG_FOREACH(cmsg, &msghdr)
                 if (cmsg->cmsg_level == SOL_SOCKET &&
                     cmsg->cmsg_type == SCM_CREDENTIALS &&
-                    cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)))
+                    cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred))) {
+                        assert(!ucred);
                         ucred = (struct ucred*) CMSG_DATA(cmsg);
-                else if (cmsg->cmsg_level == SOL_SOCKET &&
+                } else if (cmsg->cmsg_level == SOL_SOCKET &&
                          cmsg->cmsg_type == SCM_SECURITY) {
+                        assert(!label);
                         label = (char*) CMSG_DATA(cmsg);
                         label_len = cmsg->cmsg_len - CMSG_LEN(0);
                 } else if (cmsg->cmsg_level == SOL_SOCKET &&
                            cmsg->cmsg_type == SO_TIMESTAMP &&
-                           cmsg->cmsg_len == CMSG_LEN(sizeof(struct timeval)))
+                           cmsg->cmsg_len == CMSG_LEN(sizeof(struct timeval))) {
+                        assert(!tv);
                         tv = (struct timeval*) CMSG_DATA(cmsg);
-                else if (cmsg->cmsg_level == SOL_SOCKET &&
+                } else if (cmsg->cmsg_level == SOL_SOCKET &&
                          cmsg->cmsg_type == SCM_RIGHTS) {
+                        assert(!fds);
                         fds = (int*) CMSG_DATA(cmsg);
                         n_fds = (cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int);
                 }
@@ -1629,28 +1635,31 @@ static int server_parse_config_file(Server *s) {
         assert(s);
 
         if (s->namespace) {
-                const char *namespaced;
+                const char *namespaced, *dropin_dirname;
 
                 /* If we are running in namespace mode, load the namespace specific configuration file, and nothing else */
                 namespaced = strjoina(PKGSYSCONFDIR "/journald@", s->namespace, ".conf");
+                dropin_dirname = strjoina("journald@", s->namespace, ".conf.d");
 
-                r = config_parse(
-                                NULL,
-                                namespaced, NULL,
+                r = config_parse_many(
+                                STRV_MAKE_CONST(namespaced),
+                                (const char* const*) CONF_PATHS_STRV("systemd"),
+                                dropin_dirname,
                                 "Journal\0",
                                 config_item_perf_lookup, journald_gperf_lookup,
-                                CONFIG_PARSE_WARN, s);
+                                CONFIG_PARSE_WARN, s, NULL);
                 if (r < 0)
                         return r;
 
                 return 0;
         }
 
-        return config_parse_many_nulstr(PKGSYSCONFDIR "/journald.conf",
-                                        CONF_PATHS_NULSTR("systemd/journald.conf.d"),
-                                        "Journal\0",
-                                        config_item_perf_lookup, journald_gperf_lookup,
-                                        CONFIG_PARSE_WARN, s);
+        return config_parse_many_nulstr(
+                        PKGSYSCONFDIR "/journald.conf",
+                        CONF_PATHS_NULSTR("systemd/journald.conf.d"),
+                        "Journal\0",
+                        config_item_perf_lookup, journald_gperf_lookup,
+                        CONFIG_PARSE_WARN, s, NULL);
 }
 
 static int server_dispatch_sync(sd_event_source *es, usec_t t, void *userdata) {
@@ -1677,27 +1686,20 @@ int server_schedule_sync(Server *s, int priority) {
                 return 0;
 
         if (s->sync_interval_usec > 0) {
-                usec_t when;
-
-                r = sd_event_now(s->event, CLOCK_MONOTONIC, &when);
-                if (r < 0)
-                        return r;
-
-                when += s->sync_interval_usec;
 
                 if (!s->sync_event_source) {
-                        r = sd_event_add_time(
+                        r = sd_event_add_time_relative(
                                         s->event,
                                         &s->sync_event_source,
                                         CLOCK_MONOTONIC,
-                                        when, 0,
+                                        s->sync_interval_usec, 0,
                                         server_dispatch_sync, s);
                         if (r < 0)
                                 return r;
 
                         r = sd_event_source_set_priority(s->sync_event_source, SD_EVENT_PRIORITY_IMPORTANT);
                 } else {
-                        r = sd_event_source_set_time(s->sync_event_source, when);
+                        r = sd_event_source_set_time_relative(s->sync_event_source, s->sync_interval_usec);
                         if (r < 0)
                                 return r;
 
@@ -1746,7 +1748,7 @@ static int server_open_hostname(Server *s) {
 
         r = sd_event_source_set_priority(s->hostname_event_source, SD_EVENT_PRIORITY_IMPORTANT-10);
         if (r < 0)
-                return log_error_errno(r, "Failed to adjust priority of host name event source: %m");
+                return log_error_errno(r, "Failed to adjust priority of hostname event source: %m");
 
         return 0;
 }
@@ -1888,7 +1890,7 @@ static int server_connect_notify(Server *s) {
         if (sd_watchdog_enabled(false, &s->watchdog_usec) > 0) {
                 s->send_watchdog = true;
 
-                r = sd_event_add_time(s->event, &s->watchdog_event_source, CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + s->watchdog_usec/2, s->watchdog_usec/4, dispatch_watchdog, s);
+                r = sd_event_add_time_relative(s->event, &s->watchdog_event_source, CLOCK_MONOTONIC, s->watchdog_usec/2, s->watchdog_usec/4, dispatch_watchdog, s);
                 if (r < 0)
                         return log_error_errno(r, "Failed to add watchdog time event: %m");
         }
@@ -1950,7 +1952,7 @@ static int vl_method_synchronize(Varlink *link, JsonVariant *parameters, Varlink
         if (r < 0)
                 return log_error_errno(r, "Failed to set event source destroy callback: %m");
 
-        varlink_ref(link); /* The varlink object is now left to the destroy callack to unref */
+        varlink_ref(link); /* The varlink object is now left to the destroy callback to unref */
 
         r = sd_event_source_set_priority(event_source, SD_EVENT_PRIORITY_NORMAL+15);
         if (r < 0)
@@ -2043,7 +2045,7 @@ static int server_open_varlink(Server *s, const char *socket, int fd) {
 
         assert(s);
 
-        r = varlink_server_new(&s->varlink_server, VARLINK_SERVER_ROOT_ONLY);
+        r = varlink_server_new(&s->varlink_server, VARLINK_SERVER_ROOT_ONLY|VARLINK_SERVER_INHERIT_USERDATA);
         if (r < 0)
                 return r;
 
@@ -2116,7 +2118,6 @@ static int server_idle_handler(sd_event_source *source, uint64_t usec, void *use
 
 int server_start_or_stop_idle_timer(Server *s) {
         _cleanup_(sd_event_source_unrefp) sd_event_source *source = NULL;
-        usec_t when;
         int r;
 
         assert(s);
@@ -2129,11 +2130,7 @@ int server_start_or_stop_idle_timer(Server *s) {
         if (s->idle_event_source)
                 return 1;
 
-        r = sd_event_now(s->event, CLOCK_MONOTONIC, &when);
-        if (r < 0)
-                return log_error_errno(r, "Failed to determine current time: %m");
-
-        r = sd_event_add_time(s->event, &source, CLOCK_MONOTONIC, usec_add(when, IDLE_TIMEOUT_USEC), 0, server_idle_handler, s);
+        r = sd_event_add_time_relative(s->event, &source, CLOCK_MONOTONIC, IDLE_TIMEOUT_USEC, 0, server_idle_handler, s);
         if (r < 0)
                 return log_error_errno(r, "Failed to allocate idle timer: %m");
 
@@ -2148,7 +2145,6 @@ int server_start_or_stop_idle_timer(Server *s) {
 }
 
 int server_refresh_idle_timer(Server *s) {
-        usec_t when;
         int r;
 
         assert(s);
@@ -2156,11 +2152,7 @@ int server_refresh_idle_timer(Server *s) {
         if (!s->idle_event_source)
                 return 0;
 
-        r = sd_event_now(s->event, CLOCK_MONOTONIC, &when);
-        if (r < 0)
-                return log_error_errno(r, "Failed to determine current time: %m");
-
-        r = sd_event_source_set_time(s->idle_event_source, usec_add(when, IDLE_TIMEOUT_USEC));
+        r = sd_event_source_set_time_relative(s->idle_event_source, IDLE_TIMEOUT_USEC);
         if (r < 0)
                 return log_error_errno(r, "Failed to refresh idle timer: %m");
 
@@ -2205,8 +2197,10 @@ int server_init(Server *s, const char *namespace) {
                 .notify_fd = -1,
 
                 .compress.enabled = true,
-                .compress.threshold_bytes = (uint64_t) -1,
+                .compress.threshold_bytes = UINT64_MAX,
                 .seal = true,
+
+                .set_audit = true,
 
                 .watchdog_usec = USEC_INFINITY,
 
@@ -2449,7 +2443,6 @@ int server_init(Server *s, const char *namespace) {
 void server_maybe_append_tags(Server *s) {
 #if HAVE_GCRYPT
         JournalFile *f;
-        Iterator i;
         usec_t n;
 
         n = now(CLOCK_REALTIME);
@@ -2457,7 +2450,7 @@ void server_maybe_append_tags(Server *s) {
         if (s->system_journal)
                 journal_file_maybe_append_tag(s->system_journal, n);
 
-        ORDERED_HASHMAP_FOREACH(f, s->user_journals, i)
+        ORDERED_HASHMAP_FOREACH(f, s->user_journals)
                 journal_file_maybe_append_tag(f, n);
 #endif
 }
@@ -2571,7 +2564,7 @@ int config_parse_line_max(
 
                 r = parse_size(rvalue, 1024, &v);
                 if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r, "Failed to parse LineMax= value, ignoring: %s", rvalue);
+                        log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to parse LineMax= value, ignoring: %s", rvalue);
                         return 0;
                 }
 
@@ -2612,7 +2605,7 @@ int config_parse_compress(
 
         if (isempty(rvalue)) {
                 compress->enabled = true;
-                compress->threshold_bytes = (uint64_t) -1;
+                compress->threshold_bytes = UINT64_MAX;
         } else if (streq(rvalue, "1")) {
                 log_syntax(unit, LOG_WARNING, filename, line, 0,
                            "Compress= ambiguously specified as 1, enabling compression with default threshold");
@@ -2626,7 +2619,7 @@ int config_parse_compress(
                 if (r < 0) {
                         r = parse_size(rvalue, 1024, &compress->threshold_bytes);
                         if (r < 0)
-                                log_syntax(unit, LOG_ERR, filename, line, r,
+                                log_syntax(unit, LOG_WARNING, filename, line, r,
                                            "Failed to parse Compress= value, ignoring: %s", rvalue);
                         else
                                 compress->enabled = true;

@@ -1,5 +1,7 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
+
+#include <efi.h>
 
 #define SETUP_MAGIC             0x53726448      /* "HdrS" */
 
@@ -81,7 +83,7 @@ struct boot_params {
         UINT8  _pad9[276];
 } __attribute__((packed));
 
-EFI_STATUS linux_exec(EFI_HANDLE *image,
+EFI_STATUS linux_exec(EFI_HANDLE image,
                       CHAR8 *cmdline, UINTN cmdline_size,
                       UINTN linux_addr,
                       UINTN initrd_addr, UINTN initrd_size);

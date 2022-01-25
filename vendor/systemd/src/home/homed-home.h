@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 typedef struct Home Home;
@@ -13,6 +13,7 @@ typedef enum HomeState {
         HOME_UNFIXATED,               /* home exists, but local record does not */
         HOME_ABSENT,                  /* local record exists, but home does not */
         HOME_INACTIVE,                /* record and home exist, but is not logged in */
+        HOME_DIRTY,                   /* like HOME_INACTIVE, but the home directory wasn't cleanly deactivated */
         HOME_FIXATING,                /* generating local record from home */
         HOME_FIXATING_FOR_ACTIVATION, /* fixating in order to activate soon */
         HOME_FIXATING_FOR_ACQUIRE,    /* fixating because Acquire() was called */
@@ -36,7 +37,7 @@ typedef enum HomeState {
         HOME_AUTHENTICATING_WHILE_ACTIVE,
         HOME_AUTHENTICATING_FOR_ACQUIRE,  /* authenticating because Acquire() was called */
         _HOME_STATE_MAX,
-        _HOME_STATE_INVALID = -1
+        _HOME_STATE_INVALID = -EINVAL,
 } HomeState;
 
 static inline bool HOME_STATE_IS_ACTIVE(HomeState state) {
@@ -83,7 +84,7 @@ struct Home {
         /* Note that the 'state' field is only set to a state while we are doing something (i.e. activating,
          * deactivating, creating, removing, and such), or when the home is an "unfixated" one. When we are
          * done with an operation we invalidate the state. This is hint for home_get_state() to check the
-         * state on request as needed from the mount table and similar.*/
+         * state on request as needed from the mount table and similar. */
         HomeState state;
         int signed_locally; /* signed only by us */
 
@@ -163,6 +164,8 @@ int home_schedule_operation(Home *h, Operation *o, sd_bus_error *error);
 int home_auto_login(Home *h, char ***ret_seats);
 
 int home_set_current_message(Home *h, sd_bus_message *m);
+
+int home_wait_for_worker(Home *h);
 
 const char *home_state_to_string(HomeState state);
 HomeState home_state_from_string(const char *s);

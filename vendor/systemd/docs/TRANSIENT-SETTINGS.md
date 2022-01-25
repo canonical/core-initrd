@@ -68,6 +68,7 @@ Most generic unit settings are available for transient units.
 ✓ ConditionKernelCommandLine=
 ✓ ConditionKernelVersion=
 ✓ ConditionArchitecture=
+✓ ConditionFirmware=
 ✓ ConditionVirtualization=
 ✓ ConditionSecurity=
 ✓ ConditionCapability=
@@ -114,6 +115,7 @@ All execution-related settings are available for transient units.
 ✓ SupplementaryGroups=
 ✓ Nice=
 ✓ OOMScoreAdjust=
+✓ CoredumpFilter=
 ✓ IOSchedulingClass=
 ✓ IOSchedulingPriority=
 ✓ CPUSchedulingPolicy=
@@ -150,14 +152,20 @@ All execution-related settings are available for transient units.
 ✓ TimerSlackNSec=
 ✓ NoNewPrivileges=
 ✓ KeyringMode=
+✓ ProtectProc=
+✓ ProcSubset=
 ✓ SystemCallFilter=
 ✓ SystemCallArchitectures=
 ✓ SystemCallErrorNumber=
+✓ SystemCallLog=
 ✓ MemoryDenyWriteExecute=
 ✓ RestrictNamespaces=
 ✓ RestrictRealtime=
 ✓ RestrictSUIDSGID=
 ✓ RestrictAddressFamilies=
+✓ RootHash=
+✓ RootHashSignature=
+✓ RootVerity=
 ✓ LockPersonality=
 ✓ LimitCPU=
 ✓ LimitFSIZE=
@@ -263,6 +271,10 @@ All cgroup/resource control settings are available for transient units
 ✓ IPAccounting=
 ✓ IPAddressAllow=
 ✓ IPAddressDeny=
+✓ ManagedOOMSwap=
+✓ ManagedOOMMemoryPressure=
+✓ ManagedOOMMemoryPressureLimit=
+✓ ManagedOOMPreference=
 ```
 
 ## Process Killing Settings
@@ -284,37 +296,39 @@ All process killing settings are available for transient units:
 Most service unit settings are available for transient units.
 
 ```
-✓ PIDFile=
+✓ BusName=
 ✓ ExecCondition=
-✓ ExecStartPre=
+✓ ExecReload=
 ✓ ExecStart=
 ✓ ExecStartPost=
-✓ ExecReload=
+✓ ExecStartPre=
 ✓ ExecStop=
 ✓ ExecStopPost=
+✓ FileDescriptorStoreMax=
+✓ GuessMainPID=
+✓ NonBlocking=
+✓ NotifyAccess=
+✓ OOMPolicy=
+✓ PIDFile=
+✓ RemainAfterExit=
+✓ Restart=
+✓ RestartForceExitStatus=
+✓ RestartPreventExitStatus=
 ✓ RestartSec=
-✓ TimeoutStartSec=
-✓ TimeoutStopSec=
+✓ RootDirectoryStartOnly=
+✓ RuntimeMaxSec=
+  Sockets=
+✓ SuccessExitStatus=
 ✓ TimeoutAbortSec=
 ✓ TimeoutSec=
-✓ RuntimeMaxSec=
-✓ WatchdogSec=
+✓ TimeoutStartFailureMode=
+✓ TimeoutStartSec=
+✓ TimeoutStopFailureMode=
+✓ TimeoutStopSec=
 ✓ Type=
-✓ Restart=
-✓ RootDirectoryStartOnly=
-✓ RemainAfterExit=
-✓ GuessMainPID=
-✓ RestartPreventExitStatus=
-✓ RestartForceExitStatus=
-✓ SuccessExitStatus=
-✓ NonBlocking=
-✓ BusName=
-✓ FileDescriptorStoreMax=
-✓ NotifyAccess=
-  Sockets=
 ✓ USBFunctionDescriptors=
 ✓ USBFunctionStrings=
-✓ OOMPolicy=
+✓ WatchdogSec=
 ```
 
 ## Mount Unit Settings
@@ -331,6 +345,7 @@ All mount unit settings are available to transient units:
 ✓ SloppyOptions=
 ✓ LazyUnmount=
 ✓ ForceUnmount=
+✓ ReadWriteOnly=
 ```
 
 ## Automount Unit Settings
@@ -361,6 +376,7 @@ Most timer unit settings are available to transient units.
 ✓ RemainAfterElapse=
 ✓ AccuracySec=
 ✓ RandomizedDelaySec=
+✓ FixedRandomDelay=
   Unit=
 ```
 
@@ -406,6 +422,7 @@ Most socket unit settings are available to transient units.
 ✓ SocketMode=
 ✓ DirectoryMode=
 ✓ Accept=
+✓ FlushPending=
 ✓ Writable=
 ✓ MaxConnections=
 ✓ MaxConnectionsPerSource=
@@ -427,6 +444,7 @@ Most socket unit settings are available to transient units.
 ✓ Broadcast=
 ✓ PassCredentials=
 ✓ PassSecurity=
+✓ PassPacketInfo=
 ✓ TCPCongestion=
 ✓ ReusePort=
 ✓ MessageQueueMaxMessages=

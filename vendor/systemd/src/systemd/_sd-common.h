@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #ifndef foosdcommonhfoo
 #define foosdcommonhfoo
 
@@ -19,7 +19,7 @@
 
 /* This is a private header; never even think of including this directly! */
 
-#if defined(__INCLUDE_LEVEL__) && __INCLUDE_LEVEL__ <= 1
+#if defined(__INCLUDE_LEVEL__) && __INCLUDE_LEVEL__ <= 1 && !defined(__COVERITY__)
 #  error "Do not include _sd-common.h directly; it is a private header."
 #endif
 
@@ -98,5 +98,11 @@ typedef void (*_sd_destroy_t)(void *userdata);
                         func(*p);                               \
         }                                                       \
         struct _sd_useless_struct_to_allow_trailing_semicolon_
+
+/* The following macro should be used in all public enums, to force 64bit wideness on them, so that we can
+ * freely extend them later on, without breaking compatibility. */
+#define _SD_ENUM_FORCE_S64(id)               \
+        _SD_##id##_INT64_MIN = INT64_MIN,    \
+        _SD_##id##_INT64_MAX = INT64_MAX
 
 #endif

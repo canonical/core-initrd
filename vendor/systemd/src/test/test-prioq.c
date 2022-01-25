@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdlib.h>
 
@@ -60,7 +60,7 @@ DEFINE_PRIVATE_HASH_OPS(test_hash_ops, struct test, test_hash, test_compare);
 
 static void test_struct(void) {
         _cleanup_(prioq_freep) Prioq *q = NULL;
-        _cleanup_(set_freep) Set *s = NULL;
+        _cleanup_set_free_ Set *s = NULL;
         unsigned previous = 0, i;
         struct test *t;
 
@@ -72,7 +72,7 @@ static void test_struct(void) {
         assert_se(prioq_peek(q) == NULL);
         assert_se(prioq_peek_by_index(q, 0) == NULL);
         assert_se(prioq_peek_by_index(q, 1) == NULL);
-        assert_se(prioq_peek_by_index(q, (unsigned) -1) == NULL);
+        assert_se(prioq_peek_by_index(q, UINT_MAX) == NULL);
 
         for (i = 0; i < SET_SIZE; i++) {
                 assert_se(t = new0(struct test, 1));

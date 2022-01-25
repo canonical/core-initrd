@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #ifndef foosdjournalhfoo
 #define foosdjournalhfoo
 
@@ -72,7 +72,7 @@ enum {
         SD_JOURNAL_ALL_NAMESPACES            = 1 << 5, /* Show all namespaces, not just the default or specified one */
         SD_JOURNAL_INCLUDE_DEFAULT_NAMESPACE = 1 << 6, /* Show default namespace in addition to specified one */
 
-        SD_JOURNAL_SYSTEM_ONLY _sd_deprecated_ = SD_JOURNAL_SYSTEM /* deprecated name */
+        SD_JOURNAL_SYSTEM_ONLY _sd_deprecated_ = SD_JOURNAL_SYSTEM /* old name */
 };
 
 /* Wakeup event types */
@@ -88,7 +88,7 @@ int sd_journal_open_directory(sd_journal **ret, const char *path, int flags);
 int sd_journal_open_directory_fd(sd_journal **ret, int fd, int flags);
 int sd_journal_open_files(sd_journal **ret, const char **paths, int flags);
 int sd_journal_open_files_fd(sd_journal **ret, int fds[], unsigned n_fds, int flags);
-int sd_journal_open_container(sd_journal **ret, const char *machine, int flags) _sd_deprecated_; /* deprecated */
+int sd_journal_open_container(sd_journal **ret, const char *machine, int flags) _sd_deprecated_;
 void sd_journal_close(sd_journal *j);
 
 int sd_journal_previous(sd_journal *j);
@@ -105,6 +105,7 @@ int sd_journal_get_data_threshold(sd_journal *j, size_t *sz);
 
 int sd_journal_get_data(sd_journal *j, const char *field, const void **data, size_t *l);
 int sd_journal_enumerate_data(sd_journal *j, const void **data, size_t *l);
+int sd_journal_enumerate_available_data(sd_journal *j, const void **data, size_t *l);
 void sd_journal_restart_data(sd_journal *j);
 
 int sd_journal_add_match(sd_journal *j, const void *data, size_t size);
@@ -128,6 +129,7 @@ int sd_journal_get_usage(sd_journal *j, uint64_t *bytes);
 
 int sd_journal_query_unique(sd_journal *j, const char *field);
 int sd_journal_enumerate_unique(sd_journal *j, const void **data, size_t *l);
+int sd_journal_enumerate_available_unique(sd_journal *j, const void **data, size_t *l);
 void sd_journal_restart_unique(sd_journal *j);
 
 int sd_journal_enumerate_fields(sd_journal *j, const char **field);
@@ -156,13 +158,13 @@ int sd_journal_has_persistent_files(sd_journal *j);
         if (sd_journal_seek_tail(j) < 0) { }                            \
         else while (sd_journal_previous(j) > 0)
 
-/* Iterate through the data fields of the current journal entry */
+/* Iterate through all available data fields of the current journal entry */
 #define SD_JOURNAL_FOREACH_DATA(j, data, l)                             \
-        for (sd_journal_restart_data(j); sd_journal_enumerate_data((j), &(data), &(l)) > 0; )
+        for (sd_journal_restart_data(j); sd_journal_enumerate_available_data((j), &(data), &(l)) > 0; )
 
-/* Iterate through the all known values of a specific field */
+/* Iterate through all available values of a specific field */
 #define SD_JOURNAL_FOREACH_UNIQUE(j, data, l)                           \
-        for (sd_journal_restart_unique(j); sd_journal_enumerate_unique((j), &(data), &(l)) > 0; )
+        for (sd_journal_restart_unique(j); sd_journal_enumerate_available_unique((j), &(data), &(l)) > 0; )
 
 /* Iterate through all known field names */
 #define SD_JOURNAL_FOREACH_FIELD(j, field) \

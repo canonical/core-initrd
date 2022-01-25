@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <openssl/evp.h>
@@ -28,10 +28,12 @@ struct Manager {
         Hashmap *homes_by_sysfs;
 
         bool scan_slash_home;
+        UserStorage default_storage;
+        char *default_file_system_type;
 
         sd_event_source *inotify_event_source;
 
-        /* An even source we receieve sd_notify() messages from our worker from */
+        /* An event source we receive sd_notify() messages from our worker from */
         sd_event_source *notify_socket_event_source;
 
         sd_device_monitor *device_monitor;
@@ -43,6 +45,7 @@ struct Manager {
         Home *gc_focus;
 
         VarlinkServer *varlink_server;
+        char *userdb_service;
 
         EVP_PKEY *private_key; /* actually a pair of private and public key */
         Hashmap *public_keys; /* key name [char*] → publick key [EVP_PKEY*] */

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #ifndef foosdid128hfoo
 #define foosdid128hfoo
 
@@ -18,6 +18,7 @@
 ***/
 
 #include <inttypes.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "_sd-common.h"
@@ -62,7 +63,9 @@ int sd_id128_get_boot_app_specific(sd_id128_t app_id, sd_id128_t *ret);
 #define SD_ID128_FORMAT_STR "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x"
 #define SD_ID128_FORMAT_VAL(x) (x).bytes[0], (x).bytes[1], (x).bytes[2], (x).bytes[3], (x).bytes[4], (x).bytes[5], (x).bytes[6], (x).bytes[7], (x).bytes[8], (x).bytes[9], (x).bytes[10], (x).bytes[11], (x).bytes[12], (x).bytes[13], (x).bytes[14], (x).bytes[15]
 
-/* Like SD_ID128_FORMAT_STR, but formats as UUID, not in plain format */
+/* Like SD_ID128_FORMAT_STR, but formats as UUID, not in plain format (Strictly Big Endian byte order,
+ * i.e. treats everything as RFC4122 Variant 1 UUIDs, even if variant says otherwise, but matching other
+ * Linux userspace behaviour.) */
 #define SD_ID128_UUID_FORMAT_STR "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
 
 #define SD_ID128_CONST_STR(x)                                           \
@@ -104,6 +107,9 @@ int sd_id128_get_boot_app_specific(sd_id128_t app_id, sd_id128_t *ret);
 #define SD_ID128_MAKE_STR(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) \
         #a #b #c #d #e #f #g #h #i #j #k #l #m #n #o #p
 
+#define SD_ID128_MAKE_UUID_STR(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) \
+        #a #b #c #d "-" #e #f "-" #g #h "-" #i #j "-" #k #l #m #n #o #p
+
 _sd_pure_ static __inline__ int sd_id128_equal(sd_id128_t a, sd_id128_t b) {
         return memcmp(&a, &b, 16) == 0;
 }
@@ -118,6 +124,32 @@ _sd_pure_ static __inline__ int sd_id128_is_allf(sd_id128_t a) {
 
 #define SD_ID128_NULL ((const sd_id128_t) { .qwords = { 0, 0 }})
 #define SD_ID128_ALLF ((const sd_id128_t) { .qwords = { UINT64_C(0xFFFFFFFFFFFFFFFF), UINT64_C(0xFFFFFFFFFFFFFFFF) }})
+
+_sd_pure_ static __inline__ int sd_id128_in_setv(sd_id128_t a, va_list ap) {
+        for (;;) {
+                sd_id128_t b = va_arg(ap, sd_id128_t);
+
+                if (sd_id128_is_null(b))
+                        return 0;
+
+                if (sd_id128_equal(a, b))
+                        return 1;
+        }
+}
+
+_sd_pure_ static __inline__ int sd_id128_in_set_sentinel(sd_id128_t a, ...) {
+        va_list ap;
+        int r;
+
+        va_start(ap, a);
+        r = sd_id128_in_setv(a, ap);
+        va_end(ap);
+
+        return r;
+}
+
+#define sd_id128_in_set(a, ...) \
+        sd_id128_in_set_sentinel(a, ##__VA_ARGS__, SD_ID128_NULL)
 
 _SD_END_DECLARATIONS;
 

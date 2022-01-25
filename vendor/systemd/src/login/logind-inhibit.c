@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -8,6 +8,7 @@
 
 #include "alloc-util.h"
 #include "env-file.h"
+#include "errno-list.h"
 #include "escape.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -372,12 +373,11 @@ bool inhibitor_is_orphan(Inhibitor *i) {
 
 InhibitWhat manager_inhibit_what(Manager *m, InhibitMode mm) {
         Inhibitor *i;
-        Iterator j;
         InhibitWhat what = 0;
 
         assert(m);
 
-        HASHMAP_FOREACH(i, m->inhibitors, j)
+        HASHMAP_FOREACH(i, m->inhibitors)
                 if (i->mode == mm && i->started)
                         what |= i->what;
 
@@ -413,14 +413,13 @@ bool manager_is_inhibited(
                 Inhibitor **offending) {
 
         Inhibitor *i;
-        Iterator j;
         struct dual_timestamp ts = DUAL_TIMESTAMP_NULL;
         bool inhibited = false;
 
         assert(m);
         assert(w > 0 && w < _INHIBIT_WHAT_MAX);
 
-        HASHMAP_FOREACH(i, m->inhibitors, j) {
+        HASHMAP_FOREACH(i, m->inhibitors) {
                 if (!i->started)
                         continue;
 
@@ -453,7 +452,15 @@ bool manager_is_inhibited(
 }
 
 const char *inhibit_what_to_string(InhibitWhat w) {
-        static thread_local char buffer[97];
+        static thread_local char buffer[STRLEN(
+            "shutdown:"
+            "sleep:"
+            "idle:"
+            "handle-power-key:"
+            "handle-suspend-key:"
+            "handle-hibernate-key:"
+            "handle-lid-switch:"
+            "handle-reboot-key")+1];
         char *p;
 
         if (w < 0 || w >= _INHIBIT_WHAT_MAX)
@@ -474,6 +481,8 @@ const char *inhibit_what_to_string(InhibitWhat w) {
                 p = stpcpy(p, "handle-hibernate-key:");
         if (w & INHIBIT_HANDLE_LID_SWITCH)
                 p = stpcpy(p, "handle-lid-switch:");
+        if (w & INHIBIT_HANDLE_REBOOT_KEY)
+                p = stpcpy(p, "handle-reboot-key:");
 
         if (p > buffer)
                 *(p-1) = 0;
@@ -483,31 +492,41 @@ const char *inhibit_what_to_string(InhibitWhat w) {
         return buffer;
 }
 
-InhibitWhat inhibit_what_from_string(const char *s) {
+int inhibit_what_from_string(const char *s) {
         InhibitWhat what = 0;
-        const char *word, *state;
-        size_t l;
 
-        FOREACH_WORD_SEPARATOR(word, l, s, ":", state) {
-                if (l == 8 && strneq(word, "shutdown", l))
+        for (const char *p = s;;) {
+                _cleanup_free_ char *word = NULL;
+                int r;
+
+                /* A sanity check that our return values fit in an int */
+                assert_cc((int) _INHIBIT_WHAT_MAX == _INHIBIT_WHAT_MAX);
+
+                r = extract_first_word(&p, &word, ":", EXTRACT_DONT_COALESCE_SEPARATORS);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        return what;
+
+                if (streq(word, "shutdown"))
                         what |= INHIBIT_SHUTDOWN;
-                else if (l == 5 && strneq(word, "sleep", l))
+                else if (streq(word, "sleep"))
                         what |= INHIBIT_SLEEP;
-                else if (l == 4 && strneq(word, "idle", l))
+                else if (streq(word, "idle"))
                         what |= INHIBIT_IDLE;
-                else if (l == 16 && strneq(word, "handle-power-key", l))
+                else if (streq(word, "handle-power-key"))
                         what |= INHIBIT_HANDLE_POWER_KEY;
-                else if (l == 18 && strneq(word, "handle-suspend-key", l))
+                else if (streq(word, "handle-suspend-key"))
                         what |= INHIBIT_HANDLE_SUSPEND_KEY;
-                else if (l == 20 && strneq(word, "handle-hibernate-key", l))
+                else if (streq(word, "handle-hibernate-key"))
                         what |= INHIBIT_HANDLE_HIBERNATE_KEY;
-                else if (l == 17 && strneq(word, "handle-lid-switch", l))
+                else if (streq(word, "handle-lid-switch"))
                         what |= INHIBIT_HANDLE_LID_SWITCH;
+                else if (streq(word, "handle-reboot-key"))
+                        what |= INHIBIT_HANDLE_REBOOT_KEY;
                 else
                         return _INHIBIT_WHAT_INVALID;
         }
-
-        return what;
 }
 
 static const char* const inhibit_mode_table[_INHIBIT_MODE_MAX] = {

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <inttypes.h>
@@ -54,6 +54,7 @@ struct sd_lldp_neighbor {
         char *port_description;
         char *system_name;
         char *system_description;
+        char *mud_url;
 
         uint16_t port_vlan_id;
 

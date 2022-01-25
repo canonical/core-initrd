@@ -1,14 +1,18 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "sd-netlink.h"
 
+#include "format-util.h"
 #include "memory-util.h"
 #include "netlink-internal.h"
 #include "netlink-util.h"
+#include "parse-util.h"
 #include "strv.h"
 
 int rtnl_set_link_name(sd_netlink **rtnl, int ifindex, const char *name) {
         _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *message = NULL;
+        _cleanup_strv_free_ char **alternative_names = NULL;
+        char old_name[IF_NAMESIZE + 1] = {};
         int r;
 
         assert(rtnl);
@@ -18,10 +22,18 @@ int rtnl_set_link_name(sd_netlink **rtnl, int ifindex, const char *name) {
         if (!ifname_valid(name))
                 return -EINVAL;
 
-        if (!*rtnl) {
-                r = sd_netlink_open(rtnl);
+        r = rtnl_get_link_alternative_names(rtnl, ifindex, &alternative_names);
+        if (r < 0)
+                log_debug_errno(r, "Failed to get alternative names on network interface %i, ignoring: %m",
+                                ifindex);
+
+        if (strv_contains(alternative_names, name)) {
+                r = rtnl_delete_link_alternative_names(rtnl, ifindex, STRV_MAKE(name));
                 if (r < 0)
-                        return r;
+                        return log_debug_errno(r, "Failed to remove '%s' from alternative names on network interface %i: %m",
+                                               name, ifindex);
+
+                format_ifname(ifindex, old_name);
         }
 
         r = sd_rtnl_message_new_link(*rtnl, &message, RTM_SETLINK, ifindex);
@@ -36,18 +48,35 @@ int rtnl_set_link_name(sd_netlink **rtnl, int ifindex, const char *name) {
         if (r < 0)
                 return r;
 
+        if (!isempty(old_name)) {
+                r = rtnl_set_link_alternative_names(rtnl, ifindex, STRV_MAKE(old_name));
+                if (r < 0)
+                        log_debug_errno(r, "Failed to set '%s' as an alternative name on network interface %i, ignoring: %m",
+                                        old_name, ifindex);
+        }
+
         return 0;
 }
 
-int rtnl_set_link_properties(sd_netlink **rtnl, int ifindex, const char *alias,
-                             const struct ether_addr *mac, uint32_t mtu) {
+int rtnl_set_link_properties(
+                sd_netlink **rtnl,
+                int ifindex,
+                const char *alias,
+                const struct ether_addr *mac,
+                uint32_t txqueues,
+                uint32_t rxqueues,
+                uint32_t txqueuelen,
+                uint32_t mtu,
+                uint32_t gso_max_size,
+                size_t gso_max_segments) {
         _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *message = NULL;
         int r;
 
         assert(rtnl);
         assert(ifindex > 0);
 
-        if (!alias && !mac && mtu == 0)
+        if (!alias && !mac && txqueues == 0 && rxqueues == 0 && txqueuelen == UINT32_MAX && mtu == 0 &&
+            gso_max_size == 0 && gso_max_segments == 0)
                 return 0;
 
         if (!*rtnl) {
@@ -72,8 +101,38 @@ int rtnl_set_link_properties(sd_netlink **rtnl, int ifindex, const char *alias,
                         return r;
         }
 
+        if (txqueues > 0) {
+                r = sd_netlink_message_append_u32(message, IFLA_NUM_TX_QUEUES, txqueues);
+                if (r < 0)
+                        return r;
+        }
+
+        if (rxqueues > 0) {
+                r = sd_netlink_message_append_u32(message, IFLA_NUM_RX_QUEUES, rxqueues);
+                if (r < 0)
+                        return r;
+        }
+
+        if (txqueuelen < UINT32_MAX) {
+                r = sd_netlink_message_append_u32(message, IFLA_TXQLEN, txqueuelen);
+                if (r < 0)
+                        return r;
+        }
+
         if (mtu != 0) {
                 r = sd_netlink_message_append_u32(message, IFLA_MTU, mtu);
+                if (r < 0)
+                        return r;
+        }
+
+        if (gso_max_size > 0) {
+                r = sd_netlink_message_append_u32(message, IFLA_GSO_MAX_SIZE, gso_max_size);
+                if (r < 0)
+                        return r;
+        }
+
+        if (gso_max_segments > 0) {
+                r = sd_netlink_message_append_u32(message, IFLA_GSO_MAX_SEGS, gso_max_segments);
                 if (r < 0)
                         return r;
         }
@@ -85,12 +144,45 @@ int rtnl_set_link_properties(sd_netlink **rtnl, int ifindex, const char *alias,
         return 0;
 }
 
-int rtnl_set_link_alternative_names(sd_netlink **rtnl, int ifindex, char * const *alternative_names) {
+int rtnl_get_link_alternative_names(sd_netlink **rtnl, int ifindex, char ***ret) {
+        _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *message = NULL, *reply = NULL;
+        _cleanup_strv_free_ char **names = NULL;
+        int r;
+
+        assert(rtnl);
+        assert(ifindex > 0);
+        assert(ret);
+
+        if (!*rtnl) {
+                r = sd_netlink_open(rtnl);
+                if (r < 0)
+                        return r;
+        }
+
+        r = sd_rtnl_message_new_link(*rtnl, &message, RTM_GETLINK, ifindex);
+        if (r < 0)
+                return r;
+
+        r = sd_netlink_call(*rtnl, message, 0, &reply);
+        if (r < 0)
+                return r;
+
+        r = sd_netlink_message_read_strv(reply, IFLA_PROP_LIST, IFLA_ALT_IFNAME, &names);
+        if (r < 0 && r != -ENODATA)
+                return r;
+
+        *ret = TAKE_PTR(names);
+
+        return 0;
+}
+
+static int rtnl_update_link_alternative_names(sd_netlink **rtnl, uint16_t nlmsg_type, int ifindex, char * const *alternative_names) {
         _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *message = NULL;
         int r;
 
         assert(rtnl);
         assert(ifindex > 0);
+        assert(IN_SET(nlmsg_type, RTM_NEWLINKPROP, RTM_DELLINKPROP));
 
         if (strv_isempty(alternative_names))
                 return 0;
@@ -101,7 +193,7 @@ int rtnl_set_link_alternative_names(sd_netlink **rtnl, int ifindex, char * const
                         return r;
         }
 
-        r = sd_rtnl_message_new_link(*rtnl, &message, RTM_NEWLINKPROP, ifindex);
+        r = sd_rtnl_message_new_link(*rtnl, &message, nlmsg_type, ifindex);
         if (r < 0)
                 return r;
 
@@ -122,6 +214,14 @@ int rtnl_set_link_alternative_names(sd_netlink **rtnl, int ifindex, char * const
                 return r;
 
         return 0;
+}
+
+int rtnl_set_link_alternative_names(sd_netlink **rtnl, int ifindex, char * const *alternative_names) {
+        return rtnl_update_link_alternative_names(rtnl, RTM_NEWLINKPROP, ifindex, alternative_names);
+}
+
+int rtnl_delete_link_alternative_names(sd_netlink **rtnl, int ifindex, char * const *alternative_names) {
+        return rtnl_update_link_alternative_names(rtnl, RTM_DELLINKPROP, ifindex, alternative_names);
 }
 
 int rtnl_set_link_alternative_names_by_ifname(sd_netlink **rtnl, const char *ifname, char * const *alternative_names) {
@@ -167,12 +267,17 @@ int rtnl_set_link_alternative_names_by_ifname(sd_netlink **rtnl, const char *ifn
         return 0;
 }
 
-int rtnl_resolve_link_alternative_name(sd_netlink **rtnl, const char *name) {
+int rtnl_resolve_link_alternative_name(sd_netlink **rtnl, const char *name, char **ret) {
         _cleanup_(sd_netlink_unrefp) sd_netlink *our_rtnl = NULL;
         _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *message = NULL, *reply = NULL;
-        int r, ret;
+        int r, ifindex;
 
         assert(name);
+
+        /* This returns ifindex and the main interface name. */
+
+        if (!ifname_valid_full(name, IFNAME_VALID_ALTERNATIVE))
+                return -EINVAL;
 
         if (!rtnl)
                 rtnl = &our_rtnl;
@@ -196,16 +301,69 @@ int rtnl_resolve_link_alternative_name(sd_netlink **rtnl, const char *name) {
         if (r < 0)
                 return r;
 
-        r = sd_rtnl_message_link_get_ifindex(reply, &ret);
+        r = sd_rtnl_message_link_get_ifindex(reply, &ifindex);
         if (r < 0)
                 return r;
-        assert(ret > 0);
-        return ret;
+        assert(ifindex > 0);
+
+        if (ret) {
+                r = sd_netlink_message_read_string_strdup(message, IFLA_IFNAME, ret);
+                if (r < 0)
+                        return r;
+        }
+
+        return ifindex;
 }
 
-int rtnl_get_link_iftype(sd_netlink **rtnl, int ifindex, unsigned short *ret) {
-        _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *message = NULL, *reply = NULL;
+int rtnl_resolve_ifname(sd_netlink **rtnl, const char *name) {
         int r;
+
+        /* Like if_nametoindex, but resolves "alternative names" too. */
+
+        assert(name);
+
+        r = if_nametoindex(name);
+        if (r > 0)
+                return r;
+
+        return rtnl_resolve_link_alternative_name(rtnl, name, NULL);
+}
+
+int rtnl_resolve_interface(sd_netlink **rtnl, const char *name) {
+        int r;
+
+        /* Like rtnl_resolve_ifname, but resolves interface numbers too. */
+
+        assert(name);
+
+        r = parse_ifindex(name);
+        if (r > 0)
+                return r;
+        assert(r < 0);
+
+        return rtnl_resolve_ifname(rtnl, name);
+}
+
+int rtnl_resolve_interface_or_warn(sd_netlink **rtnl, const char *name) {
+        int r;
+
+        r = rtnl_resolve_interface(rtnl, name);
+        if (r < 0)
+                return log_error_errno(r, "Failed to resolve interface \"%s\": %m", name);
+        return r;
+}
+
+int rtnl_get_link_info(sd_netlink **rtnl, int ifindex, unsigned short *ret_iftype, unsigned *ret_flags) {
+        _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *message = NULL, *reply = NULL;
+        unsigned short iftype;
+        unsigned flags;
+        int r;
+
+        assert(rtnl);
+        assert(ifindex > 0);
+
+        if (!ret_iftype && !ret_flags)
+                return 0;
 
         if (!*rtnl) {
                 r = sd_netlink_open(rtnl);
@@ -223,7 +381,23 @@ int rtnl_get_link_iftype(sd_netlink **rtnl, int ifindex, unsigned short *ret) {
         if (r < 0)
                 return r;
 
-        return sd_rtnl_message_link_get_type(reply, ret);
+        if (ret_iftype) {
+                r = sd_rtnl_message_link_get_type(reply, &iftype);
+                if (r < 0)
+                        return r;
+        }
+
+        if (ret_flags) {
+                r = sd_rtnl_message_link_get_flags(reply, &flags);
+                if (r < 0)
+                        return r;
+        }
+
+        if (ret_iftype)
+                *ret_iftype = iftype;
+        if (ret_flags)
+                *ret_flags = flags;
+        return 0;
 }
 
 int rtnl_message_new_synthetic_error(sd_netlink *rtnl, int error, uint32_t serial, sd_netlink_message **ret) {
@@ -236,10 +410,10 @@ int rtnl_message_new_synthetic_error(sd_netlink *rtnl, int error, uint32_t seria
         if (r < 0)
                 return r;
 
+        rtnl_message_seal(*ret);
         (*ret)->hdr->nlmsg_seq = serial;
 
         err = NLMSG_DATA((*ret)->hdr);
-
         err->error = error;
 
         return 0;
@@ -307,5 +481,120 @@ int rtattr_append_attribute(struct rtattr **rta, unsigned short type, const void
         /* update rta_len */
         (*rta)->rta_len = message_length;
 
+        return 0;
+}
+
+MultipathRoute *multipath_route_free(MultipathRoute *m) {
+        if (!m)
+                return NULL;
+
+        free(m->ifname);
+
+        return mfree(m);
+}
+
+int multipath_route_dup(const MultipathRoute *m, MultipathRoute **ret) {
+        _cleanup_(multipath_route_freep) MultipathRoute *n = NULL;
+        _cleanup_free_ char *ifname = NULL;
+
+        assert(m);
+        assert(ret);
+
+        if (m->ifname) {
+                ifname = strdup(m->ifname);
+                if (!ifname)
+                        return -ENOMEM;
+        }
+
+        n = new(MultipathRoute, 1);
+        if (!n)
+                return -ENOMEM;
+
+        *n = (MultipathRoute) {
+                .gateway = m->gateway,
+                .weight = m->weight,
+                .ifindex = m->ifindex,
+                .ifname = TAKE_PTR(ifname),
+        };
+
+        *ret = TAKE_PTR(n);
+
+        return 0;
+}
+
+int rtattr_read_nexthop(const struct rtnexthop *rtnh, size_t size, int family, OrderedSet **ret) {
+        _cleanup_ordered_set_free_free_ OrderedSet *set = NULL;
+        int r;
+
+        assert(rtnh);
+        assert(IN_SET(family, AF_INET, AF_INET6));
+
+        if (size < sizeof(struct rtnexthop))
+                return -EBADMSG;
+
+        for (; size >= sizeof(struct rtnexthop); ) {
+                _cleanup_(multipath_route_freep) MultipathRoute *m = NULL;
+
+                if (NLMSG_ALIGN(rtnh->rtnh_len) > size)
+                        return -EBADMSG;
+
+                if (rtnh->rtnh_len < sizeof(struct rtnexthop))
+                        return -EBADMSG;
+
+                m = new(MultipathRoute, 1);
+                if (!m)
+                        return -ENOMEM;
+
+                *m = (MultipathRoute) {
+                        .ifindex = rtnh->rtnh_ifindex,
+                        .weight = rtnh->rtnh_hops,
+                };
+
+                if (rtnh->rtnh_len > sizeof(struct rtnexthop)) {
+                        size_t len = rtnh->rtnh_len - sizeof(struct rtnexthop);
+
+                        for (struct rtattr *attr = RTNH_DATA(rtnh); RTA_OK(attr, len); attr = RTA_NEXT(attr, len)) {
+                                if (attr->rta_type == RTA_GATEWAY) {
+                                        if (attr->rta_len != RTA_LENGTH(FAMILY_ADDRESS_SIZE(family)))
+                                                return -EBADMSG;
+
+                                        m->gateway.family = family;
+                                        memcpy(&m->gateway.address, RTA_DATA(attr), FAMILY_ADDRESS_SIZE(family));
+                                        break;
+                                } else if (attr->rta_type == RTA_VIA) {
+                                        uint16_t gw_family;
+
+                                        if (family != AF_INET)
+                                                return -EINVAL;
+
+                                        if (attr->rta_len < RTA_LENGTH(sizeof(uint16_t)))
+                                                return -EBADMSG;
+
+                                        gw_family = *(uint16_t *) RTA_DATA(attr);
+
+                                        if (gw_family != AF_INET6)
+                                                return -EBADMSG;
+
+                                        if (attr->rta_len != RTA_LENGTH(FAMILY_ADDRESS_SIZE(gw_family) + sizeof(gw_family)))
+                                                return -EBADMSG;
+
+                                        memcpy(&m->gateway, RTA_DATA(attr), FAMILY_ADDRESS_SIZE(gw_family) + sizeof(gw_family));
+                                        break;
+                                }
+                        }
+                }
+
+                r = ordered_set_ensure_put(&set, NULL, m);
+                if (r < 0)
+                        return r;
+
+                TAKE_PTR(m);
+
+                size -= NLMSG_ALIGN(rtnh->rtnh_len);
+                rtnh = RTNH_NEXT(rtnh);
+        }
+
+        if (ret)
+                *ret = TAKE_PTR(set);
         return 0;
 }

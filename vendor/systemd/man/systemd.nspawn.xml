@@ -4,7 +4,7 @@
 <!ENTITY % entities SYSTEM "custom-entities.ent" >
 %entities;
 ]>
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="systemd.nspawn">
 
@@ -80,7 +80,7 @@
   <refsect1>
     <title>[Exec] Section Options</title>
 
-    <para>Settings files may include an <literal>[Exec]</literal>
+    <para>Settings files may include an [Exec]
     section, which carries various execution parameters:</para>
 
     <variablelist class='nspawn-directives'>
@@ -190,7 +190,34 @@
         <filename>/run/system/nspawn/</filename> (see above). On the
         other hand, <varname>DropCapability=</varname> takes effect in
         all cases. If the special value <literal>all</literal> is passed, all
-        capabilities are retained (or dropped).</para></listitem>
+        capabilities are retained (or dropped).</para>
+        <para>These settings change the bounding set of capabilities which
+        also limits the ambient capabilities as given with the
+        <varname>AmbientCapability=</varname>.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>AmbientCapability=</varname></term>
+        <listitem><para>Takes a space-separated list of Linux process
+        capabilities (see
+        <citerefentry project='man-pages'><refentrytitle>capabilities</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+        for details). The <varname>AmbientCapability=</varname> setting
+        specifies capability which will be passed to the started program
+        in the inheritable and ambient capability sets. This will grant
+        these capabilities to this process. This setting correspond to
+        the <option>--ambient-capability=</option> command line switch.
+        </para>
+
+        <para>The value <literal>all</literal> is not supported for this
+        setting.</para>
+
+        <para>The setting of <varname>AmbientCapability=</varname> must
+        be covered by the bounding set settings which were established by
+        <varname>Capability=</varname> and <varname>DropCapability=</varname>.
+        </para>
+
+        <para>Note that <varname>AmbientCapability=</varname> is a privileged
+        setting (see above).</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -344,7 +371,7 @@
   <refsect1>
     <title>[Files] Section Options</title>
 
-    <para>Settings files may include a <literal>[Files]</literal>
+    <para>Settings files may include a [Files]
     section, which carries various parameters configuring the file
     system of the container:</para>
 
@@ -389,6 +416,16 @@
       </varlistentry>
 
       <varlistentry>
+        <term><varname>BindUser=</varname></term>
+
+        <listitem><para>Binds a user from the host into the container. This option is equivalent to the
+        command line switch <option>--bind-user=</option>, see
+        <citerefentry><refentrytitle>systemd-nspawn</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+        for details about the specific options supported. This setting is privileged (see
+        above).</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><varname>TemporaryFileSystem=</varname></term>
 
         <listitem><para>Adds a <literal>tmpfs</literal> mount to the
@@ -405,7 +442,7 @@
       <varlistentry>
         <term><varname>Inaccessible=</varname></term>
 
-        <listitem><para>Masks the specified file or directly in the container, by over-mounting it with an empty file
+        <listitem><para>Masks the specified file or directory in the container, by over-mounting it with an empty file
         node of the same type with the most restrictive access mode. Takes a file system path as argument. This option
         may be used multiple times to mask multiple files or directories. This option is equivalent to the command line
         switch <option>--inaccessible=</option>, see
@@ -425,12 +462,12 @@
       </varlistentry>
 
       <varlistentry>
-        <term><varname>PrivateUsersChown=</varname></term>
+        <term><varname>PrivateUsersOwnership=</varname></term>
 
-        <listitem><para>Configures whether the ownership of the files and directories in the container tree shall be
-        adjusted to the UID/GID range used, if necessary and user namespacing is enabled. This is equivalent to the
-        <option>--private-users-chown</option> command line switch. This option is privileged (see
-        above). </para></listitem>
+        <listitem><para>Configures whether the ownership of the files and directories in the container tree
+        shall be adjusted to the UID/GID range used, if necessary and user namespacing is enabled. This is
+        equivalent to the <option>--private-users-ownership=</option> command line switch. This option is
+        privileged (see above).</para></listitem>
       </varlistentry>
 
     </variablelist>
@@ -439,7 +476,7 @@
   <refsect1>
     <title>[Network] Section Options</title>
 
-    <para>Settings files may include a <literal>[Network]</literal>
+    <para>Settings files may include a [Network]
     section, which carries various parameters configuring the network
     connectivity of the container:</para>
 
@@ -469,18 +506,16 @@
       <varlistentry>
         <term><varname>VirtualEthernetExtra=</varname></term>
 
-        <listitem><para>Takes a colon-separated pair of interface
-        names. Configures an additional virtual Ethernet connection
-        (<literal>veth</literal>) between host and the container. The
-        first specified name is the interface name on the host, the
-        second the interface name in the container. The latter may be
-        omitted in which case it is set to the same name as the host
-        side interface. This setting implies
-        <varname>Private=yes</varname>. This setting corresponds to
-        the <option>--network-veth-extra=</option> command line
-        switch, and maybe be used multiple times. It is independent of
-        <varname>VirtualEthernet=</varname>. This option is privileged
-        (see above).</para></listitem>
+        <listitem><para>Takes a colon-separated pair of interface names. Configures an additional virtual
+        Ethernet connection (<literal>veth</literal>) between host and the container. The first specified
+        name is the interface name on the host, the second the interface name in the container. The latter
+        may be omitted in which case it is set to the same name as the host side interface. This setting
+        implies <varname>Private=yes</varname>. This setting corresponds to the
+        <option>--network-veth-extra=</option> command line switch, and maybe be used multiple times. It is
+        independent of <varname>VirtualEthernet=</varname>. Note that this option is unrelated to the
+        <varname>Bridge=</varname> setting below, and thus any connections created this way are not
+        automatically added to any bridge device on the host side. This option is privileged (see
+        above).</para></listitem>
       </varlistentry>
 
       <varlistentry>

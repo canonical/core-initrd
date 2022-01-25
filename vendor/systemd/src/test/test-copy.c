@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <sys/xattr.h>
 #include <unistd.h>
@@ -78,13 +78,15 @@ static void test_copy_file_fd(void) {
 }
 
 static void test_copy_tree(void) {
-        char original_dir[] = "/var/tmp/test-copy_tree/";
-        char copy_dir[] = "/var/tmp/test-copy_tree-copy/";
+        char original_dir[] = "/tmp/test-copy_tree/";
+        char copy_dir[] = "/tmp/test-copy_tree-copy/";
         char **files = STRV_MAKE("file", "dir1/file", "dir1/dir2/file", "dir1/dir2/dir3/dir4/dir5/file");
-        char **links = STRV_MAKE("link", "file",
-                                 "link2", "dir1/file");
+        char **symlinks = STRV_MAKE("link", "file",
+                                    "link2", "dir1/file");
+        char **hardlinks = STRV_MAKE("hlink", "file",
+                                     "hlink2", "dir1/file");
         const char *unixsockp;
-        char **p, **link;
+        char **p, **ll;
         struct stat st;
         int xattr_worked = -1; /* xattr support is optional in temporary directories, hence use it if we can,
                                 * but don't fail if we can't */
@@ -110,20 +112,30 @@ static void test_copy_tree(void) {
                 xattr_worked = k >= 0;
         }
 
-        STRV_FOREACH_PAIR(link, p, links) {
+        STRV_FOREACH_PAIR(ll, p, symlinks) {
                 _cleanup_free_ char *f, *l;
 
                 assert_se(f = path_join(original_dir, *p));
-                assert_se(l = path_join(original_dir, *link));
+                assert_se(l = path_join(original_dir, *ll));
 
                 assert_se(mkdir_parents(l, 0755) >= 0);
                 assert_se(symlink(f, l) == 0);
         }
 
+        STRV_FOREACH_PAIR(ll, p, hardlinks) {
+                _cleanup_free_ char *f, *l;
+
+                assert_se(f = path_join(original_dir, *p));
+                assert_se(l = path_join(original_dir, *ll));
+
+                assert_se(mkdir_parents(l, 0755) >= 0);
+                assert_se(link(f, l) == 0);
+        }
+
         unixsockp = strjoina(original_dir, "unixsock");
         assert_se(mknod(unixsockp, S_IFSOCK|0644, 0) >= 0);
 
-        assert_se(copy_tree(original_dir, copy_dir, UID_INVALID, GID_INVALID, COPY_REFLINK|COPY_MERGE) == 0);
+        assert_se(copy_tree(original_dir, copy_dir, UID_INVALID, GID_INVALID, COPY_REFLINK|COPY_MERGE|COPY_HARDLINKS) == 0);
 
         STRV_FOREACH(p, files) {
                 _cleanup_free_ char *buf, *f, *c = NULL;
@@ -147,14 +159,28 @@ static void test_copy_tree(void) {
                 }
         }
 
-        STRV_FOREACH_PAIR(link, p, links) {
+        STRV_FOREACH_PAIR(ll, p, symlinks) {
                 _cleanup_free_ char *target, *f, *l;
 
                 assert_se(f = strjoin(original_dir, *p));
-                assert_se(l = strjoin(copy_dir, *link));
+                assert_se(l = strjoin(copy_dir, *ll));
 
                 assert_se(chase_symlinks(l, NULL, 0, &target, NULL) == 1);
                 assert_se(path_equal(f, target));
+        }
+
+        STRV_FOREACH_PAIR(ll, p, hardlinks) {
+                _cleanup_free_ char *f, *l;
+                struct stat a, b;
+
+                assert_se(f = strjoin(copy_dir, *p));
+                assert_se(l = strjoin(copy_dir, *ll));
+
+                assert_se(lstat(f, &a) >= 0);
+                assert_se(lstat(l, &b) >= 0);
+
+                assert_se(a.st_ino == b.st_ino);
+                assert_se(a.st_dev == b.st_dev);
         }
 
         unixsockp = strjoina(copy_dir, "unixsock");
@@ -181,7 +207,7 @@ static void test_copy_bytes(void) {
 
         assert_se(pipe2(pipefd, O_CLOEXEC) == 0);
 
-        r = copy_bytes(infd, pipefd[1], (uint64_t) -1, 0);
+        r = copy_bytes(infd, pipefd[1], UINT64_MAX, 0);
         assert_se(r == 0);
 
         r = read(pipefd[0], buf, sizeof(buf));
@@ -223,7 +249,7 @@ static void test_copy_bytes_regular_file(const char *src, bool try_reflink, uint
         assert_se(fd3 >= 0);
 
         r = copy_bytes(fd, fd2, max_bytes, try_reflink ? COPY_REFLINK : 0);
-        if (max_bytes == (uint64_t) -1)
+        if (max_bytes == UINT64_MAX)
                 assert_se(r == 0);
         else
                 assert_se(IN_SET(r, 0, 1));
@@ -232,14 +258,14 @@ static void test_copy_bytes_regular_file(const char *src, bool try_reflink, uint
         assert_se(fstat(fd2, &buf2) == 0);
         assert_se((uint64_t) buf2.st_size == MIN((uint64_t) buf.st_size, max_bytes));
 
-        if (max_bytes < (uint64_t) -1)
+        if (max_bytes < UINT64_MAX)
                 /* Make sure the file is now higher than max_bytes */
                 assert_se(ftruncate(fd2, max_bytes + 1) == 0);
 
         assert_se(lseek(fd2, 0, SEEK_SET) == 0);
 
         r = copy_bytes(fd2, fd3, max_bytes, try_reflink ? COPY_REFLINK : 0);
-        if (max_bytes == (uint64_t) -1)
+        if (max_bytes == UINT64_MAX)
                 assert_se(r == 0);
         else
                 /* We cannot distinguish between the input being exactly max_bytes
@@ -251,7 +277,7 @@ static void test_copy_bytes_regular_file(const char *src, bool try_reflink, uint
 
         assert_se(fstat(fd3, &buf3) == 0);
 
-        if (max_bytes == (uint64_t) -1)
+        if (max_bytes == UINT64_MAX)
                 assert_se(buf3.st_size == buf2.st_size);
         else
                 assert_se((uint64_t) buf3.st_size == max_bytes);
@@ -270,12 +296,28 @@ static void test_copy_atomic(void) {
         q = strjoina(p, "/fstab");
 
         r = copy_file_atomic("/etc/fstab", q, 0644, 0, 0, COPY_REFLINK);
-        if (r == -ENOENT)
+        if (r == -ENOENT || ERRNO_IS_PRIVILEGE(r))
                 return;
 
         assert_se(copy_file_atomic("/etc/fstab", q, 0644, 0, 0, COPY_REFLINK) == -EEXIST);
 
         assert_se(copy_file_atomic("/etc/fstab", q, 0644, 0, 0, COPY_REPLACE) >= 0);
+}
+
+static void test_copy_proc(void) {
+        _cleanup_(rm_rf_physical_and_freep) char *p = NULL;
+        _cleanup_free_ char *f = NULL, *a = NULL, *b = NULL;
+
+        /* Check if copying data from /proc/ works correctly, i.e. let's see if https://lwn.net/Articles/846403/ is a problem for us */
+
+        assert_se(mkdtemp_malloc(NULL, &p) >= 0);
+        assert_se(f = path_join(p, "version"));
+        assert_se(copy_file("/proc/version", f, 0, MODE_INVALID, 0, 0, 0) >= 0);
+
+        assert_se(read_one_line_file("/proc/version", &a) >= 0);
+        assert_se(read_one_line_file(f, &b) >= 0);
+        assert_se(streq(a, b));
+        assert_se(!isempty(a));
 }
 
 int main(int argc, char *argv[]) {
@@ -285,13 +327,14 @@ int main(int argc, char *argv[]) {
         test_copy_file_fd();
         test_copy_tree();
         test_copy_bytes();
-        test_copy_bytes_regular_file(argv[0], false, (uint64_t) -1);
-        test_copy_bytes_regular_file(argv[0], true, (uint64_t) -1);
+        test_copy_bytes_regular_file(argv[0], false, UINT64_MAX);
+        test_copy_bytes_regular_file(argv[0], true, UINT64_MAX);
         test_copy_bytes_regular_file(argv[0], false, 1000); /* smaller than copy buffer size */
         test_copy_bytes_regular_file(argv[0], true, 1000);
         test_copy_bytes_regular_file(argv[0], false, 32000); /* larger than copy buffer size */
         test_copy_bytes_regular_file(argv[0], true, 32000);
         test_copy_atomic();
+        test_copy_proc();
 
         return 0;
 }

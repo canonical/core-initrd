@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <dirent.h>
@@ -7,6 +7,9 @@
 #include <sys/socket.h>
 
 #include "macro.h"
+
+/* maximum length of fdname */
+#define FDNAME_MAX 255
 
 /* Make sure we can distinguish fd 0 and NULL */
 #define FD_TO_PTR(fd) INT_TO_PTR((fd)+1)
@@ -41,8 +44,8 @@ static inline void fclosep(FILE **f) {
         safe_fclose(*f);
 }
 
-DEFINE_TRIVIAL_CLEANUP_FUNC(FILE*, pclose);
-DEFINE_TRIVIAL_CLEANUP_FUNC(DIR*, closedir);
+DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(FILE*, pclose, NULL);
+DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(DIR*, closedir, NULL);
 
 #define _cleanup_close_ _cleanup_(closep)
 #define _cleanup_fclose_ _cleanup_(fclosep)
@@ -73,10 +76,6 @@ enum {
         ACQUIRE_NO_REGULAR  = 1 << 4,
 };
 
-int acquire_data_fd(const void *data, size_t size, unsigned flags);
-
-int fd_duplicate_data_fd(int fd);
-
 int fd_move_above_stdio(int fd);
 
 int rearrange_stdio(int original_input_fd, int original_output_fd, int original_error_fd);
@@ -93,6 +92,16 @@ static inline int make_null_stdio(void) {
                 _fd_;                           \
         })
 
-int fd_reopen(int fd, int flags);
+/* Like free_and_replace(), but for file descriptors */
+#define CLOSE_AND_REPLACE(a, b)                 \
+        ({                                      \
+                int *_fdp_ = &(a);              \
+                safe_close(*_fdp_);             \
+                *_fdp_ = TAKE_FD(b);            \
+                0;                              \
+        })
 
+
+int fd_reopen(int fd, int flags);
 int read_nr_open(void);
+int btrfs_defrag_fd(int fd);

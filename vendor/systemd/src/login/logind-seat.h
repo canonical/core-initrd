@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 typedef struct Seat Seat;
@@ -19,7 +19,6 @@ struct Seat {
         LIST_HEAD(Session, sessions);
 
         Session **positions;
-        size_t position_count;
 
         bool in_gc_queue:1;
         bool started:1;
@@ -51,7 +50,6 @@ void seat_claim_position(Seat *s, Session *session, unsigned pos);
 
 bool seat_has_vts(Seat *s);
 bool seat_is_seat0(Seat *s);
-bool seat_can_multi_session(Seat *s);
 bool seat_can_tty(Seat *s);
 bool seat_has_master_device(Seat *s);
 bool seat_can_graphical(Seat *s);

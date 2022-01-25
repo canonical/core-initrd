@@ -74,12 +74,12 @@ systemctl_redirect () {
     # the synchronous wait plus systemd's normal behaviour of
     # transactionally processing all dependencies first easily
     # causes dependency loops
-    if ! OUT=$(systemctl is-system-running 2>/dev/null) && [ "$OUT" != "degraded" ]; then
-        sctl_args="--job-mode=ignore-dependencies"
+    if ! systemctl --quiet is-system-running && [ "$command" = "reload" ]; then
+        sctl_args="--no-block"
     fi
 
     [ "$command" = status ] || log_daemon_msg "$s" "$service"
-    /bin/systemctl --no-pager $sctl_args $command "$service"
+    systemctl --no-pager $sctl_args $command "$service"
     rc=$?
     [ "$command" = status ] || log_end_msg $rc
 

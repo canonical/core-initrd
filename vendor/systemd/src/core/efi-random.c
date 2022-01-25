@@ -1,8 +1,6 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <fcntl.h>
-#include <linux/random.h>
-#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "alloc-util.h"
@@ -11,6 +9,7 @@
 #include "efivars.h"
 #include "fd-util.h"
 #include "fs-util.h"
+#include "random-util.h"
 #include "strv.h"
 
 /* If a random seed was passed by the boot loader in the LoaderRandomSeed EFI variable, let's credit it to
@@ -28,8 +27,8 @@ static void lock_down_efi_variables(void) {
          * identify the system or gain too much insight into what we might have credited to the entropy
          * pool. */
         FOREACH_STRING(p,
-                       "/sys/firmware/efi/efivars/LoaderRandomSeed-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f",
-                       "/sys/firmware/efi/efivars/LoaderSystemToken-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f") {
+                       EFIVAR_PATH(EFI_LOADER_VARIABLE(LoaderRandomSeed)),
+                       EFIVAR_PATH(EFI_LOADER_VARIABLE(LoaderSystemToken))) {
 
                 r = chattr_path(p, 0, FS_IMMUTABLE_FL, NULL);
                 if (r == -ENOENT)
@@ -43,9 +42,7 @@ static void lock_down_efi_variables(void) {
 }
 
 int efi_take_random_seed(void) {
-        _cleanup_free_ struct rand_pool_info *info = NULL;
         _cleanup_free_ void *value = NULL;
-        _cleanup_close_ int random_fd = -1;
         size_t size;
         int r;
 
@@ -64,7 +61,7 @@ int efi_take_random_seed(void) {
                 return 0;
         }
 
-        r = efi_get_variable(EFI_VENDOR_LOADER, "LoaderRandomSeed", NULL, &value, &size);
+        r = efi_get_variable(EFI_LOADER_VARIABLE(LoaderRandomSeed), NULL, &value, &size);
         if (r == -EOPNOTSUPP) {
                 log_debug_errno(r, "System lacks EFI support, not initializing random seed from EFI variable.");
                 return 0;
@@ -79,30 +76,14 @@ int efi_take_random_seed(void) {
         if (size == 0)
                 return log_warning_errno(SYNTHETIC_ERRNO(EINVAL), "Random seed passed from boot loader has zero size? Ignoring.");
 
-        /* The kernel API only accepts "int" as entropy count (which is in bits), let's avoid any chance for
-         * confusion here. */
-        if (size > INT_MAX / 8)
-                size = INT_MAX / 8;
-
-        random_fd = open("/dev/urandom", O_WRONLY|O_CLOEXEC|O_NOCTTY);
-        if (random_fd < 0)
-                return log_warning_errno(errno, "Failed to open /dev/urandom for writing, ignoring: %m");
-
         /* Before we use the seed, let's mark it as used, so that we never credit it twice. Also, it's a nice
          * way to let users known that we successfully acquired entropy from the boot laoder. */
         r = touch("/run/systemd/efi-random-seed-taken");
         if (r < 0)
                 return log_warning_errno(r, "Unable to mark EFI random seed as used, not using it: %m");
 
-        info = malloc(offsetof(struct rand_pool_info, buf) + size);
-        if (!info)
-                return log_oom();
-
-        info->entropy_count = size * 8;
-        info->buf_size = size;
-        memcpy(info->buf, value, size);
-
-        if (ioctl(random_fd, RNDADDENTROPY, info) < 0)
+        r = random_write_entropy(-1, value, size, true);
+        if (r < 0)
                 return log_warning_errno(errno, "Failed to credit entropy, ignoring: %m");
 
         log_info("Successfully credited entropy passed from boot loader.");

@@ -1,4 +1,4 @@
-#  SPDX-License-Identifier: LGPL-2.1+
+#  SPDX-License-Identifier: LGPL-2.1-or-later
 #
 #  This file is part of systemd.
 #
@@ -13,14 +13,14 @@ Documentation=man:systemd-pstore(8)
 ConditionDirectoryNotEmpty=/sys/fs/pstore
 ConditionVirtualization=!container
 DefaultDependencies=no
-Wants=systemd-remount-fs.service
-After=systemd-remount-fs.service
+Conflicts=shutdown.target
+Before=sysinit.target shutdown.target
 
 [Service]
 Type=oneshot
-ExecStart=@rootlibexecdir@/systemd-pstore
+ExecStart={{ROOTLIBEXECDIR}}/systemd-pstore
 RemainAfterExit=yes
 StateDirectory=systemd/pstore
 
 [Install]
-WantedBy=systemd-remount-fs.service
+WantedBy=sysinit.target

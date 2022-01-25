@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <getopt.h>
 #include <sys/epoll.h>
@@ -122,7 +122,6 @@ static int open_sockets(int *epoll_fd, bool accept) {
 }
 
 static int exec_process(const char *name, char **argv, char **env, int start_fd, size_t n_fds) {
-
         _cleanup_strv_free_ char **envp = NULL;
         _cleanup_free_ char *joined = NULL;
         size_t n_env = 0, length;
@@ -152,7 +151,7 @@ static int exec_process(const char *name, char **argv, char **env, int start_fd,
 
                         envp[n_env++] = k;
                 } else {
-                        _cleanup_free_ char *p;
+                        _cleanup_free_ char *p = NULL;
                         const char *n;
 
                         p = strjoin(*s, "=");
@@ -200,7 +199,6 @@ static int exec_process(const char *name, char **argv, char **env, int start_fd,
                                 return log_error_errno(errno, "Failed to dup connection: %m");
 
                         safe_close(start_fd);
-                        start_fd = SD_LISTEN_FDS_START;
                 }
 
                 if (asprintf((char **) (envp + n_env++), "LISTEN_FDS=%zu", n_fds) < 0)
@@ -215,15 +213,13 @@ static int exec_process(const char *name, char **argv, char **env, int start_fd,
                         char *e;
 
                         len = strv_length(arg_fdnames);
-                        if (len == 1) {
-                                size_t i;
-
-                                for (i = 1; i < n_fds; i++) {
+                        if (len == 1)
+                                for (size_t i = 1; i < n_fds; i++) {
                                         r = strv_extend(&arg_fdnames, arg_fdnames[0]);
                                         if (r < 0)
-                                                return log_error_errno(r, "Failed to extend strv: %m");
+                                                return log_oom();
                                 }
-                        } else if (len != n_fds)
+                        else if (len != n_fds)
                                 log_warning("The number of fd names is different than number of fds: %zu vs %zu", len, n_fds);
 
                         names = strv_join(arg_fdnames, ":");
@@ -346,11 +342,11 @@ static int help(void) {
                "     --fdname=NAME[:NAME...] Specify names for file descriptors\n"
                "     --inetd                 Enable inetd file descriptor passing protocol\n"
                "\nNote: file descriptors from sd_listen_fds() will be passed through.\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , ansi_highlight(), ansi_normal()
-               , link
-        );
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               ansi_highlight(),
+               ansi_normal(),
+               link);
 
         return 0;
 }
@@ -425,7 +421,7 @@ static int parse_argv(int argc, char *argv[]) {
                         break;
 
                 case ARG_FDNAME: {
-                        _cleanup_strv_free_ char **names;
+                        _cleanup_strv_free_ char **names = NULL;
                         char **s;
 
                         names = strv_split(optarg, ":");
@@ -434,7 +430,7 @@ static int parse_argv(int argc, char *argv[]) {
 
                         STRV_FOREACH(s, names)
                                 if (!fdname_is_valid(*s)) {
-                                        _cleanup_free_ char *esc;
+                                        _cleanup_free_ char *esc = NULL;
 
                                         esc = cescape(*s);
                                         log_warning("File descriptor name \"%s\" is not valid.", esc);

@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <refentry id="resolved.conf" conditional='ENABLE_RESOLVE'
     xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -41,14 +41,19 @@
   <refsect1>
     <title>Options</title>
 
-    <para>The following options are available in the <literal>[Resolve]</literal> section:</para>
+    <para>The following options are available in the [Resolve] section:</para>
 
     <variablelist class='network-directives'>
 
       <varlistentry>
         <term><varname>DNS=</varname></term>
-        <listitem><para>A space-separated list of IPv4 and IPv6 addresses to use as system DNS servers. DNS requests
-        are sent to one of the listed DNS servers in parallel to suitable per-link DNS servers acquired from
+        <listitem><para>A space-separated list of IPv4 and IPv6 addresses to use as system DNS servers. Each address can
+        optionally take a port number separated with <literal>:</literal>, a network interface name or index separated with
+        <literal>%</literal>, and a Server Name Indication (SNI) separated with <literal>#</literal>. When IPv6 address is
+        specified with a port number, then the address must be in the square brackets. That is, the acceptable full formats
+        are <literal>111.222.333.444:9953%ifname#example.com</literal> for IPv4 and
+        <literal>[1111:2222::3333]:9953%ifname#example.com</literal> for IPv6. DNS requests are sent to one of the listed
+        DNS servers in parallel to suitable per-link DNS servers acquired from
         <citerefentry><refentrytitle>systemd-networkd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry> or
         set at runtime by external applications.  For compatibility reasons, if this setting is not specified, the DNS
         servers listed in <filename>/etc/resolv.conf</filename> are used instead, if that file exists and any servers
@@ -57,8 +62,8 @@
 
       <varlistentry>
         <term><varname>FallbackDNS=</varname></term>
-        <listitem><para>A space-separated list of IPv4 and IPv6 addresses to use as the fallback DNS servers. Any
-        per-link DNS servers obtained from
+        <listitem><para>A space-separated list of IPv4 and IPv6 addresses to use as the fallback DNS servers. Please see
+        <varname>DNS=</varname> for acceptable format of addresses. Any per-link DNS servers obtained from
         <citerefentry><refentrytitle>systemd-networkd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>
         take precedence over this setting, as do any servers set via <varname>DNS=</varname> above or
         <filename>/etc/resolv.conf</filename>. This setting is hence only used if no other DNS server information is
@@ -67,20 +72,28 @@
 
       <varlistentry>
         <term><varname>Domains=</varname></term>
-        <listitem><para>A space-separated list of domains. These domains are used as search suffixes when resolving
-        single-label host names (domain names which contain no dot), in order to qualify them into fully-qualified
-        domain names (FQDNs). Search domains are strictly processed in the order they are specified, until the name
-        with the suffix appended is found. For compatibility reasons, if this setting is not specified, the search
-        domains listed in <filename>/etc/resolv.conf</filename> are used instead, if that file exists and any domains
-        are configured in it. This setting defaults to the empty list.</para>
+        <listitem><para>A space-separated list of domains optionally prefixed with <literal>~</literal>,
+        used for two distinct purposes described below. Defaults to the empty list.</para>
 
-        <para>Specified domain names may optionally be prefixed with <literal>~</literal>. In this case they do not
-        define a search path, but preferably direct DNS queries for the indicated domains to the DNS servers configured
-        with the system <varname>DNS=</varname> setting (see above), in case additional, suitable per-link DNS servers
-        are known. If no per-link DNS servers are known using the <literal>~</literal> syntax has no effect. Use the
-        construct <literal>~.</literal> (which is composed of <literal>~</literal> to indicate a routing domain and
-        <literal>.</literal> to indicate the DNS root domain that is the implied suffix of all DNS domains) to use the
-        system DNS server defined with <varname>DNS=</varname> preferably for all domains.</para></listitem>
+        <para>Any domains <emphasis>not</emphasis> prefixed with <literal>~</literal> are used as search
+        suffixes when resolving single-label hostnames (domain names which contain no dot), in order to
+        qualify them into fully-qualified domain names (FQDNs). These "search domains" are strictly processed
+        in the order they are specified in, until the name with the suffix appended is found. For
+        compatibility reasons, if this setting is not specified, the search domains listed in
+        <filename>/etc/resolv.conf</filename> with the <varname>search</varname> keyword are used instead, if
+        that file exists and any domains are configured in it.</para>
+
+        <para>The domains prefixed with <literal>~</literal> are called "routing domains". All domains listed
+        here (both search domains and routing domains after removing the <literal>~</literal> prefix) define
+        a search path that preferably directs DNS queries to this interface. This search path has an effect
+        only when suitable per-link DNS servers are known. Such servers may be defined through the
+        <varname>DNS=</varname> setting (see above) and dynamically at run time, for example from DHCP
+        leases. If no per-link DNS servers are known, routing domains have no effect.</para>
+
+        <para>Use the construct <literal>~.</literal> (which is composed from <literal>~</literal> to
+        indicate a routing domain and <literal>.</literal> to indicate the DNS root domain that is the
+        implied suffix of all DNS domains) to use the DNS servers defined for this link preferably for all
+        domains.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -186,18 +199,24 @@
         domains (TLDs) that are not known by the DNS root server. This
         logic does not work in all private zone setups.</para>
 
-        <para>Defaults to <literal>allow-downgrade</literal></para>
+        <para>Defaults to <literal>allow-downgrade</literal>.</para>
         </listitem>
       </varlistentry>
 
       <varlistentry>
         <term><varname>DNSOverTLS=</varname></term>
         <listitem>
-        <para>Takes a boolean argument or <literal>opportunistic</literal>.
-        If true all connections to the server will be encrypted. Note that
-        this mode requires a DNS server that supports DNS-over-TLS and has
-        a valid certificate for it's IP. If the DNS server does not support
-        DNS-over-TLS all DNS requests will fail. When set to <literal>opportunistic</literal>
+        <para>Takes a boolean argument or <literal>opportunistic</literal>. If
+        true all connections to the server will be encrypted. Note that this
+        mode requires a DNS server that supports DNS-over-TLS and has a valid
+        certificate. If the hostname was specified in <varname>DNS=</varname>
+        by using the format format <literal>address#server_name</literal> it
+        is used to validate its certificate and also to enable Server Name
+        Indication (SNI) when opening a TLS connection. Otherwise
+        the certificate is checked against the server's IP.
+        If the DNS server does not support DNS-over-TLS all DNS requests will fail.</para>
+
+        <para>When set to <literal>opportunistic</literal>
         DNS request are attempted to send encrypted with DNS-over-TLS.
         If the DNS server does not support TLS, DNS-over-TLS is disabled.
         Note that this mode makes DNS-over-TLS vulnerable to "downgrade"
@@ -214,16 +233,11 @@
         resolver is not capable of authenticating the server, so it is
         vulnerable to "man-in-the-middle" attacks.</para>
 
-        <para>Server Name Indication (SNI) can be used when opening a TLS connection.
-        Entries in <varname>DNS=</varname> should be in format <literal>address#server_name</literal>.</para>
-
-        <para>In addition to this global DNSOverTLS setting
+        <para>In addition to this global <varname>DNSOverTLS=</varname> setting
         <citerefentry><refentrytitle>systemd-networkd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>
-        also maintains per-link DNSOverTLS settings. For system DNS
-        servers (see above), only the global DNSOverTLS setting is in
-        effect. For per-link DNS servers the per-link
-        setting is in effect, unless it is unset in which case the
-        global setting is used instead.</para>
+        also maintains per-link <varname>DNSOverTLS=</varname> settings. For system DNS servers (see above), only the global
+        <varname>DNSOverTLS=</varname> setting is in effect. For per-link DNS servers the per-link setting is in effect, unless
+        it is unset in which case the global setting is used instead.</para>
 
         <para>Defaults to off.</para>
         </listitem>
@@ -231,14 +245,22 @@
 
       <varlistentry>
         <term><varname>Cache=</varname></term>
-        <listitem><para>Takes a boolean or <literal>no-negative</literal> as argument. If <literal>yes</literal> (the default), resolving a domain name
-        which already got queried earlier will return the previous result as long as it is still valid, and thus does
-        not result in a new network request. Be aware that turning off caching comes at a performance penalty, which
-        is particularly high when DNSSEC is used.</para>
-        If <literal>no-negative</literal>, only positive answers are cached.
+        <listitem><para>Takes a boolean or <literal>no-negative</literal> as argument. If
+        <literal>yes</literal> (the default), resolving a domain name which already got queried earlier will
+        return the previous result as long as it is still valid, and thus does not result in a new network
+        request. Be aware that turning off caching comes at a performance penalty, which is particularly high
+        when DNSSEC is used. If <literal>no-negative</literal>, only positive answers are cached.</para>
 
-        <para>Note that caching is turned off implicitly if the configured DNS server is on a host-local IP address
-        (such as 127.0.0.1 or ::1), in order to avoid duplicate local caching.</para></listitem>
+        <para>Note that caching is turned off by default for host-local DNS servers.
+        See <varname>CacheFromLocalhost=</varname> for details.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>CacheFromLocalhost=</varname></term>
+        <listitem><para>Takes a boolean as argument. If <literal>no</literal> (the default), and response cames from
+        host-local IP address (such as 127.0.0.1 or ::1), the result wouldn't be cached in order to avoid
+        potential duplicate local caching.</para>
+        </listitem>
       </varlistentry>
 
       <varlistentry>
@@ -254,12 +276,54 @@
       </varlistentry>
 
       <varlistentry>
-        <term><varname>ReadEtcHosts=</varname></term>
-        <listitem><para>Takes a boolean argument. If <literal>yes</literal> (the default), the DNS stub resolver will read
-        <filename>/etc/hosts</filename>, and try to resolve hosts or address by using the entries in the file before
-        sending query to DNS servers.</para></listitem>
+        <term><varname>DNSStubListenerExtra=</varname></term>
+        <listitem><para>Takes an IPv4 or IPv6 address to listen on. The address may be optionally
+        prefixed with a protocol name (<literal>udp</literal> or <literal>tcp</literal>) separated with
+        <literal>:</literal>. If the protocol is not specified, the service will listen on both UDP and
+        TCP. It may be also optionally suffixed by a numeric port number with separator
+        <literal>:</literal>. When an IPv6 address is specified with a port number, then the address
+        must be in the square brackets. If the port is not specified, then the service uses port 53.
+        Note that this is independent of the primary DNS stub configured with
+        <varname>DNSStubListener=</varname>, and only configures <emphasis>additional</emphasis>
+        sockets to listen on. This option can be specified multiple times. If an empty string is
+        assigned, then the all previous assignments are cleared. Defaults to unset.</para>
+
+        <para>Examples:
+        <programlisting>DNSStubListenerExtra=192.168.10.10
+DNSStubListenerExtra=2001:db8:0:f102::10
+DNSStubListenerExtra=192.168.10.11:9953
+DNSStubListenerExtra=[2001:db8:0:f102::11]:9953
+DNSStubListenerExtra=tcp:192.168.10.12
+DNSStubListenerExtra=udp:2001:db8:0:f102::12
+DNSStubListenerExtra=tcp:192.168.10.13:9953
+DNSStubListenerExtra=udp:[2001:db8:0:f102::13]:9953</programlisting>
+        </para></listitem>
       </varlistentry>
 
+      <varlistentry>
+        <term><varname>ReadEtcHosts=</varname></term>
+        <listitem><para>Takes a boolean argument. If <literal>yes</literal> (the default),
+        <command>systemd-resolved</command> will read <filename>/etc/hosts</filename>, and try to resolve
+        hosts or address by using the entries in the file before sending query to DNS servers.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>ResolveUnicastSingleLabel=</varname></term>
+        <listitem><para>Takes a boolean argument. When false (the default),
+        <command>systemd-resolved</command> will not resolve A and AAAA queries for single-label names over
+        classic DNS. Note that such names may still be resolved if search domains are specified (see
+        <varname>Domains=</varname> above), or using other mechanisms, in particular via LLMNR or from
+        <filename>/etc/hosts</filename>. When true, queries for single-label names will be forwarded to
+        global DNS servers even if no search domains are defined.
+        </para>
+
+        <para>This option is provided for compatibility with configurations where <emphasis>public DNS
+        servers are not used</emphasis>. Forwarding single-label names to servers not under your control is
+        not standard-conformant, see <ulink
+        url="https://www.iab.org/documents/correspondence-reports-documents/2013-2/iab-statement-dotless-domains-considered-harmful/">IAB
+        Statement</ulink>, and may create a privacy and security risk.</para></listitem>
+      </varlistentry>
     </variablelist>
   </refsect1>
 
@@ -270,7 +334,7 @@
       <citerefentry><refentrytitle>systemd-resolved.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
       <citerefentry><refentrytitle>systemd-networkd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
       <citerefentry><refentrytitle>dnssec-trust-anchors.d</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
-      <citerefentry project='man-pages'><refentrytitle>resolv.conf</refentrytitle><manvolnum>4</manvolnum></citerefentry>
+      <citerefentry project='man-pages'><refentrytitle>resolv.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>
       </para>
   </refsect1>
 

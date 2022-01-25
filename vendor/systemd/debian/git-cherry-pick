@@ -51,5 +51,3 @@ firstdebian=$(git log -i --grep "topic.*debian" --pretty=%h --reverse $debbranch
 sedexpr="/$firstdebian/i$picks"
 
 GIT_EDITOR="sed -i -e '$sedexpr'" git rebase --interactive --no-autosquash $debbranch
-
-

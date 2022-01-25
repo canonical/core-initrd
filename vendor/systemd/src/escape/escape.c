@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <getopt.h>
 #include <stdio.h>
@@ -40,10 +40,9 @@ static int help(void) {
                "  -u --unescape           Unescape strings\n"
                "  -m --mangle             Mangle strings\n"
                "  -p --path               When escaping/unescaping assume the string is a path\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , link
-        );
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               link);
 
         return 0;
 }
@@ -83,17 +82,16 @@ static int parse_argv(int argc, char *argv[]) {
                 case ARG_VERSION:
                         return version();
 
-                case ARG_SUFFIX:
-
-                        if (unit_type_from_string(optarg) < 0)
-                                return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
-                                                       "Invalid unit suffix type %s.", optarg);
+                case ARG_SUFFIX: {
+                        UnitType t = unit_type_from_string(optarg);
+                        if (t < 0)
+                                return log_error_errno(t, "Invalid unit suffix type \"%s\".", optarg);
 
                         arg_suffix = optarg;
                         break;
+                }
 
                 case ARG_TEMPLATE:
-
                         if (!unit_name_is_valid(optarg, UNIT_NAME_TEMPLATE))
                                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
                                                        "Template name %s is not valid.", optarg);
@@ -159,9 +157,7 @@ static int run(int argc, char *argv[]) {
         char **i;
         int r;
 
-        log_show_color(true);
-        log_parse_environment();
-        log_open();
+        log_setup();
 
         r = parse_argv(argc, argv);
         if (r <= 0)
@@ -192,13 +188,8 @@ static int run(int argc, char *argv[]) {
 
                                 free_and_replace(e, x);
                         } else if (arg_suffix) {
-                                char *x;
-
-                                x = strjoin(e, ".", arg_suffix);
-                                if (!x)
+                                if (!strextend(&e, ".", arg_suffix))
                                         return log_oom();
-
-                                free_and_replace(e, x);
                         }
 
                         break;
@@ -213,14 +204,16 @@ static int run(int argc, char *argv[]) {
                                 if (r < 0)
                                         return log_error_errno(r, "Failed to extract instance: %m");
                                 if (isempty(name))
-                                        return log_error("Unit %s is missing the instance name.", *i);
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Unit %s is missing the instance name.", *i);
 
                                 r = unit_name_template(*i, &template);
                                 if (r < 0)
                                         return log_error_errno(r, "Failed to extract template: %m");
                                 if (arg_template && !streq(arg_template, template))
-                                        return log_error("Unit %s template %s does not match specified template %s.",
-                                                         *i, template, arg_template);
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Unit %s template %s does not match specified template %s.",
+                                                               *i, template, arg_template);
                         } else {
                                 name = strdup(*i);
                                 if (!name)

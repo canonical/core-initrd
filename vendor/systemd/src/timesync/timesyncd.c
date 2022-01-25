@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -89,15 +89,15 @@ settime:
 }
 
 static int run(int argc, char *argv[]) {
-        _cleanup_(notify_on_cleanup) const char *notify_message = NULL;
         _cleanup_(manager_freep) Manager *m = NULL;
+        _cleanup_(notify_on_cleanup) const char *notify_message = NULL;
         const char *user = "systemd-timesync";
         uid_t uid, uid_current;
         gid_t gid;
         int r;
 
         log_set_facility(LOG_CRON);
-        log_setup_service();
+        log_setup();
 
         umask(0022);
 

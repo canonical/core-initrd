@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <grp.h>
 #include <linux/fs.h>
@@ -12,6 +12,7 @@
 #include "btrfs-util.h"
 #include "bus-common-errors.h"
 #include "bus-error.h"
+#include "bus-log-control-api.h"
 #include "bus-polkit.h"
 #include "clean-ipc.h"
 #include "conf-files.h"
@@ -23,6 +24,7 @@
 #include "fs-util.h"
 #include "gpt.h"
 #include "home-util.h"
+#include "homed-conf.h"
 #include "homed-home-bus.h"
 #include "homed-home.h"
 #include "homed-manager-bus.h"
@@ -77,7 +79,7 @@ static void manager_watch_home(Manager *m) {
 
         assert(m);
 
-        m->inotify_event_source = sd_event_source_unref(m->inotify_event_source);
+        m->inotify_event_source = sd_event_source_disable_unref(m->inotify_event_source);
         m->scan_slash_home = false;
 
         if (statfs("/home/", &sfs) < 0) {
@@ -98,7 +100,9 @@ static void manager_watch_home(Manager *m) {
 
         m->scan_slash_home = true;
 
-        r = sd_event_add_inotify(m->event, &m->inotify_event_source, "/home/", IN_CREATE|IN_CLOSE_WRITE|IN_DELETE_SELF|IN_MOVE_SELF|IN_ONLYDIR|IN_MOVED_TO|IN_MOVED_FROM|IN_DELETE, on_home_inotify, m);
+        r = sd_event_add_inotify(m->event, &m->inotify_event_source, "/home/",
+                                 IN_CREATE|IN_CLOSE_WRITE|IN_DELETE_SELF|IN_MOVE_SELF|IN_ONLYDIR|IN_MOVED_TO|IN_MOVED_FROM|IN_DELETE,
+                                 on_home_inotify, m);
         if (r < 0)
                 log_full_errno(r == -ENOENT ? LOG_DEBUG : LOG_WARNING, r,
                                "Failed to create inotify watch on /home/, ignoring.");
@@ -157,7 +161,7 @@ static int on_home_inotify(sd_event_source *s, const struct inotify_event *event
                 (void) bus_manager_emit_auto_login_changed(m);
         }
 
-        if ((event->mask & (IN_DELETE|IN_MOVED_FROM|IN_DELETE)) != 0) {
+        if ((event->mask & (IN_DELETE | IN_CLOSE_WRITE | IN_MOVED_FROM)) != 0) {
                 Home *h;
 
                 if (FLAGS_SET(event->mask, IN_DELETE))
@@ -183,9 +187,17 @@ int manager_new(Manager **ret) {
 
         assert(ret);
 
-        m = new0(Manager, 1);
+        m = new(Manager, 1);
         if (!m)
                 return -ENOMEM;
+
+        *m = (Manager) {
+                .default_storage = _USER_STORAGE_INVALID,
+        };
+
+        r = manager_parse_config_file(m);
+        if (r < 0)
+                return r;
 
         r = sd_event_default(&m->event);
         if (r < 0)
@@ -222,26 +234,30 @@ int manager_new(Manager **ret) {
 }
 
 Manager* manager_free(Manager *m) {
+        Home *h;
+
         assert(m);
+
+        HASHMAP_FOREACH(h, m->homes_by_worker_pid)
+                (void) home_wait_for_worker(h);
+
+        sd_bus_flush_close_unref(m->bus);
+        bus_verify_polkit_async_registry_free(m->polkit_registry);
+
+        m->device_monitor = sd_device_monitor_unref(m->device_monitor);
+
+        m->inotify_event_source = sd_event_source_unref(m->inotify_event_source);
+        m->notify_socket_event_source = sd_event_source_unref(m->notify_socket_event_source);
+        m->deferred_rescan_event_source = sd_event_source_unref(m->deferred_rescan_event_source);
+        m->deferred_gc_event_source = sd_event_source_unref(m->deferred_gc_event_source);
+        m->deferred_auto_login_event_source = sd_event_source_unref(m->deferred_auto_login_event_source);
+
+        sd_event_unref(m->event);
 
         hashmap_free(m->homes_by_uid);
         hashmap_free(m->homes_by_name);
         hashmap_free(m->homes_by_worker_pid);
         hashmap_free(m->homes_by_sysfs);
-
-        m->inotify_event_source = sd_event_source_unref(m->inotify_event_source);
-
-        bus_verify_polkit_async_registry_free(m->polkit_registry);
-
-        sd_bus_flush_close_unref(m->bus);
-        sd_event_unref(m->event);
-
-        m->notify_socket_event_source = sd_event_source_unref(m->notify_socket_event_source);
-        m->device_monitor = sd_device_monitor_unref(m->device_monitor);
-
-        m->deferred_rescan_event_source = sd_event_source_unref(m->deferred_rescan_event_source);
-        m->deferred_gc_event_source = sd_event_source_unref(m->deferred_gc_event_source);
-        m->deferred_auto_login_event_source = sd_event_source_unref(m->deferred_auto_login_event_source);
 
         if (m->private_key)
                 EVP_PKEY_free(m->private_key);
@@ -249,13 +265,15 @@ Manager* manager_free(Manager *m) {
         hashmap_free(m->public_keys);
 
         varlink_server_unref(m->varlink_server);
+        free(m->userdb_service);
+
+        free(m->default_file_system_type);
 
         return mfree(m);
 }
 
 int manager_verify_user_record(Manager *m, UserRecord *hr) {
         EVP_PKEY *pkey;
-        Iterator i;
         int r;
 
         assert(m);
@@ -286,7 +304,7 @@ int manager_verify_user_record(Manager *m, UserRecord *hr) {
                 }
         }
 
-        HASHMAP_FOREACH(pkey, m->public_keys, i) {
+        HASHMAP_FOREACH(pkey, m->public_keys) {
                 r = user_record_verify(hr, pkey);
                 switch (r) {
 
@@ -317,26 +335,43 @@ static int manager_add_home_by_record(
         _cleanup_(user_record_unrefp) UserRecord *hr = NULL;
         unsigned line, column;
         int r, is_signed;
+        struct stat st;
         Home *h;
 
         assert(m);
         assert(name);
         assert(fname);
 
+        if (fstatat(dir_fd, fname, &st, 0) < 0)
+                return log_error_errno(errno, "Failed to stat identity record %s: %m", fname);
+
+        if (!S_ISREG(st.st_mode)) {
+                log_debug("Identity record file %s is not a regular file, ignoring.", fname);
+                return 0;
+        }
+
+        if (st.st_size == 0)
+                goto unlink_this_file;
+
         r = json_parse_file_at(NULL, dir_fd, fname, JSON_PARSE_SENSITIVE, &v, &line, &column);
         if (r < 0)
                 return log_error_errno(r, "Failed to parse identity record at %s:%u%u: %m", fname, line, column);
+
+        if (json_variant_is_blank_object(v))
+                goto unlink_this_file;
 
         hr = user_record_new();
         if (!hr)
                 return log_oom();
 
-        r = user_record_load(hr, v, USER_RECORD_LOAD_REFUSE_SECRET);
+        r = user_record_load(hr, v, USER_RECORD_LOAD_REFUSE_SECRET|USER_RECORD_LOG|USER_RECORD_PERMISSIVE);
         if (r < 0)
                 return r;
 
         if (!streq_ptr(hr->user_name, name))
-                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Identity's user name %s does not match file name %s, refusing.", hr->user_name, name);
+                return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                       "Identity's user name %s does not match file name %s, refusing.",
+                                       hr->user_name, name);
 
         is_signed = manager_verify_user_record(m, hr);
         switch (is_signed) {
@@ -367,7 +402,7 @@ static int manager_add_home_by_record(
 
                 /* If we acquired a record now for a previously unallocated entry, then reset the state. This
                  * makes sure home_get_state() will check for the availability of the image file dynamically
-                 * in order to detect to distuingish HOME_INACTIVE and HOME_ABSENT. */
+                 * in order to detect to distinguish HOME_INACTIVE and HOME_ABSENT. */
                 if (h->state == HOME_UNFIXATED)
                         h->state = _HOME_STATE_INVALID;
         } else {
@@ -382,6 +417,19 @@ static int manager_add_home_by_record(
         h->signed_locally = is_signed == USER_RECORD_SIGNED_EXCLUSIVE;
 
         return 1;
+
+unlink_this_file:
+        /* If this is an empty file, then let's just remove it. An empty file is not useful in any case, and
+         * apparently xfs likes to leave empty files around when not unmounted cleanly (see
+         * https://github.com/systemd/systemd/issues/15178 for example). Note that we don't delete non-empty
+         * files even if they are invalid, because that's just too risky, we might delete data the user still
+         * needs. But empty files are never useful, hence let's just remove them. */
+
+        if (unlinkat(dir_fd, fname, 0) < 0)
+                return log_error_errno(errno, "Failed to remove empty user record file %s: %m", fname);
+
+        log_notice("Discovered empty user record file /var/lib/systemd/home/%s, removed automatically.", fname);
+        return 0;
 }
 
 static int manager_enumerate_records(Manager *m) {
@@ -472,8 +520,10 @@ static int search_quota(uid_t uid, const char *exclude_quota_path) {
                 if (r < 0) {
                         if (ERRNO_IS_NOT_SUPPORTED(r))
                                 log_debug_errno(r, "No UID quota support on %s, ignoring.", where);
+                        else if (ERRNO_IS_PRIVILEGE(r))
+                                log_debug_errno(r, "UID quota support for %s prohibited, ignoring.", where);
                         else
-                                log_warning_errno(r, "Failed to query quota on %s, ignoring.", where);
+                                log_warning_errno(r, "Failed to query quota on %s, ignoring: %m", where);
 
                         continue;
                 }
@@ -552,19 +602,22 @@ static int manager_acquire_uid(
 
                 other = hashmap_get(m->homes_by_uid, UID_TO_PTR(candidate));
                 if (other) {
-                        log_debug("Candidate UID " UID_FMT " already used by another home directory (%s), let's try another.", candidate, other->user_name);
+                        log_debug("Candidate UID " UID_FMT " already used by another home directory (%s), let's try another.",
+                                  candidate, other->user_name);
                         continue;
                 }
 
                 pw = getpwuid(candidate);
                 if (pw) {
-                        log_debug("Candidate UID " UID_FMT " already registered by another user in NSS (%s), let's try another.", candidate, pw->pw_name);
+                        log_debug("Candidate UID " UID_FMT " already registered by another user in NSS (%s), let's try another.",
+                                  candidate, pw->pw_name);
                         continue;
                 }
 
                 gr = getgrgid((gid_t) candidate);
                 if (gr) {
-                        log_debug("Candidate UID " UID_FMT " already registered by another group in NSS (%s), let's try another.", candidate, gr->gr_name);
+                        log_debug("Candidate UID " UID_FMT " already registered by another group in NSS (%s), let's try another.",
+                                  candidate, gr->gr_name);
                         continue;
                 }
 
@@ -572,7 +625,8 @@ static int manager_acquire_uid(
                 if (r < 0)
                         continue;
                 if (r > 0) {
-                        log_debug_errno(r, "Candidate UID " UID_FMT " already owns IPC objects, let's try another: %m", candidate);
+                        log_debug_errno(r, "Candidate UID " UID_FMT " already owns IPC objects, let's try another: %m",
+                                        candidate);
                         continue;
                 }
 
@@ -645,7 +699,9 @@ static int manager_add_home_by_image(
         if (h && uid_is_valid(h->uid))
                 uid = h->uid;
         else {
-                r = manager_acquire_uid(m, start_uid, user_name, IN_SET(storage, USER_SUBVOLUME, USER_DIRECTORY, USER_FSCRYPT) ? image_path : NULL, &uid);
+                r = manager_acquire_uid(m, start_uid, user_name,
+                                        IN_SET(storage, USER_SUBVOLUME, USER_DIRECTORY, USER_FSCRYPT) ? image_path : NULL,
+                                        &uid);
                 if (r < 0)
                         return log_warning_errno(r, "Failed to acquire unused UID for %s: %m", user_name);
         }
@@ -869,6 +925,7 @@ int manager_enumerate_images(Manager *m) {
 }
 
 static int manager_connect_bus(Manager *m) {
+        const char *suffix, *busname;
         int r;
 
         assert(m);
@@ -878,23 +935,17 @@ static int manager_connect_bus(Manager *m) {
         if (r < 0)
                 return log_error_errno(r, "Failed to connect to system bus: %m");
 
-        r = sd_bus_add_object_vtable(m->bus, NULL, "/org/freedesktop/home1", "org.freedesktop.home1.Manager", manager_vtable, m);
+        r = bus_add_implementation(m->bus, &manager_object, m);
         if (r < 0)
-                return log_error_errno(r, "Failed to add manager object vtable: %m");
+                return r;
 
-        r = sd_bus_add_fallback_vtable(m->bus, NULL, "/org/freedesktop/home1/home", "org.freedesktop.home1.Home", home_vtable, bus_home_object_find, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to add image object vtable: %m");
+        suffix = getenv("SYSTEMD_HOME_DEBUG_SUFFIX");
+        if (suffix)
+                busname = strjoina("org.freedesktop.home1.", suffix);
+        else
+                busname = "org.freedesktop.home1";
 
-        r = sd_bus_add_node_enumerator(m->bus, NULL, "/org/freedesktop/home1/home", bus_home_node_enumerator, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to add image enumerator: %m");
-
-        r = sd_bus_add_object_manager(m->bus, NULL, "/org/freedesktop/home1/home");
-        if (r < 0)
-                return log_error_errno(r, "Failed to add object manager: %m");
-
-        r = sd_bus_request_name_async(m->bus, NULL, "org.freedesktop.home1", 0, NULL, NULL);
+        r = sd_bus_request_name_async(m->bus, NULL, busname, 0, NULL, NULL);
         if (r < 0)
                 return log_error_errno(r, "Failed to request name: %m");
 
@@ -908,12 +959,13 @@ static int manager_connect_bus(Manager *m) {
 }
 
 static int manager_bind_varlink(Manager *m) {
+        const char *suffix, *socket_path;
         int r;
 
         assert(m);
         assert(!m->varlink_server);
 
-        r = varlink_server_new(&m->varlink_server, VARLINK_SERVER_ACCOUNT_UID);
+        r = varlink_server_new(&m->varlink_server, VARLINK_SERVER_ACCOUNT_UID|VARLINK_SERVER_INHERIT_USERDATA);
         if (r < 0)
                 return log_error_errno(r, "Failed to allocate varlink server object: %m");
 
@@ -929,13 +981,30 @@ static int manager_bind_varlink(Manager *m) {
 
         (void) mkdir_p("/run/systemd/userdb", 0755);
 
-        r = varlink_server_listen_address(m->varlink_server, "/run/systemd/userdb/io.systemd.Home", 0666);
+        /* To make things easier to debug, when working from a homed managed home directory, let's optionally
+         * use a different varlink socket name */
+        suffix = getenv("SYSTEMD_HOME_DEBUG_SUFFIX");
+        if (suffix)
+                socket_path = strjoina("/run/systemd/userdb/io.systemd.Home.", suffix);
+        else
+                socket_path = "/run/systemd/userdb/io.systemd.Home";
+
+        r = varlink_server_listen_address(m->varlink_server, socket_path, 0666);
         if (r < 0)
                 return log_error_errno(r, "Failed to bind to varlink socket: %m");
 
         r = varlink_server_attach_event(m->varlink_server, m->event, SD_EVENT_PRIORITY_NORMAL);
         if (r < 0)
                 return log_error_errno(r, "Failed to attach varlink connection to event loop: %m");
+
+        assert(!m->userdb_service);
+        m->userdb_service = strdup(basename(socket_path));
+        if (!m->userdb_service)
+                return log_oom();
+
+        /* Avoid recursion */
+        if (setenv("SYSTEMD_BYPASS_USERDB", m->userdb_service, 1) < 0)
+                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Failed to set $SYSTEMD_BYPASS_USERDB: %m");
 
         return 0;
 }
@@ -957,10 +1026,7 @@ static ssize_t read_datagram(int fd, struct ucred *ret_sender, void **ret) {
                 return -ENOMEM;
 
         if (ret_sender) {
-                union {
-                        struct cmsghdr cmsghdr;
-                        uint8_t buf[CMSG_SPACE(sizeof(struct ucred))];
-                } control;
+                CMSG_BUFFER_TYPE(CMSG_SPACE(sizeof(struct ucred))) control;
                 bool found_ucred = false;
                 struct cmsghdr *cmsg;
                 struct msghdr mh;
@@ -976,9 +1042,9 @@ static ssize_t read_datagram(int fd, struct ucred *ret_sender, void **ret) {
                         .msg_controllen = sizeof(control),
                 };
 
-                m = recvmsg(fd, &mh, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
+                m = recvmsg_safe(fd, &mh, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
                 if (m < 0)
-                        return -errno;
+                        return m;
 
                 cmsg_close_all(&mh);
 
@@ -1042,7 +1108,7 @@ static int on_notify_socket(sd_event_source *s, int fd, uint32_t revents, void *
 
         h = hashmap_get(m->homes_by_worker_pid, PID_TO_PTR(sender.pid));
         if (!h) {
-                log_warning("Recieved notify datagram of unknown process, ignoring.");
+                log_warning("Received notify datagram of unknown process, ignoring.");
                 return 0;
         }
 
@@ -1060,10 +1126,21 @@ static int manager_listen_notify(Manager *m) {
                 .un.sun_family = AF_UNIX,
                 .un.sun_path = "/run/systemd/home/notify",
         };
+        const char *suffix;
         int r;
 
         assert(m);
         assert(!m->notify_socket_event_source);
+
+        suffix = getenv("SYSTEMD_HOME_DEBUG_SUFFIX");
+        if (suffix) {
+                const char *unix_path;
+
+                unix_path = strjoina("/run/systemd/home/notify.", suffix);
+                r = sockaddr_un_set_path(&sa.un, unix_path);
+                if (r < 0)
+                        return log_error_errno(r, "Socket path %s does not fit in sockaddr_un: %m", unix_path);
+        }
 
         fd = socket(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
         if (fd < 0)
@@ -1166,7 +1243,7 @@ static int manager_on_device(sd_device_monitor *monitor, sd_device *d, void *use
         assert(m);
         assert(d);
 
-        if (device_for_action(d, DEVICE_ACTION_REMOVE)) {
+        if (device_for_action(d, SD_DEVICE_REMOVE)) {
                 const char *sysfs;
                 Home *h;
 
@@ -1250,7 +1327,7 @@ static int manager_load_key_pair(Manager *m) {
                 m->private_key = NULL;
         }
 
-        r = search_and_fopen_nulstr("local.private", "re", NULL, KEY_PATHS_NULSTR, &f);
+        r = search_and_fopen_nulstr("local.private", "re", NULL, KEY_PATHS_NULSTR, &f, NULL);
         if (r == -ENOENT)
                 return 0;
         if (r < 0)
@@ -1275,7 +1352,7 @@ static int manager_load_key_pair(Manager *m) {
         return 1;
 }
 
-DEFINE_TRIVIAL_CLEANUP_FUNC(EVP_PKEY_CTX*, EVP_PKEY_CTX_free);
+DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(EVP_PKEY_CTX*, EVP_PKEY_CTX_free, NULL);
 
 static int manager_generate_key_pair(Manager *m) {
         _cleanup_(EVP_PKEY_CTX_freep) EVP_PKEY_CTX *ctx = NULL;
@@ -1312,7 +1389,7 @@ static int manager_generate_key_pair(Manager *m) {
         if (PEM_write_PUBKEY(fpublic, m->private_key) <= 0)
                 return log_error_errno(SYNTHETIC_ERRNO(EIO), "Failed to write public key.");
 
-        r = fflush_and_check(fpublic);
+        r = fflush_sync_and_check(fpublic);
         if (r < 0)
                 return log_error_errno(r, "Failed to write private key: %m");
 
@@ -1326,7 +1403,7 @@ static int manager_generate_key_pair(Manager *m) {
         if (PEM_write_PrivateKey(fprivate, m->private_key, NULL, NULL, 0, NULL, 0) <= 0)
                 return log_error_errno(SYNTHETIC_ERRNO(EIO), "Failed to write private key pair.");
 
-        r = fflush_and_check(fprivate);
+        r = fflush_sync_and_check(fprivate);
         if (r < 0)
                 return log_error_errno(r, "Failed to write private key: %m");
 
@@ -1340,9 +1417,13 @@ static int manager_generate_key_pair(Manager *m) {
 
         if (rename(temp_private, "/var/lib/systemd/home/local.private") < 0) {
                 (void) unlink_noerrno("/var/lib/systemd/home/local.public"); /* try to remove the file we already created */
-                return log_error_errno(errno, "Failed to move privtate key file into place: %m");
+                return log_error_errno(errno, "Failed to move private key file into place: %m");
         }
         temp_private = mfree(temp_private);
+
+        r = fsync_path_at(AT_FDCWD, "/var/lib/systemd/home/");
+        if (r < 0)
+                log_warning_errno(r, "Failed to sync /var/lib/systemd/home/, ignoring: %m");
 
         return 1;
 }
@@ -1376,13 +1457,13 @@ int manager_sign_user_record(Manager *m, UserRecord *u, UserRecord **ret, sd_bus
         if (r < 0)
                 return r;
         if (r == 0)
-                return sd_bus_error_setf(error, BUS_ERROR_NO_PRIVATE_KEY, "Can't sign without local key.");
+                return sd_bus_error_set(error, BUS_ERROR_NO_PRIVATE_KEY, "Can't sign without local key.");
 
         return user_record_sign(u, m->private_key, ret);
 }
 
 DEFINE_PRIVATE_HASH_OPS_FULL(public_key_hash_ops, char, string_hash_func, string_compare_func, free, EVP_PKEY, EVP_PKEY_free);
-DEFINE_TRIVIAL_CLEANUP_FUNC(EVP_PKEY*, EVP_PKEY_free);
+DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(EVP_PKEY*, EVP_PKEY_free, NULL);
 
 static int manager_load_public_key_one(Manager *m, const char *path) {
         _cleanup_(EVP_PKEY_freep) EVP_PKEY *pkey = NULL;
@@ -1575,9 +1656,8 @@ int manager_gc_images(Manager *m) {
                 manager_revalidate_image(m, h);
         } else {
                 /* Gc all */
-                Iterator i;
 
-                HASHMAP_FOREACH(h, m->homes_by_name, i)
+                HASHMAP_FOREACH(h, m->homes_by_name)
                         manager_revalidate_image(m, h);
         }
 
@@ -1589,7 +1669,7 @@ static int on_deferred_rescan(sd_event_source *s, void *userdata) {
 
         assert(m);
 
-        m->deferred_rescan_event_source = sd_event_source_unref(m->deferred_rescan_event_source);
+        m->deferred_rescan_event_source = sd_event_source_disable_unref(m->deferred_rescan_event_source);
 
         manager_enumerate_devices(m);
         manager_enumerate_images(m);
@@ -1627,7 +1707,7 @@ static int on_deferred_gc(sd_event_source *s, void *userdata) {
 
         assert(m);
 
-        m->deferred_gc_event_source = sd_event_source_unref(m->deferred_gc_event_source);
+        m->deferred_gc_event_source = sd_event_source_disable_unref(m->deferred_gc_event_source);
 
         manager_gc_images(m);
         return 0;
@@ -1656,7 +1736,7 @@ int manager_enqueue_gc(Manager *m, Home *focus) {
 
                 return 0;
         } else
-                m->gc_focus = focus; /* start focussed */
+                m->gc_focus = focus; /* start focused */
 
         r = sd_event_add_defer(m->event, &m->deferred_gc_event_source, on_deferred_gc, m);
         if (r < 0)

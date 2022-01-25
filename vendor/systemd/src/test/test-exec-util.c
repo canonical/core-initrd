@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -22,7 +22,7 @@
 #include "tests.h"
 
 static int here = 0, here2 = 0, here3 = 0;
-void *ignore_stdout_args[] = {&here, &here2, &here3};
+static void *ignore_stdout_args[] = { &here, &here2, &here3 };
 
 /* noop handlers, just check that arguments are passed correctly */
 static int ignore_stdout_func(int fd, void *arg) {
@@ -115,6 +115,9 @@ static void test_execute_directory(bool gather_stdout) {
         assert_se(chmod(masked2e, 0755) == 0);
         assert_se(chmod(mask2e, 0755) == 0);
 
+        if (access(name, X_OK) < 0 && ERRNO_IS_PRIVILEGE(errno))
+                return;
+
         if (gather_stdout)
                 execute_directories(dirs, DEFAULT_TIMEOUT_USEC, ignore_stdout, ignore_stdout_args, NULL, NULL, EXEC_DIR_PARALLEL | EXEC_DIR_IGNORE_ERRORS);
         else
@@ -182,6 +185,9 @@ static void test_execution_order(void) {
         assert_se(chmod(overridden, 0755) == 0);
         assert_se(chmod(override, 0755) == 0);
         assert_se(chmod(masked, 0755) == 0);
+
+        if (access(name, X_OK) < 0 && ERRNO_IS_PRIVILEGE(errno))
+                return;
 
         execute_directories(dirs, DEFAULT_TIMEOUT_USEC, ignore_stdout, ignore_stdout_args, NULL, NULL, EXEC_DIR_PARALLEL | EXEC_DIR_IGNORE_ERRORS);
 
@@ -265,6 +271,9 @@ static void test_stdout_gathering(void) {
         assert_se(chmod(name2, 0755) == 0);
         assert_se(chmod(name3, 0755) == 0);
 
+        if (access(name, X_OK) < 0 && ERRNO_IS_PRIVILEGE(errno))
+                return;
+
         r = execute_directories(dirs, DEFAULT_TIMEOUT_USEC, gather_stdout, args, NULL, NULL, EXEC_DIR_PARALLEL | EXEC_DIR_IGNORE_ERRORS);
         assert_se(r >= 0);
 
@@ -331,6 +340,9 @@ static void test_environment_gathering(void) {
         r = setenv("PATH", "no-sh-built-in-path", 1);
         assert_se(r >= 0);
 
+        if (access(name, X_OK) < 0 && ERRNO_IS_PRIVILEGE(errno))
+                return;
+
         r = execute_directories(dirs, DEFAULT_TIMEOUT_USEC, gather_environment, args, NULL, NULL, EXEC_DIR_PARALLEL | EXEC_DIR_IGNORE_ERRORS);
         assert_se(r >= 0);
 
@@ -360,10 +372,7 @@ static void test_environment_gathering(void) {
         assert_se(streq(strv_env_get(env, "PATH"), DEFAULT_PATH ":/no/such/file"));
 
         /* reset environ PATH */
-        if (old)
-                (void) setenv("PATH", old, 1);
-        else
-                (void) unsetenv("PATH");
+        assert_se(set_unset_env("PATH", old, true) == 0);
 }
 
 static void test_error_catching(void) {
@@ -394,6 +403,9 @@ static void test_error_catching(void) {
         assert_se(chmod(name, 0755) == 0);
         assert_se(chmod(name2, 0755) == 0);
         assert_se(chmod(name3, 0755) == 0);
+
+        if (access(name, X_OK) < 0 && ERRNO_IS_PRIVILEGE(errno))
+                return;
 
         r = execute_directories(dirs, DEFAULT_TIMEOUT_USEC, NULL, NULL, NULL, NULL, EXEC_DIR_NONE);
 

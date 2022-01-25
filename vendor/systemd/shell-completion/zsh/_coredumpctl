@@ -1,5 +1,5 @@
-#compdef coredumpctl                    -*- shell-script -*-
-# SPDX-License-Identifier: LGPL-2.1+
+#compdef coredumpctl
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 (( $+functions[_coredumpctl_commands] )) ||
 _coredumpctl_commands(){

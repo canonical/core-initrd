@@ -1,15 +1,13 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 /***
   Copyright © 2013 Intel Corporation. All rights reserved.
 ***/
 
-#include <stdint.h>
-#include <linux/if_packet.h>
-
 #include "sd-dhcp-client.h"
 
+#include "dhcp-internal.h"
 #include "dhcp-protocol.h"
 #include "list.h"
 #include "util.h"
@@ -52,17 +50,10 @@ struct sd_dhcp_lease {
         struct in_addr *router;
         size_t router_size;
 
-        struct in_addr *dns;
-        size_t dns_size;
-
-        struct in_addr *ntp;
-        size_t ntp_size;
-
-        struct in_addr *sip;
-        size_t sip_size;
+        DHCPServerData servers[_SD_DHCP_LEASE_SERVER_TYPE_MAX];
 
         struct sd_dhcp_route *static_route;
-        size_t static_route_size, static_route_allocated;
+        size_t static_route_size;
 
         uint16_t mtu; /* 0 if unset */
 
@@ -91,6 +82,3 @@ int dhcp_lease_insert_private_option(sd_dhcp_lease *lease, uint8_t tag, const vo
 int dhcp_lease_set_default_subnet_mask(sd_dhcp_lease *lease);
 
 int dhcp_lease_set_client_id(sd_dhcp_lease *lease, const void *client_id, size_t client_id_len);
-
-int dhcp_lease_save(sd_dhcp_lease *lease, const char *lease_file);
-int dhcp_lease_load(sd_dhcp_lease **ret, const char *lease_file);

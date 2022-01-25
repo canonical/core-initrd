@@ -25,6 +25,19 @@ layout: default
   note that emacs loads `.dir-locals.el` automatically, but vim needs to be
   configured to load `.vimrc`, see that file for instructions.
 
+- If you break a function declaration over multiple lines, do it like this:
+
+  ```c
+  void some_function(
+                  int foo,
+                  bool bar,
+                  char baz) {
+
+          int a, b, c;
+  ```
+
+  (i.e. use double indentation — 16 spaces — for the parameter list.)
+
 - Try to write this:
 
   ```c
@@ -56,6 +69,14 @@ layout: default
   ```
 
 - Do not write `foo ()`, write `foo()`.
+- `else` blocks should generally start on the same line as the closing `}`:
+  ```c
+  if (foobar) {
+          find();
+          waldo();
+  } else
+          dont_find_waldo();
+  ```
 
 ## Code Organization and Semantics
 
@@ -73,7 +94,27 @@ layout: default
 
 - Do not write functions that clobber call-by-reference variables on
   failure. Use temporary variables for these cases and change the passed in
-  variables only on success.
+  variables only on success. The rule is: never clobber return parameters on
+  failure, always initialize return parameters on success.
+
+- Typically, function parameters fit into three categories: input parameters,
+  mutable objects, and call-by-reference return parameters. Input parameters
+  should always carry suitable "const" declarators if they are pointers, to
+  indicate they are input-only and not changed by the function. Return
+  parameters are best prefixed with "ret_", to clarify they are return
+  parameters. (Conversely, please do not prefix parameters that aren't
+  output-only with "ret_", in particular not mutable parameters that are both
+  input as well as output). Example:
+
+  ```c
+  static int foobar_frobnicate(
+                  Foobar* object,            /* the associated mutable object */
+                  const char *input,         /* immutable input parameter */
+                  char **ret_frobnicated) {  /* return parameter */
+          …
+          return 0;
+  }
+  ```
 
 - The order in which header files are included doesn't matter too
   much. systemd-internal headers must not rely on an include order, so it is
@@ -102,31 +143,6 @@ layout: default
   global in global variables, for example data parsed from command lines, see
   below.
 
-- You might wonder what kind of common code belongs in `src/shared/` and what
-  belongs in `src/basic/`. The split is like this: anything that is used to
-  implement the public shared object we provide (sd-bus, sd-login, sd-id128,
-  nss-systemd, nss-mymachines, nss-resolve, nss-myhostname, pam_systemd), must
-  be located in `src/basic` (those objects are not allowed to link to
-  libsystemd-shared.so). Conversely, anything which is shared between multiple
-  components and does not need to be in `src/basic/`, should be in
-  `src/shared/`.
-
-  To summarize:
-
-  `src/basic/`
-  - may be used by all code in the tree
-  - may not use any code outside of `src/basic/`
-
-  `src/libsystemd/`
-  - may be used by all code in the tree, except for code in `src/basic/`
-  - may not use any code outside of `src/basic/`, `src/libsystemd/`
-
-  `src/shared/`
-  - may be used by all code in the tree, except for code in `src/basic/`,
-    `src/libsystemd/`, `src/nss-*`, `src/login/pam_systemd.*`, and files under
-    `src/journal/` that end up in `libjournal-client.a` convenience library.
-  - may not use any code outside of `src/basic/`, `src/libsystemd/`, `src/shared/`
-
 - Our focus is on the GNU libc (glibc), not any other libcs. If other libcs are
   incompatible with glibc it's on them. However, if there are equivalent POSIX
   and Linux/GNU-specific APIs, we generally prefer the POSIX APIs. If there
@@ -135,18 +151,37 @@ layout: default
 
 ## Using C Constructs
 
-- Preferably allocate local variables on the top of the block:
+- Allocate local variables where it makes sense: at the top of the block, or at
+  the point where they can be initialized. `r` is typically used for a local
+  state variable, but should almost always be declared at the top of the
+  function.
 
   ```c
   {
-          int a, b;
+          uint64_t a, b;
+          int r;
 
-          a = 5;
-          b = a;
+          a = frobnicate();
+          b = a + 5;
+
+          r = do_something();
+          if (r < 0)
+                  …
   }
   ```
 
-- Do not mix function invocations with variable definitions in one line. Wrong:
+- Do not mix function invocations with variable definitions in one line.
+
+  ```c
+  {
+          uint64_t x = 7;
+          int a;
+
+          a = foobar();
+  }
+  ```
+
+  instead of:
 
   ```c
   {
@@ -155,18 +190,7 @@ layout: default
   }
   ```
 
-  Right:
-
-  ```c
-  {
-          int a;
-          uint64_t x = 7;
-
-          a = foobar();
-  }
-  ```
-
-- Use `goto` for cleaning up, and only use it for that. i.e. you may only jump
+- Use `goto` for cleaning up, and only use it for that. I.e. you may only jump
   to the end of a function, and little else. Never jump backwards!
 
 - To minimize strict aliasing violations, we prefer unions over casting.
@@ -285,6 +309,14 @@ layout: default
   unlink("/foo/bar/baz");
   ```
 
+  When returning from a `void` function, you may also want to shorten the error
+  path boilerplate by returning a function invocation cast to `(void)` like so:
+
+  ```c
+  if (condition_not_met)
+          return (void) log_tests_skipped("Cannot run ...");
+  ```
+
   Don't cast function calls to `(void)` that return no error
   conditions. Specifically, the various `xyz_unref()` calls that return a
   `NULL` object shouldn't be cast to `(void)`, since not using the return value
@@ -296,13 +328,16 @@ layout: default
 ## Logging
 
 - For every function you add, think about whether it is a "logging" function or
-  a "non-logging" function. "Logging" functions do logging on their own,
-  "non-logging" function never log on their own and expect their callers to
-  log. All functions in "library" code, i.e. in `src/shared/` and suchlike must
-  be "non-logging". Every time a "logging" function calls a "non-logging"
-  function, it should log about the resulting errors. If a "logging" function
-  calls another "logging" function, then it should not generate log messages,
-  so that log messages are not generated twice for the same errors.
+  a "non-logging" function. "Logging" functions do (non-debug) logging on their
+  own, "non-logging" function never log on their own (except at debug level)
+  and expect their callers to log. All functions in "library" code, i.e. in
+  `src/shared/` and suchlike must be "non-logging". Every time a "logging"
+  function calls a "non-logging" function, it should log about the resulting
+  errors. If a "logging" function calls another "logging" function, then it
+  should not generate log messages, so that log messages are not generated
+  twice for the same errors. (Note that debug level logging — at syslog level
+  `LOG_DEBUG` — is not considered logging in this context, debug logging is
+  generally always fine and welcome.)
 
 - If possible, do a combined log & return operation:
 
@@ -328,8 +363,7 @@ layout: default
   `log_oom()` for then printing a short message, but not in "library" code.
 
 - Avoid fixed-size string buffers, unless you really know the maximum size and
-  that maximum size is small. They are a source of errors, since they possibly
-  result in truncated strings. It is often nicer to use dynamic memory,
+  that maximum size is small. It is often nicer to use dynamic memory,
   `alloca()` or VLAs. If you do allocate fixed-size strings on the stack, then
   it is probably only OK if you either use a maximum size such as `LINE_MAX`,
   or count in detail the maximum size a string can have. (`DECIMAL_STR_MAX` and
@@ -372,7 +406,7 @@ layout: default
   broken on Linux).
 
 - When applying C-style unescaping as well as specifier expansion on the same
-  string, always apply the C-style unescaping fist, followed by the specifier
+  string, always apply the C-style unescaping first, followed by the specifier
   expansion. When doing the reverse, make sure to escape `%` in specifier-style
   first (i.e. `%` → `%%`), and then do C-style escaping where necessary.
 
@@ -385,7 +419,7 @@ layout: default
   limits after which it will refuse operation. It's fine if it is hard-coded
   (at least initially), but it needs to be there. This is particularly
   important for objects that unprivileged users may allocate, but also matters
-  for everything else any user may allocated.
+  for everything else any user may allocate.
 
 ## Types
 
@@ -420,11 +454,11 @@ layout: default
 
 - Use the bool type for booleans, not integers. One exception: in public
   headers (i.e those in `src/systemd/sd-*.h`) use integers after all, as `bool`
-  is C99 and in our public APIs we try to stick to C89 (with a few extension).
+  is C99 and in our public APIs we try to stick to C89 (with a few extensions).
 
 ## Deadlocks
 
-- Do not issue NSS requests (that includes user name and host name lookups)
+- Do not issue NSS requests (that includes user name and hostname lookups)
   from PID 1 as this might trigger deadlocks when those lookups involve
   synchronously talking to services that we would need to start up.
 
@@ -521,7 +555,7 @@ layout: default
   hence we might want to call it "big endian" right-away.
 
 - Please never use `dup()`. Use `fcntl(fd, F_DUPFD_CLOEXEC, 3)` instead. For
-  two reason: first, you want `O_CLOEXEC` set on the new `fd` (see
+  two reasons: first, you want `O_CLOEXEC` set on the new `fd` (see
   above). Second, `dup()` will happily duplicate your `fd` as 0, 1, 2,
   i.e. stdin, stdout, stderr, should those `fd`s be closed. Given the special
   semantics of those `fd`s, it's probably a good idea to avoid
@@ -529,7 +563,7 @@ layout: default
 
 - Don't use `fgets()`, it's too hard to properly handle errors such as overly
   long lines. Use `read_line()` instead, which is our own function that handles
-  this much nicer.
+  this much more nicely.
 
 - Don't invoke `exit()`, ever. It is not replacement for proper error
   handling. Please escalate errors up your call chain, and use normal `return`
@@ -537,11 +571,17 @@ layout: default
   process, please use `_exit()` instead of `exit()`, so that the exit handlers
   are not run.
 
-- We never use the POSIX version of `basename()` (which glibc defines it in
+- We never use the POSIX version of `basename()` (which glibc defines in
   `libgen.h`), only the GNU version (which glibc defines in `string.h`).  The
   only reason to include `libgen.h` is because `dirname()` is needed. Every
   time you need that please immediately undefine `basename()`, and add a
   comment about it, so that no code ever ends up using the POSIX version!
+
+- Never use `FILENAME_MAX`. Use `PATH_MAX` instead (for checking maximum size
+  of paths) and `NAME_MAX` (for checking maximum size of filenames).
+  `FILENAME_MAX` is not POSIX, and is a confusingly named alias for `PATH_MAX`
+  on Linux. Note that `NAME_MAX` does not include space for a trailing `NUL`,
+  but `PATH_MAX` does. UNIX FTW!
 
 ## Committing to git
 

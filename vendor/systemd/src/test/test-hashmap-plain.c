@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "hashmap.h"
@@ -251,7 +251,7 @@ static void test_hashmap_put(void) {
 
         log_info("/* %s */", __func__);
 
-        assert_se(hashmap_ensure_allocated(&m, &string_hash_ops) >= 0);
+        assert_se(hashmap_ensure_allocated(&m, &string_hash_ops) == 1);
         assert_se(m);
 
         valid_hashmap_put = hashmap_put(m, "key 1", val1);
@@ -451,23 +451,24 @@ static void test_hashmap_remove_and_replace(void) {
 }
 
 static void test_hashmap_ensure_allocated(void) {
-        Hashmap *m;
-        int valid_hashmap;
+        _cleanup_hashmap_free_ Hashmap *m = NULL;
+        int r;
 
         log_info("/* %s */", __func__);
 
-        m = hashmap_new(&string_hash_ops);
+        r = hashmap_ensure_allocated(&m, &string_hash_ops);
+        assert_se(r == 1);
 
-        valid_hashmap = hashmap_ensure_allocated(&m, &string_hash_ops);
-        assert_se(valid_hashmap == 0);
+        r = hashmap_ensure_allocated(&m, &string_hash_ops);
+        assert_se(r == 0);
 
-        assert_se(m);
-        hashmap_free(m);
+        /* different hash ops shouldn't matter at this point */
+        r = hashmap_ensure_allocated(&m, &trivial_hash_ops);
+        assert_se(r == 0);
 }
 
 static void test_hashmap_foreach_key(void) {
         Hashmap *m;
-        Iterator i;
         bool key_found[] = { false, false, false, false };
         const char *s;
         const char *key;
@@ -484,7 +485,7 @@ static void test_hashmap_foreach_key(void) {
         NULSTR_FOREACH(key, key_table)
                 hashmap_put(m, key, (void*) (const char*) "my dummy val");
 
-        HASHMAP_FOREACH_KEY(s, key, m, i) {
+        HASHMAP_FOREACH_KEY(s, key, m) {
                 assert(s);
                 if (!key_found[0] && streq(key, "key 1"))
                         key_found[0] = true;
@@ -504,7 +505,6 @@ static void test_hashmap_foreach_key(void) {
 
 static void test_hashmap_foreach(void) {
         Hashmap *m;
-        Iterator i;
         bool value_found[] = { false, false, false, false };
         char *val1, *val2, *val3, *val4, *s;
         unsigned count;
@@ -523,14 +523,14 @@ static void test_hashmap_foreach(void) {
         m = NULL;
 
         count = 0;
-        HASHMAP_FOREACH(s, m, i)
+        HASHMAP_FOREACH(s, m)
                 count++;
         assert_se(count == 0);
 
         m = hashmap_new(&string_hash_ops);
 
         count = 0;
-        HASHMAP_FOREACH(s, m, i)
+        HASHMAP_FOREACH(s, m)
                 count++;
         assert_se(count == 0);
 
@@ -539,7 +539,7 @@ static void test_hashmap_foreach(void) {
         hashmap_put(m, "Key 3", val3);
         hashmap_put(m, "Key 4", val4);
 
-        HASHMAP_FOREACH(s, m, i) {
+        HASHMAP_FOREACH(s, m) {
                 if (!value_found[0] && streq(s, val1))
                         value_found[0] = true;
                 else if (!value_found[1] && streq(s, val2))
@@ -557,8 +557,7 @@ static void test_hashmap_foreach(void) {
 }
 
 static void test_hashmap_merge(void) {
-        Hashmap *m;
-        Hashmap *n;
+        Hashmap *m, *n;
         char *val1, *val2, *val3, *val4, *r;
 
         log_info("/* %s */", __func__);
@@ -572,8 +571,8 @@ static void test_hashmap_merge(void) {
         val4 = strdup("my val4");
         assert_se(val4);
 
-        n = hashmap_new(&string_hash_ops);
         m = hashmap_new(&string_hash_ops);
+        n = hashmap_new(&string_hash_ops);
 
         hashmap_put(m, "Key 1", val1);
         hashmap_put(m, "Key 2", val2);
@@ -586,8 +585,8 @@ static void test_hashmap_merge(void) {
         r = hashmap_get(m, "Key 4");
         assert_se(r && streq(r, "my val4"));
 
-        assert_se(n);
         assert_se(m);
+        assert_se(n);
         hashmap_free(n);
         hashmap_free_free(m);
 }
@@ -1015,8 +1014,11 @@ static void test_path_hashmap(void) {
         assert_se(hashmap_put(h, "//foo", INT_TO_PTR(3)) == -EEXIST);
         assert_se(hashmap_put(h, "//foox/", INT_TO_PTR(4)) >= 0);
         assert_se(hashmap_put(h, "/foox////", INT_TO_PTR(5)) == -EEXIST);
+        assert_se(hashmap_put(h, "//././/foox//.//.", INT_TO_PTR(5)) == -EEXIST);
         assert_se(hashmap_put(h, "foo//////bar/quux//", INT_TO_PTR(6)) >= 0);
         assert_se(hashmap_put(h, "foo/bar//quux/", INT_TO_PTR(8)) == -EEXIST);
+        assert_se(hashmap_put(h, "foo./ba.r//.quux/", INT_TO_PTR(9)) >= 0);
+        assert_se(hashmap_put(h, "foo./ba.r//.//.quux///./", INT_TO_PTR(10)) == -EEXIST);
 
         assert_se(hashmap_get(h, "foo") == INT_TO_PTR(1));
         assert_se(hashmap_get(h, "foo/") == INT_TO_PTR(1));
@@ -1025,12 +1027,14 @@ static void test_path_hashmap(void) {
         assert_se(hashmap_get(h, "//foo") == INT_TO_PTR(2));
         assert_se(hashmap_get(h, "/////foo////") == INT_TO_PTR(2));
         assert_se(hashmap_get(h, "/////foox////") == INT_TO_PTR(4));
+        assert_se(hashmap_get(h, "/.///./foox//.//") == INT_TO_PTR(4));
         assert_se(hashmap_get(h, "/foox/") == INT_TO_PTR(4));
         assert_se(hashmap_get(h, "/foox") == INT_TO_PTR(4));
         assert_se(!hashmap_get(h, "foox"));
         assert_se(hashmap_get(h, "foo/bar/quux") == INT_TO_PTR(6));
         assert_se(hashmap_get(h, "foo////bar////quux/////") == INT_TO_PTR(6));
         assert_se(!hashmap_get(h, "/foo////bar////quux/////"));
+        assert_se(hashmap_get(h, "foo././//ba.r////.quux///.//.") == INT_TO_PTR(9));
 }
 
 static void test_string_strv_hashmap(void) {

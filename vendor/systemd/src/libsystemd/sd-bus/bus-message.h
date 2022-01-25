@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <byteswap.h>
@@ -26,7 +26,7 @@ struct bus_container {
         uint32_t *array_size;
 
         /* gvariant: list of offsets to end of children if this is struct/dict entry/array */
-        size_t *offsets, n_offsets, offsets_allocated, offset_index;
+        size_t *offsets, n_offsets, offset_index;
         size_t item_size;
 
         char *peeked_signature;
@@ -76,7 +76,6 @@ struct sd_bus_message {
         usec_t monotonic;
         usec_t realtime;
         uint64_t seqnum;
-        int64_t priority;
         uint64_t verify_destination_id;
 
         bool sealed:1;
@@ -112,7 +111,6 @@ struct sd_bus_message {
 
         struct bus_container root_container, *containers;
         size_t n_containers;
-        size_t containers_allocated;
 
         struct iovec *iovec;
         struct iovec iovec_fixed[2];

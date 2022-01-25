@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <linux/bpf_insn.h>
 #include <string.h>
@@ -8,10 +8,11 @@
 #include "bpf-program.h"
 #include "load-fragment.h"
 #include "manager.h"
+#include "memory-util.h"
 #include "rm-rf.h"
 #include "service.h"
 #include "tests.h"
-#include "unit.h"
+#include "unit-serialize.h"
 #include "virt.h"
 
 int main(int argc, char *argv[]) {
@@ -48,7 +49,9 @@ int main(int argc, char *argv[]) {
         if (r == -ENOMEDIUM)
                 return log_tests_skipped("cgroupfs not available");
 
-        assert_se(set_unit_path(get_testdata_dir()) >= 0);
+        _cleanup_free_ char *unit_dir = NULL;
+        assert_se(get_testdata_dir("units", &unit_dir) >= 0);
+        assert_se(set_unit_path(unit_dir) >= 0);
         assert_se(runtime_dir = setup_fake_runtime_dir());
 
         r = bpf_program_new(BPF_PROG_TYPE_CGROUP_SKB, &p);
@@ -75,11 +78,10 @@ int main(int argc, char *argv[]) {
         assert(r >= 0);
 
         if (test_custom_filter) {
-                attr = (union bpf_attr) {
-                        .pathname = PTR_TO_UINT64(test_prog),
-                        .bpf_fd = p->kernel_fd,
-                        .file_flags = 0,
-                };
+                zero(attr);
+                attr.pathname = PTR_TO_UINT64(test_prog);
+                attr.bpf_fd = p->kernel_fd;
+                attr.file_flags = 0;
 
                 (void) unlink(test_prog);
 

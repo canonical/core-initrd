@@ -11,15 +11,18 @@ ifeq ($(DEB_VENDOR),Ubuntu)
     DEFAULT_NTP_SERVERS = ntp.ubuntu.com
     SUPPORT_URL = http://www.ubuntu.com/support
     CONFFLAGS_DISTRO = -Dtpm-pcrindex=12
+ifeq ($(DEB_HOST_ARCH),amd64)
+# enable CET on ubuntu amd64, until compiler is fixed to do it correctly with
+# -flto
+export DEB_LDFLAGS_MAINT_APPEND=-fcf-protection
+endif
 else
     DEFAULT_NTP_SERVERS = 0.debian.pool.ntp.org 1.debian.pool.ntp.org 2.debian.pool.ntp.org 3.debian.pool.ntp.org
     SUPPORT_URL = https://www.debian.org/support
     CONFFLAGS_DISTRO =
 endif
 
-ifneq (, $(filter $(DEB_BUILD_ARCH), riscv64))
-    TEST_TIMEOUT_MULTIPLIER = "-t 10"
-endif
+TEST_TIMEOUT_MULTIPLIER = "-t 10"
 
 # fail on missing files and symbols changes on distro builds, but not if we
 # build/test upstream master
@@ -38,7 +41,8 @@ endif
 CONFFLAGS = \
 	-Db_lto=true \
 	-Db_pie=true \
-	-Drootlibdir=/lib/$(DEB_HOST_MULTIARCH) \
+	-Dmode=release \
+	-Drootlibdir=/usr/lib/$(DEB_HOST_MULTIARCH) \
 	-Dsplit-usr=true \
 	-Duser-path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
 	-Dversion-tag="$(DEB_VERSION)" \
@@ -55,13 +59,18 @@ CONFFLAGS = \
 	-Dtelinit-path=/lib/sysvinit/telinit \
 	-Dsysvinit-path=/etc/init.d \
 	-Dsysvrcnd-path=/etc \
+	-Dlocalegen-path=/usr/sbin/locale-gen \
 	-Ddebug-shell=/bin/bash \
 	-Dzshcompletiondir=/usr/share/zsh/vendor-completions \
 	-Ddbuspolicydir=/usr/share/dbus-1/system.d/ \
 	-Dsupport-url=$(SUPPORT_URL) \
 	-Ddefault-kill-user-processes=false \
-	-Ddefault-hierarchy=hybrid \
+	-Ddefault-hierarchy=unified \
+	-Ddefault-dnssec=no \
+	-Ddefault-llmnr=no \
+	-Ddefault-mdns=no \
 	-Dpamconfdir=no \
+	-Dpamlibdir=/lib/$(DEB_HOST_MULTIARCH)/security \
 	-Drpmmacrosdir=no \
 	-Dqrencode=false \
 	-Dvconsole=false \
@@ -71,9 +80,14 @@ CONFFLAGS = \
 	-Drepart=false \
 	-Duserdb=false \
 	-Dhomed=false \
+	-Dlibfido2=false \
 	-Dfdisk=false \
 	-Dpwquality=false \
 	-Dp11kit=false \
+	-Dtpm2=false \
+	-Doomd=false \
+	-Dsysext=true \
+	-Dnscd=true \
 	-Dntp-servers="$(DEFAULT_NTP_SERVERS)" \
 	-Ddns-servers='' \
 	-Dlink-udev-shared=false \
@@ -85,10 +99,6 @@ CONFFLAGS = \
 	-Ddev-kvm-mode=0660 \
 	-Dgroup-render-mode=0660
 
-# resolved's DNSSEC support is still not mature enough, don't enable it by
-# default on stable Debian or any Ubuntu releases
-CONFFLAGS += $(shell grep -qE 'stretch|ubuntu' /etc/os-release && echo -Ddefault-dnssec=no)
-
 CONFFLAGS_deb = \
 	-Dselinux=true \
 	-Dhwdb=true \
@@ -96,11 +106,13 @@ CONFFLAGS_deb = \
 	-Dinstall-tests=$(if $(filter noinsttest,$(DEB_BUILD_PROFILES)),false,true) \
 	-Defi=true \
 	-Dman=true \
+	-Dtranslations=true \
 	-Dnss-myhostname=true \
 	-Dnss-mymachines=true \
 	-Dnss-resolve=true \
 	-Dnss-systemd=true \
 	-Dresolve=true \
+	-Dstandalone-binaries=true \
 	-Dlink-systemctl-shared=false
 
 ifeq (, $(filter stage1, $(DEB_BUILD_PROFILES)))
@@ -173,6 +185,7 @@ CONFFLAGS_udeb = \
 	-Drfkill=false \
 	-Dhwdb=false \
 	-Dman=false \
+	-Dtranslations=false \
 	-Defi=false \
 	-Dseccomp=false \
 	-Dsysusers=false \
@@ -225,24 +238,35 @@ override_dh_install:
 	rm -f debian/install/*/usr/share/doc/systemd/LICENSE.*
 	rm -f debian/install/*/var/log/README
 	rm -f debian/install/*/etc/init.d/README
+	rm -f debian/install/*/lib/*.d/README
+	rm -f debian/install/*/lib/udev/*.d/README
+	rm -f debian/install/*/usr/lib/*.d/README
 	rm -f debian/install/*/etc/X11/xinit/xinitrc.d/50-systemd-user.sh
 	rmdir -p --ignore-fail-on-non-empty debian/install/*/etc/X11/xinit/xinitrc.d/
 	# remove files related to factory-reset feature
 	find debian/install/ \( -name 'systemd-update-done*' -o \
 		-name systemd-journal-catalog-update.service -o \
-		-name systemd-udev-hwdb-update.service -o \
+		-name systemd-hwdb-update.service -o \
 		-name ldconfig.service -o \
-		-name etc.conf \) -delete
+		-name etc.conf \) -print -delete
 	rm -rf debian/install/*/usr/share/factory/
 	# replace upstream sysusers.d/basic.conf with proper users for Debian
 	debian/extra/make-sysusers-basic > debian/install/deb/usr/lib/sysusers.d/basic.conf
 	# remove resolvconf compat symlink
 	rm -f debian/install/*/sbin/resolvconf
+	# remove obsolete compat symlink
+	rm -f debian/install/*/usr/bin/systemd-resolve
 ifeq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
 	dh_install -pudev-udeb -plibudev1-udeb --sourcedir=debian/install/udeb
 endif
 
 	dh_install --remaining-packages --sourcedir=debian/install/deb
+
+	# install standalone binaries
+	for pkg in sysusers tmpfiles; do \
+		mkdir -p debian/systemd-standalone-$$pkg/bin; \
+		mv debian/systemd/bin/systemd-$$pkg.standalone debian/systemd-standalone-$$pkg/bin/systemd-$$pkg; \
+	done
 
 	# we don't want /tmp to be a tmpfs by default
 	mv debian/systemd/lib/systemd/system/tmp.mount debian/systemd/usr/share/systemd/
@@ -262,7 +286,7 @@ endif
 
 	# remove duplicate files shipped by systemd-*/udev
 	echo "Removing duplicate files in systemd package:"
-	set -e; for pkg in $(shell dh_listpackages -Nudev-udeb -Nlibudev1-udeb -Nsystemd); do \
+	set -e; for pkg in $(shell dh_listpackages -Nudev-udeb -Nlibudev1-udeb -Nsystemd -Nsystemd-standalone-sysusers -Nsystemd-standalone-tmpfiles); do \
 		echo "... from $$pkg..."; \
 		(cd debian/$$pkg; find -type f -o -type l) | (cd debian/systemd; xargs rm -f --verbose); \
 		(cd debian/$$pkg; find -mindepth 1 -type d | sort -r) | (cd debian/systemd; xargs rmdir --ignore-fail-on-non-empty --verbose || true); \
@@ -274,8 +298,11 @@ ifeq ($(DEB_VENDOR),Ubuntu)
 	install -D --mode=644 debian/extra/systemd.py debian/systemd/usr/share/apport/package-hooks/systemd.py
 	install --mode=644 debian/extra/rules-ubuntu/*.rules debian/udev/lib/udev/rules.d/
 	cp -a debian/extra/units-ubuntu/* debian/systemd/lib/systemd/system/
-	install --mode=755 debian/extra/set-cpufreq debian/systemd/lib/systemd/
-	install -D --mode=755 debian/extra/dhclient-enter-resolved-hook debian/systemd/etc/dhcp/dhclient-enter-hooks.d/resolved
+endif
+
+	# Remove unneeded file that produces errors in debugedit (LP: #1950445)
+ifeq ($(DEB_HOST_ARCH),i386)
+	rm -f debian/systemd/usr/lib/systemd/boot/efi/linuxia32.elf.stub
 endif
 
 override_dh_missing:
@@ -285,11 +312,10 @@ override_dh_installinit:
 	dh_installinit --no-scripts -psystemd
 	dh_installinit --no-start -Nsystemd
 
-override_dh_systemd_enable:
-	dh_systemd_enable -psystemd-timesyncd
+override_dh_installsystemd:
+	dh_installsystemd -psystemd-timesyncd
 
-override_dh_systemd_start:
-	dh_systemd_start -psystemd-timesyncd
+override_dh_installsystemduser:
 
 PROJECT_VERSION ?= $(shell awk '/(PROJECT|PACKAGE)_VERSION/ {print $$3}' build-deb/config.h | tr -d \")
 

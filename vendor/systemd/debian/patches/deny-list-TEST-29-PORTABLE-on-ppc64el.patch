@@ -1,0 +1,16 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Thu, 13 May 2021 16:57:32 +0200
+Subject: Deny-list TEST-29-PORTABLE on ppc64el
+
+---
+ test/TEST-29-PORTABLE/deny-list-upstream-ci-ppc64el | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 test/TEST-29-PORTABLE/deny-list-upstream-ci-ppc64el
+
+diff --git a/test/TEST-29-PORTABLE/deny-list-upstream-ci-ppc64el b/test/TEST-29-PORTABLE/deny-list-upstream-ci-ppc64el
+new file mode 100644
+index 0000000..7281c38
+--- /dev/null
++++ b/test/TEST-29-PORTABLE/deny-list-upstream-ci-ppc64el
+@@ -0,0 +1 @@
++# autofs4 module is missing on ppc64el

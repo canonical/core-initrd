@@ -1,1 +1,1 @@
-lib/*/libsystemd.so.*
+usr/lib/*/libsystemd.so.*

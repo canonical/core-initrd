@@ -1,5 +1,5 @@
 # localectl(1) completion                                 -*- shell-script -*-
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # This file is part of systemd.
 #
@@ -67,7 +67,7 @@ _localectl() {
         fi
     done
 
-    if [[ -z $verb ]]; then
+    if [[ -z ${verb-} ]]; then
         comps=${VERBS[*]}
     elif __contains_word "$verb" ${VERBS[VARIANTS]}; then
         comps=$(command localectl list-x11-keymap-layouts)

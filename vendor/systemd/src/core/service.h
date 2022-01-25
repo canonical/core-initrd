@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 typedef struct Service Service;
@@ -20,7 +20,7 @@ typedef enum ServiceRestart {
         SERVICE_RESTART_ON_ABORT,
         SERVICE_RESTART_ALWAYS,
         _SERVICE_RESTART_MAX,
-        _SERVICE_RESTART_INVALID = -1
+        _SERVICE_RESTART_INVALID = -EINVAL,
 } ServiceRestart;
 
 typedef enum ServiceType {
@@ -32,7 +32,7 @@ typedef enum ServiceType {
         SERVICE_IDLE,     /* much like simple, but delay exec() until all jobs are dispatched. */
         SERVICE_EXEC,     /* we fork and wait until we execute exec() (this means our own setup is waited for) */
         _SERVICE_TYPE_MAX,
-        _SERVICE_TYPE_INVALID = -1
+        _SERVICE_TYPE_INVALID = -EINVAL,
 } ServiceType;
 
 typedef enum ServiceExecCommand {
@@ -44,7 +44,7 @@ typedef enum ServiceExecCommand {
         SERVICE_EXEC_STOP,
         SERVICE_EXEC_STOP_POST,
         _SERVICE_EXEC_COMMAND_MAX,
-        _SERVICE_EXEC_COMMAND_INVALID = -1
+        _SERVICE_EXEC_COMMAND_INVALID = -EINVAL,
 } ServiceExecCommand;
 
 typedef enum NotifyState {
@@ -53,7 +53,7 @@ typedef enum NotifyState {
         NOTIFY_RELOADING,
         NOTIFY_STOPPING,
         _NOTIFY_STATE_MAX,
-        _NOTIFY_STATE_INVALID = -1
+        _NOTIFY_STATE_INVALID = -EINVAL,
 } NotifyState;
 
 /* The values of this enum are referenced in man/systemd.exec.xml and src/shared/bus-unit-util.c.
@@ -71,8 +71,16 @@ typedef enum ServiceResult {
         SERVICE_FAILURE_OOM_KILL,
         SERVICE_SKIP_CONDITION,
         _SERVICE_RESULT_MAX,
-        _SERVICE_RESULT_INVALID = -1
+        _SERVICE_RESULT_INVALID = -EINVAL,
 } ServiceResult;
+
+typedef enum ServiceTimeoutFailureMode {
+        SERVICE_TIMEOUT_TERMINATE,
+        SERVICE_TIMEOUT_ABORT,
+        SERVICE_TIMEOUT_KILL,
+        _SERVICE_TIMEOUT_FAILURE_MODE_MAX,
+        _SERVICE_TIMEOUT_FAILURE_MODE_INVALID = -EINVAL,
+} ServiceTimeoutFailureMode;
 
 struct ServiceFDStore {
         Service *service;
@@ -80,6 +88,7 @@ struct ServiceFDStore {
         int fd;
         char *fdname;
         sd_event_source *event_source;
+        bool do_poll;
 
         LIST_FIELDS(ServiceFDStore, fd_store);
 };
@@ -102,6 +111,8 @@ struct Service {
         usec_t timeout_abort_usec;
         bool timeout_abort_set;
         usec_t runtime_max_usec;
+        ServiceTimeoutFailureMode timeout_start_failure_mode;
+        ServiceTimeoutFailureMode timeout_stop_failure_mode;
 
         dual_timestamp watchdog_timestamp;
         usec_t watchdog_usec;            /* the requested watchdog timeout in the unit file */
@@ -199,6 +210,11 @@ static inline usec_t service_timeout_abort_usec(Service *s) {
         return s->timeout_abort_set ? s->timeout_abort_usec : s->timeout_stop_usec;
 }
 
+static inline usec_t service_get_watchdog_usec(Service *s) {
+        assert(s);
+        return s->watchdog_override_enable ? s->watchdog_override_usec : s->watchdog_original_usec;
+}
+
 extern const UnitVTable service_vtable;
 
 int service_set_socket_fd(Service *s, int fd, struct Socket *socket, bool selinux_context_net);
@@ -222,6 +238,12 @@ NotifyState notify_state_from_string(const char *s) _pure_;
 const char* service_result_to_string(ServiceResult i) _const_;
 ServiceResult service_result_from_string(const char *s) _pure_;
 
+const char* service_timeout_failure_mode_to_string(ServiceTimeoutFailureMode i) _const_;
+ServiceTimeoutFailureMode service_timeout_failure_mode_from_string(const char *s) _pure_;
+
 DEFINE_CAST(SERVICE, Service);
 
 #define STATUS_TEXT_MAX (16U*1024U)
+
+/* Only exported for unit tests */
+int service_deserialize_exec_command(Unit *u, const char *key, const char *value);

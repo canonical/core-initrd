@@ -1,13 +1,13 @@
 ---
 title: JSON Group Records
-category: Interfaces
+category: Users, Groups and Home Directories
 layout: default
 ---
 
 # JSON Group Records
 
 Long story short: JSON Group Records are to `struct group` what [JSON User
-Records](https://systemd.io/USER_RECORD.md) are to `struct passwd`.
+Records](https://systemd.io/USER_RECORD) are to `struct passwd`.
 
 Conceptually, much of what applies to JSON user records also applies to JSON
 group records. They also consist of seven sections, with similar properties and
@@ -21,6 +21,10 @@ UNIX/glibc NSS `struct group`, or the shadow structure `struct sgrp`'s
 
 `realm` → The "realm" the group belongs to, conceptually identical to the same
 field of user records. A string in DNS domain name syntax.
+
+`description` → A descriptive string for the group. This is similar to the
+`realName` field of user records, and accepts arbitrary strings, as long as
+they follow the same GECOS syntax requirements as `realName`.
 
 `disposition` → The disposition of the group, conceptually identical to the
 same field of user records. A string.

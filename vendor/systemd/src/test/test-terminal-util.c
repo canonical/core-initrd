@@ -1,8 +1,9 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "alloc-util.h"
@@ -14,6 +15,12 @@
 #include "tests.h"
 #include "tmpfile-util.h"
 #include "util.h"
+
+#define LOREM_IPSUM "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor " \
+        "incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation " \
+        "ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit " \
+        "in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat " \
+        "non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
 
 static void test_default_term_for_tty(void) {
         log_info("/* %s */", __func__);
@@ -75,36 +82,99 @@ static void test_getttyname_malloc(void) {
         assert_se(PATH_IN_SET(ttyname, "ptmx", "pts/ptmx"));
 }
 
-static void test_one_color(const char *name, const char *color) {
-        printf("<%s%s%s>\n", color, name, ansi_normal());
-}
+typedef struct {
+        const char *name;
+        const char* (*func)(void);
+} Color;
+
+static const Color colors[] = {
+        { "normal", ansi_normal },
+        { "highlight", ansi_highlight },
+        { "black", ansi_black },
+        { "red", ansi_red },
+        { "green", ansi_green },
+        { "yellow", ansi_yellow },
+        { "blue", ansi_blue },
+        { "magenta", ansi_magenta },
+        { "cyan", ansi_cyan },
+        { "white", ansi_white },
+        { "grey", ansi_grey },
+
+        { "bright-black", ansi_bright_black },
+        { "bright-red", ansi_bright_red },
+        { "bright-green", ansi_bright_green },
+        { "bright-yellow", ansi_bright_yellow },
+        { "bright-blue", ansi_bright_blue },
+        { "bright-magenta", ansi_bright_magenta },
+        { "bright-cyan", ansi_bright_cyan },
+        { "bright-white", ansi_bright_white },
+
+        { "highlight-black", ansi_highlight_black },
+        { "highlight-red", ansi_highlight_red },
+        { "highlight-green", ansi_highlight_green },
+        { "highlight-yellow (original)", _ansi_highlight_yellow },
+        { "highlight-yellow (replacement)", ansi_highlight_yellow },
+        { "highlight-blue", ansi_highlight_blue },
+        { "highlight-magenta", ansi_highlight_magenta },
+        { "highlight-cyan", ansi_highlight_cyan },
+        { "highlight-white", ansi_highlight_white },
+        { "highlight-grey", ansi_highlight_grey },
+
+        { "underline", ansi_underline },
+        { "highlight-underline", ansi_highlight_underline },
+        { "highlight-red-underline", ansi_highlight_red_underline },
+        { "highlight-green-underline", ansi_highlight_green_underline },
+        { "highlight-yellow-underline", ansi_highlight_yellow_underline },
+        { "highlight-blue-underline", ansi_highlight_blue_underline },
+        { "highlight-magenta-underline", ansi_highlight_magenta_underline },
+        { "highlight-grey-underline", ansi_highlight_grey_underline },
+};
 
 static void test_colors(void) {
         log_info("/* %s */", __func__);
 
-        test_one_color("normal", ansi_normal());
-        test_one_color("highlight", ansi_highlight());
-        test_one_color("red", ansi_red());
-        test_one_color("green", ansi_green());
-        test_one_color("yellow", ansi_yellow());
-        test_one_color("blue", ansi_blue());
-        test_one_color("megenta", ansi_magenta());
-        test_one_color("grey", ansi_grey());
-        test_one_color("highlight-red", ansi_highlight_red());
-        test_one_color("highlight-green", ansi_highlight_green());
-        test_one_color("highlight-yellow", ansi_highlight_yellow());
-        test_one_color("highlight-blue", ansi_highlight_blue());
-        test_one_color("highlight-magenta", ansi_highlight_magenta());
-        test_one_color("highlight-grey", ansi_highlight_grey());
+        for (size_t i = 0; i < ELEMENTSOF(colors); i++)
+                printf("<%s%s%s>\n", colors[i].func(), colors[i].name, ansi_normal());
+}
 
-        test_one_color("underline", ansi_underline());
-        test_one_color("highlight-underline", ansi_highlight_underline());
-        test_one_color("highlight-red-underline", ansi_highlight_red_underline());
-        test_one_color("highlight-green-underline", ansi_highlight_green_underline());
-        test_one_color("highlight-yellow-underline", ansi_highlight_yellow_underline());
-        test_one_color("highlight-blue-underline", ansi_highlight_blue_underline());
-        test_one_color("highlight-magenta-underline", ansi_highlight_magenta_underline());
-        test_one_color("highlight-grey-underline", ansi_highlight_grey_underline());
+static void test_text(void) {
+        log_info("/* %s */", __func__);
+
+        for (size_t i = 0; !streq(colors[i].name, "underline"); i++) {
+                bool blwh = strstr(colors[i].name, "black")
+                        || strstr(colors[i].name, "white");
+
+                printf("\n"
+                       "Testing color %s%s\n%s%s%s\n",
+                       colors[i].name,
+                       blwh ? "" : ", this text should be readable",
+                       colors[i].func(),
+                       LOREM_IPSUM,
+                       ansi_normal());
+        }
+}
+
+static void test_get_ctty(void) {
+        _cleanup_free_ char *ctty = NULL;
+        struct stat st;
+        dev_t devnr;
+        int r;
+
+        r = get_ctty(0, &devnr, &ctty);
+        if (r < 0) {
+                log_notice_errno(r, "Apparently called without a controlling TTY, cutting get_ctty() test short: %m");
+                return;
+        }
+
+        /* In almost all cases STDIN will match our controlling TTY. Let's verify that and then compare paths */
+        assert_se(fstat(STDIN_FILENO, &st) >= 0);
+        if (S_ISCHR(st.st_mode) && st.st_rdev == devnr) {
+                _cleanup_free_ char *stdin_name = NULL;
+
+                assert_se(getttyname_malloc(STDIN_FILENO, &stdin_name) >= 0);
+                assert_se(path_equal(stdin_name, ctty));
+        } else
+                log_notice("Not invoked with stdin == ctty, cutting get_ctty() test short");
 }
 
 int main(int argc, char *argv[]) {
@@ -114,6 +184,8 @@ int main(int argc, char *argv[]) {
         test_read_one_char();
         test_getttyname_malloc();
         test_colors();
+        test_text();
+        test_get_ctty();
 
         return 0;
 }

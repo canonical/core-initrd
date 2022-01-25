@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 _systemd_headers = '''
         sd-bus.h
@@ -12,6 +12,7 @@ _systemd_headers = '''
         sd-journal.h
         sd-login.h
         sd-messages.h
+        sd-path.h
 '''.split()
 
 # https://github.com/mesonbuild/meson/issues/1633
@@ -23,6 +24,7 @@ _not_installed_headers = '''
         sd-dhcp-client.h
         sd-dhcp-lease.h
         sd-dhcp-option.h
+        sd-dhcp6-option.h
         sd-dhcp-server.h
         sd-ipv4acd.h
         sd-ipv4ll.h
@@ -30,7 +32,6 @@ _not_installed_headers = '''
         sd-ndisc.h
         sd-netlink.h
         sd-network.h
-        sd-path.h
         sd-radv.h
         sd-resolve.h
         sd-utf8.h
@@ -40,7 +41,6 @@ install_headers(
         systemd_headers,
         '_sd-common.h',
         subdir : 'systemd')
-
 
 ############################################################
 
@@ -53,21 +53,25 @@ if cc.has_argument('-std=iso9899:2017')
         opts += [['c', '-std=iso9899:2017']]
 endif
 
-if add_languages('cpp', required : false)
+if cxx_cmd != ''
         opts += [['c++'],
                  ['c++', '-std=c++98'],
                  ['c++', '-std=c++11']]
-        if cc.has_argument('-std=c++14')
+        if cxx.has_argument('-std=c++14')
                 opts += [['c++', '-std=c++14']]
         endif
-        if cc.has_argument('-std=c++17')
+        if cxx.has_argument('-std=c++17')
                 opts += [['c++', '-std=c++17']]
+        endif
+        if cxx.has_argument('-std=c++20')
+                opts += [['c++', '-std=c++20']]
         endif
 endif
 
-foreach header : _systemd_headers + _not_installed_headers + ['../libudev/libudev.h']
+foreach header : _systemd_headers + _not_installed_headers + [libudev_h_path]
         foreach opt : opts
-                name = ''.join(['cc-', header.split('/')[-1], ':'] + opt)
+                std_name = opt.length() == 2 ? '_'.join(opt[1].split(':')) : ''
+                name = ''.join(['cc-', header.split('/')[-1], '_', opt[0], std_name])
                 if want_tests != 'false'
                         test(name,
                              check_compilation_sh,

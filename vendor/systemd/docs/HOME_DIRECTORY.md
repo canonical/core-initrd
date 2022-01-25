@@ -1,6 +1,6 @@
 ---
 title: Home Directories
-category: Concepts
+category: Users, Groups and Home Directories
 layout: default
 ---
 
@@ -125,7 +125,7 @@ medium. (Moreover it allows to embed additional partitions later on, for
 example for allowing a multi-purpose USB stick that contains both a home
 directory and a generic storage volume.)
 
-Rationale for including the encrypted user record in the the LUKS2 header:
+Rationale for including the encrypted user record in the LUKS2 header:
 Linux kernel file system implementations are generally not robust towards
 maliciously formatted file systems; there's a good chance that file system
 images can be used as attack vectors, exploiting the kernel. Thus it is
@@ -147,7 +147,7 @@ directory-based storage mechanisms (`directory`, `subvolume` and `fscrypt`)
 this is a bind mount, in case of `cifs` this is a CIFS network mount, and in
 case of the LUKS2 backend a regular block device mount of the file system
 contained in the LUKS2 image. By requiring a mount for all cases (even for
-those that already are a directory) a clear logic is defined to distuingish
+those that already are a directory) a clear logic is defined to distinguish
 active and inactive home directories, so that the directories become
 inaccessible under their regular path the instant they are
 deactivated. Moreover, the `nosuid`, `nodev` and `noexec` flags configured in
@@ -168,6 +168,10 @@ If the UID assigned to a user does not match the owner of the home directory in
 the file system, the home directory is automatically and recursively `chown()`ed
 to the correct UID.
 
-Depending on the `discard` setting of the user record either the backing
+Depending on the `luksDiscard` setting of the user record either the backing
 loopback file is `fallocate()`ed during activation, or the mounted file system
 is `FITRIM`ed after mounting, to ensure the setting is correctly enforced.
+
+When deactivating a home directory, the file system or block device is trimmed
+or extended as configured in the `luksOfflineDiscard` setting of the user
+record.

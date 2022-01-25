@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <netinet/in.h>
 #include <linux/fou.h>
@@ -389,7 +389,7 @@ static int netdev_ip6tnl_fill_message_create(NetDev *netdev, Link *link, sd_netl
         if (t->allow_localremote >= 0)
                 SET_FLAG(t->flags, IP6_TNL_F_ALLOW_LOCAL_REMOTE, t->allow_localremote);
 
-        if (t->encap_limit != IPV6_DEFAULT_TNL_ENCAP_LIMIT) {
+        if (t->encap_limit != 0) {
                 r = sd_netlink_message_append_u8(m, IFLA_IPTUN_ENCAP_LIMIT, t->encap_limit);
                 if (r < 0)
                         return log_netdev_error_errno(netdev, r, "Could not append IFLA_IPTUN_ENCAP_LIMIT attribute: %m");
@@ -468,7 +468,7 @@ static int netdev_tunnel_verify(NetDev *netdev, const char *filename) {
                                               "vti/ipip/sit/gre tunnel without a local/remote IPv4 address configured in %s. Ignoring", filename);
 
         if (IN_SET(netdev->kind, NETDEV_KIND_GRETAP, NETDEV_KIND_ERSPAN) &&
-            (t->family != AF_INET || in_addr_is_null(t->family, &t->remote)))
+            (t->family != AF_INET || !in_addr_is_set(t->family, &t->remote)))
                 return log_netdev_error_errno(netdev, SYNTHETIC_ERRNO(EINVAL),
                                               "gretap/erspan tunnel without a remote IPv4 address configured in %s. Ignoring", filename);
 
@@ -478,7 +478,7 @@ static int netdev_tunnel_verify(NetDev *netdev, const char *filename) {
                                               "vti6/ip6tnl/ip6gre tunnel without a local/remote IPv6 address configured in %s. Ignoring", filename);
 
         if (netdev->kind == NETDEV_KIND_IP6GRETAP &&
-            (t->family != AF_INET6 || in_addr_is_null(t->family, &t->remote)))
+            (t->family != AF_INET6 || !in_addr_is_set(t->family, &t->remote)))
                 return log_netdev_error_errno(netdev, SYNTHETIC_ERRNO(EINVAL),
                                               "ip6gretap tunnel without a remote IPv6 address configured in %s. Ignoring", filename);
 
@@ -530,24 +530,22 @@ int config_parse_tunnel_address(const char *unit,
                 *addr = IN_ADDR_NULL;
 
                 /* As a special case, if both the local and remote addresses are
-                 * unspecified, also clear the address family.
-                 */
-                if (t->family != AF_UNSPEC &&
-                    in_addr_is_null(t->family, &t->local) != 0 &&
-                    in_addr_is_null(t->family, &t->remote) != 0)
+                 * unspecified, also clear the address family. */
+                if (!in_addr_is_set(t->family, &t->local) &&
+                    !in_addr_is_set(t->family, &t->remote))
                         t->family = AF_UNSPEC;
                 return 0;
         }
 
         r = in_addr_from_string_auto(rvalue, &f, &buffer);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Tunnel address \"%s\" invalid, ignoring assignment: %m", rvalue);
                 return 0;
         }
 
         if (t->family != AF_UNSPEC && t->family != f) {
-                log_syntax(unit, LOG_ERR, filename, line, 0,
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
                            "Tunnel addresses incompatible, ignoring assignment: %s", rvalue);
                 return 0;
         }
@@ -581,7 +579,8 @@ int config_parse_tunnel_key(const char *unit,
         if (r < 0) {
                 r = safe_atou32(rvalue, &k);
                 if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, 0, "Failed to parse tunnel key ignoring assignment: %s", rvalue);
+                        log_syntax(unit, LOG_WARNING, filename, line, r,
+                                   "Failed to parse tunnel key ignoring assignment: %s", rvalue);
                         return 0;
                 }
         } else
@@ -626,7 +625,7 @@ int config_parse_ipv6_flowlabel(const char* unit,
                         return r;
 
                 if (k > 0xFFFFF)
-                        log_syntax(unit, LOG_ERR, filename, line, 0, "Failed to parse IPv6 flowlabel option, ignoring: %s", rvalue);
+                        log_syntax(unit, LOG_WARNING, filename, line, 0, "Failed to parse IPv6 flowlabel option, ignoring: %s", rvalue);
                 else {
                         *ipv6_flowlabel = htobe32(k) & IP6_FLOWINFO_FLOWLABEL;
                         t->flags &= ~IP6_TNL_F_USE_ORIG_FLOWLABEL;
@@ -659,12 +658,12 @@ int config_parse_encap_limit(const char* unit,
         else {
                 r = safe_atoi(rvalue, &k);
                 if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r, "Failed to parse Tunnel Encapsulation Limit option, ignoring: %s", rvalue);
+                        log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to parse Tunnel Encapsulation Limit option, ignoring: %s", rvalue);
                         return 0;
                 }
 
                 if (k > 255 || k < 0)
-                        log_syntax(unit, LOG_ERR, filename, line, 0, "Invalid Tunnel Encapsulation value, ignoring: %d", k);
+                        log_syntax(unit, LOG_WARNING, filename, line, 0, "Invalid Tunnel Encapsulation value, ignoring: %d", k);
                 else {
                         t->encap_limit = k;
                         t->flags &= ~IP6_TNL_F_IGN_ENCAP_LIMIT;
@@ -696,11 +695,11 @@ int config_parse_6rd_prefix(const char* unit,
 
         r = in_addr_prefix_from_string(rvalue, AF_INET6, &p, &l);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r, "Failed to parse 6rd prefix \"%s\", ignoring: %m", rvalue);
+                log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to parse 6rd prefix \"%s\", ignoring: %m", rvalue);
                 return 0;
         }
         if (l == 0) {
-                log_syntax(unit, LOG_ERR, filename, line, 0, "6rd prefix length of \"%s\" must be greater than zero, ignoring", rvalue);
+                log_syntax(unit, LOG_WARNING, filename, line, 0, "6rd prefix length of \"%s\" must be greater than zero, ignoring", rvalue);
                 return 0;
         }
 

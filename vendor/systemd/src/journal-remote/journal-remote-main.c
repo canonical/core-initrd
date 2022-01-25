@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <getopt.h>
 #include <unistd.h>
@@ -13,6 +13,8 @@
 #include "journal-remote-write.h"
 #include "journal-remote.h"
 #include "main-func.h"
+#include "memory-util.h"
+#include "parse-argument.h"
 #include "pretty-print.h"
 #include "process-util.h"
 #include "rlimit-util.h"
@@ -33,8 +35,8 @@ static const char* arg_listen_raw = NULL;
 static const char* arg_listen_http = NULL;
 static const char* arg_listen_https = NULL;
 static char** arg_files = NULL; /* Do not free this. */
-static int arg_compress = true;
-static int arg_seal = false;
+static bool arg_compress = true;
+static bool arg_seal = false;
 static int http_socket = -1, https_socket = -1;
 static char** arg_gnutls_log = NULL;
 
@@ -124,7 +126,7 @@ static int spawn_getter(const char *getter) {
         _cleanup_strv_free_ char **words = NULL;
 
         assert(getter);
-        r = strv_split_extract(&words, getter, WHITESPACE, EXTRACT_UNQUOTE);
+        r = strv_split_full(&words, getter, WHITESPACE, EXTRACT_UNQUOTE);
         if (r < 0)
                 return log_error_errno(r, "Failed to split getter option: %m");
 
@@ -253,7 +255,7 @@ static int process_http_upload(
         return mhd_respond(connection, MHD_HTTP_ACCEPTED, "OK.");
 };
 
-static int request_handler(
+static mhd_result request_handler(
                 void *cls,
                 struct MHD_Connection *connection,
                 const char *url,
@@ -469,7 +471,7 @@ static int setup_microhttpd_server(RemoteServer *s,
         }
 
         r = sd_event_add_time(s->events, &d->timer_event,
-                              CLOCK_MONOTONIC, (uint64_t) -1, 0,
+                              CLOCK_MONOTONIC, UINT64_MAX, 0,
                               null_timer_event_handler, d);
         if (r < 0) {
                 log_error_errno(r, "Failed to add timer_event: %m");
@@ -482,13 +484,11 @@ static int setup_microhttpd_server(RemoteServer *s,
                 goto error;
         }
 
-        r = hashmap_ensure_allocated(&s->daemons, &uint64_hash_ops);
-        if (r < 0) {
+        r = hashmap_ensure_put(&s->daemons, &uint64_hash_ops, &d->fd, d);
+        if (r == -ENOMEM) {
                 log_oom();
                 goto error;
         }
-
-        r = hashmap_put(s->daemons, &d->fd, d);
         if (r < 0) {
                 log_error_errno(r, "Failed to add daemon to hashmap: %m");
                 goto error;
@@ -762,10 +762,14 @@ static int parse_config(void) {
                 {}
         };
 
-        return config_parse_many_nulstr(PKGSYSCONFDIR "/journal-remote.conf",
-                                        CONF_PATHS_NULSTR("systemd/journal-remote.conf.d"),
-                                        "Remote\0", config_item_table_lookup, items,
-                                        CONFIG_PARSE_WARN, NULL);
+        return config_parse_many_nulstr(
+                        PKGSYSCONFDIR "/journal-remote.conf",
+                        CONF_PATHS_NULSTR("systemd/journal-remote.conf.d"),
+                        "Remote\0",
+                        config_item_table_lookup, items,
+                        CONFIG_PARSE_WARN,
+                        NULL,
+                        NULL);
 }
 
 static int help(void) {
@@ -786,7 +790,7 @@ static int help(void) {
                "     --listen-http=ADDR     Listen for HTTP connections at ADDR\n"
                "     --listen-https=ADDR    Listen for HTTPS connections at ADDR\n"
                "  -o --output=FILE|DIR      Write output to FILE or DIR/external-*.journal\n"
-               "     --compress[=BOOL]      XZ-compress the output journal (default: yes)\n"
+               "     --compress[=BOOL]      Use compression in the output journal (default: yes)\n"
                "     --seal[=BOOL]          Use event sealing (default: no)\n"
                "     --key=FILENAME         SSL key in PEM format (default:\n"
                "                            \"" PRIV_KEY_FILE "\")\n"
@@ -798,10 +802,9 @@ static int help(void) {
                "                            Specify a list of gnutls logging categories\n"
                "     --split-mode=none|host How many output files to create\n"
                "\nNote: file descriptors from sd_listen_fds() will be consumed, too.\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , link
-        );
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               link);
 
         return 0;
 }
@@ -959,40 +962,24 @@ static int parse_argv(int argc, char *argv[]) {
                 case ARG_SPLIT_MODE:
                         arg_split_mode = journal_write_split_mode_from_string(optarg);
                         if (arg_split_mode == _JOURNAL_WRITE_SPLIT_INVALID)
-                                return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
-                                                       "Invalid split mode: %s", optarg);
+                                return log_error_errno(arg_split_mode, "Invalid split mode: %s", optarg);
                         break;
 
                 case ARG_COMPRESS:
-                        if (optarg) {
-                                r = parse_boolean(optarg);
-                                if (r < 0)
-                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
-                                                               "Failed to parse --compress= parameter.");
-
-                                arg_compress = !!r;
-                        } else
-                                arg_compress = true;
-
+                        r = parse_boolean_argument("--compress", optarg, &arg_compress);
+                        if (r < 0)
+                                return r;
                         break;
 
                 case ARG_SEAL:
-                        if (optarg) {
-                                r = parse_boolean(optarg);
-                                if (r < 0)
-                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
-                                                               "Failed to parse --seal= parameter.");
-
-                                arg_seal = !!r;
-                        } else
-                                arg_seal = true;
-
+                        r = parse_boolean_argument("--seal", optarg, &arg_seal);
+                        if (r < 0)
+                                return r;
                         break;
 
-                case ARG_GNUTLS_LOG: {
+                case ARG_GNUTLS_LOG:
 #if HAVE_GNUTLS
-                        const char* p = optarg;
-                        for (;;) {
+                        for (const char* p = optarg;;) {
                                 _cleanup_free_ char *word = NULL;
 
                                 r = extract_first_word(&p, &word, ",", 0);
@@ -1011,7 +998,6 @@ static int parse_argv(int argc, char *argv[]) {
                         return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
                                                "Option --gnutls-log is not available.");
 #endif
-                }
 
                 case '?':
                         return -EINVAL;
@@ -1073,12 +1059,20 @@ static int parse_argv(int argc, char *argv[]) {
 static int load_certificates(char **key, char **cert, char **trust) {
         int r;
 
-        r = read_full_file(arg_key ?: PRIV_KEY_FILE, key, NULL);
+        r = read_full_file_full(
+                        AT_FDCWD, arg_key ?: PRIV_KEY_FILE, UINT64_MAX, SIZE_MAX,
+                        READ_FULL_FILE_SECURE|READ_FULL_FILE_WARN_WORLD_READABLE|READ_FULL_FILE_CONNECT_SOCKET,
+                        NULL,
+                        key, NULL);
         if (r < 0)
                 return log_error_errno(r, "Failed to read key from file '%s': %m",
                                        arg_key ?: PRIV_KEY_FILE);
 
-        r = read_full_file(arg_cert ?: CERT_FILE, cert, NULL);
+        r = read_full_file_full(
+                        AT_FDCWD, arg_cert ?: CERT_FILE, UINT64_MAX, SIZE_MAX,
+                        READ_FULL_FILE_CONNECT_SOCKET,
+                        NULL,
+                        cert, NULL);
         if (r < 0)
                 return log_error_errno(r, "Failed to read certificate from file '%s': %m",
                                        arg_cert ?: CERT_FILE);
@@ -1086,7 +1080,11 @@ static int load_certificates(char **key, char **cert, char **trust) {
         if (arg_trust_all)
                 log_info("Certificate checking disabled.");
         else {
-                r = read_full_file(arg_trust ?: TRUST_FILE, trust, NULL);
+                r = read_full_file_full(
+                                AT_FDCWD, arg_trust ?: TRUST_FILE, UINT64_MAX, SIZE_MAX,
+                                READ_FULL_FILE_CONNECT_SOCKET,
+                                NULL,
+                                trust, NULL);
                 if (r < 0)
                         return log_error_errno(r, "Failed to read CA certificate file '%s': %m",
                                                arg_trust ?: TRUST_FILE);
@@ -1100,9 +1098,10 @@ static int load_certificates(char **key, char **cert, char **trust) {
 }
 
 static int run(int argc, char **argv) {
-        _cleanup_(notify_on_cleanup) const char *notify_message = NULL;
         _cleanup_(journal_remote_server_destroy) RemoteServer s = {};
-        _cleanup_free_ char *key = NULL, *cert = NULL, *trust = NULL;
+        _cleanup_(notify_on_cleanup) const char *notify_message = NULL;
+        _cleanup_(erase_and_freep) char *key = NULL;
+        _cleanup_free_ char *cert = NULL, *trust = NULL;
         int r;
 
         log_show_color(true);

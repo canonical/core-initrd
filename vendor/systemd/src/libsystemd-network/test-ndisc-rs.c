@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /***
   Copyright © 2014 Intel Corporation. All rights reserved.
 ***/
@@ -174,8 +174,8 @@ static int test_rs_hangcheck(sd_event_source *s, uint64_t usec,
         return 0;
 }
 
-int icmp6_bind_router_solicitation(int index) {
-        assert_se(index == 42);
+int icmp6_bind_router_solicitation(int ifindex) {
+        assert_se(ifindex == 42);
 
         if (socketpair(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0, test_fd) < 0)
                 return -errno;
@@ -183,8 +183,7 @@ int icmp6_bind_router_solicitation(int index) {
         return test_fd[0];
 }
 
-int icmp6_bind_router_advertisement(int index) {
-
+int icmp6_bind_router_advertisement(int ifindex) {
         return -ENOSYS;
 }
 
@@ -218,7 +217,7 @@ static int send_ra(uint8_t flags) {
         advertisement[5] = flags;
 
         assert_se(write(test_fd[1], advertisement, sizeof(advertisement)) ==
-               sizeof(advertisement));
+                  sizeof(advertisement));
 
         if (verbose)
                 printf("  sent RA with flag 0x%02x\n", flags);
@@ -233,7 +232,7 @@ int icmp6_send_router_solicitation(int s, const struct ether_addr *ether_addr) {
         return send_ra_function(0);
 }
 
-static void test_callback(sd_ndisc *nd, sd_ndisc_event event, sd_ndisc_router *rt, void *userdata) {
+static void test_callback(sd_ndisc *nd, sd_ndisc_event_t event, sd_ndisc_router *rt, void *userdata) {
         sd_event *e = userdata;
         static unsigned idx = 0;
         uint64_t flags_array[] = {
@@ -273,7 +272,6 @@ static void test_callback(sd_ndisc *nd, sd_ndisc_event event, sd_ndisc_router *r
 static void test_rs(void) {
         sd_event *e;
         sd_ndisc *nd;
-        usec_t time_now = now(clock_boottime_or_monotonic());
 
         if (verbose)
                 printf("* %s\n", __FUNCTION__);
@@ -291,11 +289,13 @@ static void test_rs(void) {
         assert_se(sd_ndisc_set_mac(nd, &mac_addr) >= 0);
         assert_se(sd_ndisc_set_callback(nd, test_callback, e) >= 0);
 
-        assert_se(sd_event_add_time(e, &test_hangcheck, clock_boottime_or_monotonic(),
-                                 time_now + 2 *USEC_PER_SEC, 0,
-                                 test_rs_hangcheck, NULL) >= 0);
+        assert_se(sd_event_add_time_relative(
+                                  e, &test_hangcheck, clock_boottime_or_monotonic(),
+                                  30 * USEC_PER_SEC, 0,
+                                  test_rs_hangcheck, NULL) >= 0);
 
         assert_se(sd_ndisc_stop(nd) >= 0);
+        assert_se(sd_ndisc_start(nd) >= 0);
         assert_se(sd_ndisc_start(nd) >= 0);
         assert_se(sd_ndisc_stop(nd) >= 0);
 
@@ -373,7 +373,6 @@ static int test_timeout_value(uint8_t flags) {
 static void test_timeout(void) {
         sd_event *e;
         sd_ndisc *nd;
-        usec_t time_now = now(clock_boottime_or_monotonic());
 
         if (verbose)
                 printf("* %s\n", __FUNCTION__);
@@ -392,9 +391,10 @@ static void test_timeout(void) {
         assert_se(sd_ndisc_set_ifindex(nd, 42) >= 0);
         assert_se(sd_ndisc_set_mac(nd, &mac_addr) >= 0);
 
-        assert_se(sd_event_add_time(e, &test_hangcheck, clock_boottime_or_monotonic(),
-                                 time_now + 2U * USEC_PER_SEC, 0,
-                                 test_rs_hangcheck, NULL) >= 0);
+        assert_se(sd_event_add_time_relative(
+                                  e, &test_hangcheck, clock_boottime_or_monotonic(),
+                                  30 * USEC_PER_SEC, 0,
+                                  test_rs_hangcheck, NULL) >= 0);
 
         assert_se(sd_ndisc_start(nd) >= 0);
 

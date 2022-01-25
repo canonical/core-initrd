@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <endian.h>
 #include <poll.h>
@@ -22,7 +22,6 @@
 #include "path-util.h"
 #include "process-util.h"
 #include "rlimit-util.h"
-#include "selinux-util.h"
 #include "signal-util.h"
 #include "stdio-util.h"
 #include "string-util.h"
@@ -136,11 +135,10 @@ static int bus_socket_write_auth(sd_bus *b) {
         if (b->prefer_writev)
                 k = writev(b->output_fd, b->auth_iovec + b->auth_index, ELEMENTSOF(b->auth_iovec) - b->auth_index);
         else {
-                struct msghdr mh;
-                zero(mh);
-
-                mh.msg_iov = b->auth_iovec + b->auth_index;
-                mh.msg_iovlen = ELEMENTSOF(b->auth_iovec) - b->auth_index;
+                struct msghdr mh = {
+                        .msg_iov = b->auth_iovec + b->auth_index,
+                        .msg_iovlen = ELEMENTSOF(b->auth_iovec) - b->auth_index,
+                };
 
                 k = sendmsg(b->output_fd, &mh, MSG_DONTWAIT|MSG_NOSIGNAL);
                 if (k < 0 && errno == ENOTSOCK) {
@@ -519,10 +517,7 @@ static int bus_socket_read_auth(sd_bus *b) {
         ssize_t k;
         int r;
         void *p;
-        union {
-                struct cmsghdr cmsghdr;
-                uint8_t buf[CMSG_SPACE(sizeof(int) * BUS_FDS_MAX)];
-        } control;
+        CMSG_BUFFER_TYPE(CMSG_SPACE(sizeof(int) * BUS_FDS_MAX)) control;
         bool handle_cmsg = false;
 
         assert(b);
@@ -548,26 +543,36 @@ static int bus_socket_read_auth(sd_bus *b) {
 
         iov = IOVEC_MAKE((uint8_t *)b->rbuffer + b->rbuffer_size, n - b->rbuffer_size);
 
-        if (b->prefer_readv)
+        if (b->prefer_readv) {
                 k = readv(b->input_fd, &iov, 1);
-        else {
-                zero(mh);
-                mh.msg_iov = &iov;
-                mh.msg_iovlen = 1;
-                mh.msg_control = &control;
-                mh.msg_controllen = sizeof(control);
+                if (k < 0)
+                        k = -errno;
+        } else {
+                mh = (struct msghdr) {
+                        .msg_iov = &iov,
+                        .msg_iovlen = 1,
+                        .msg_control = &control,
+                        .msg_controllen = sizeof(control),
+                };
 
-                k = recvmsg(b->input_fd, &mh, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
-                if (k < 0 && errno == ENOTSOCK) {
+                k = recvmsg_safe(b->input_fd, &mh, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
+                if (k == -ENOTSOCK) {
                         b->prefer_readv = true;
                         k = readv(b->input_fd, &iov, 1);
+                        if (k < 0)
+                                k = -errno;
                 } else
                         handle_cmsg = true;
         }
+        if (k == -EAGAIN)
+                return 0;
         if (k < 0)
-                return errno == EAGAIN ? 0 : -errno;
-        if (k == 0)
+                return (int) k;
+        if (k == 0) {
+                if (handle_cmsg)
+                        cmsg_close_all(&mh); /* paranoia, we shouldn't have gotten any fds on EOF */
                 return -ECONNRESET;
+        }
 
         b->rbuffer_size += k;
 
@@ -614,7 +619,7 @@ static void bus_get_peercred(sd_bus *b) {
         assert(b);
         assert(!b->ucred_valid);
         assert(!b->label);
-        assert(b->n_groups == (size_t) -1);
+        assert(b->n_groups == SIZE_MAX);
 
         /* Get the peer for socketpair() sockets */
         b->ucred_valid = getpeercred(b->input_fd, &b->ucred) >= 0;
@@ -694,7 +699,7 @@ int bus_socket_start_auth(sd_bus *b) {
 static int bus_socket_inotify_setup(sd_bus *b) {
         _cleanup_free_ int *new_watches = NULL;
         _cleanup_free_ char *absolute = NULL;
-        size_t n_allocated = 0, n = 0, done = 0, i;
+        size_t n = 0, done = 0, i;
         unsigned max_follow = 32;
         const char *p;
         int wd, r;
@@ -731,7 +736,7 @@ static int bus_socket_inotify_setup(sd_bus *b) {
          * that exists we want to know when files are created or moved into it. For all parents of it we just care if
          * they are removed or renamed. */
 
-        if (!GREEDY_REALLOC(new_watches, n_allocated, n + 1)) {
+        if (!GREEDY_REALLOC(new_watches, n + 1)) {
                 r = -ENOMEM;
                 goto fail;
         }
@@ -780,7 +785,7 @@ static int bus_socket_inotify_setup(sd_bus *b) {
                         goto fail;
                 }
 
-                if (!GREEDY_REALLOC(new_watches, n_allocated, n + 1)) {
+                if (!GREEDY_REALLOC(new_watches, n + 1)) {
                         r = -ENOMEM;
                         goto fail;
                 }
@@ -879,6 +884,13 @@ int bus_socket_connect(sd_bus *b) {
                 assert(b->output_fd < 0);
                 assert(b->sockaddr.sa.sa_family != AF_UNSPEC);
 
+                if (DEBUG_LOGGING) {
+                        _cleanup_free_ char *pretty = NULL;
+                        (void) sockaddr_pretty(&b->sockaddr.sa, b->sockaddr_size, false, true, &pretty);
+                        log_debug("sd-bus: starting bus%s%s by connecting to %s...",
+                                  b->description ? " " : "", strempty(b->description), strnull(pretty));
+                }
+
                 b->input_fd = socket(b->sockaddr.sa.sa_family, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
                 if (b->input_fd < 0)
                         return -errno;
@@ -949,6 +961,9 @@ int bus_socket_exec(sd_bus *b) {
         assert(b->output_fd < 0);
         assert(b->exec_path);
         assert(b->busexec_pid == 0);
+
+        log_debug("sd-bus: starting bus%s%s with %s...",
+                  b->description ? " " : "", strempty(b->description), b->exec_path);
 
         r = socketpair(AF_UNIX, SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, s);
         if (r < 0)
@@ -1030,8 +1045,10 @@ int bus_socket_write_message(sd_bus *bus, sd_bus_message *m, size_t *idx) {
                 if (m->n_fds > 0 && *idx == 0) {
                         struct cmsghdr *control;
 
-                        mh.msg_control = control = alloca(CMSG_SPACE(sizeof(int) * m->n_fds));
-                        mh.msg_controllen = control->cmsg_len = CMSG_LEN(sizeof(int) * m->n_fds);
+                        mh.msg_controllen = CMSG_SPACE(sizeof(int) * m->n_fds);
+                        mh.msg_control = alloca0(mh.msg_controllen);
+                        control = CMSG_FIRSTHDR(&mh);
+                        control->cmsg_len = CMSG_LEN(sizeof(int) * m->n_fds);
                         control->cmsg_level = SOL_SOCKET;
                         control->cmsg_type = SCM_RIGHTS;
                         memcpy(CMSG_DATA(control), m->fds, sizeof(int) * m->n_fds);
@@ -1160,10 +1177,7 @@ int bus_socket_read_message(sd_bus *bus) {
         size_t need;
         int r;
         void *b;
-        union {
-                struct cmsghdr cmsghdr;
-                uint8_t buf[CMSG_SPACE(sizeof(int) * BUS_FDS_MAX)];
-        } control;
+        CMSG_BUFFER_TYPE(CMSG_SPACE(sizeof(int) * BUS_FDS_MAX)) control;
         bool handle_cmsg = false;
 
         assert(bus);
@@ -1184,26 +1198,36 @@ int bus_socket_read_message(sd_bus *bus) {
 
         iov = IOVEC_MAKE((uint8_t *)bus->rbuffer + bus->rbuffer_size, need - bus->rbuffer_size);
 
-        if (bus->prefer_readv)
+        if (bus->prefer_readv) {
                 k = readv(bus->input_fd, &iov, 1);
-        else {
-                zero(mh);
-                mh.msg_iov = &iov;
-                mh.msg_iovlen = 1;
-                mh.msg_control = &control;
-                mh.msg_controllen = sizeof(control);
+                if (k < 0)
+                        k = -errno;
+        } else {
+                mh = (struct msghdr) {
+                        .msg_iov = &iov,
+                        .msg_iovlen = 1,
+                        .msg_control = &control,
+                        .msg_controllen = sizeof(control),
+                };
 
-                k = recvmsg(bus->input_fd, &mh, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
-                if (k < 0 && errno == ENOTSOCK) {
+                k = recvmsg_safe(bus->input_fd, &mh, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
+                if (k == -ENOTSOCK) {
                         bus->prefer_readv = true;
                         k = readv(bus->input_fd, &iov, 1);
+                        if (k < 0)
+                                k = -errno;
                 } else
                         handle_cmsg = true;
         }
+        if (k == -EAGAIN)
+                return 0;
         if (k < 0)
-                return errno == EAGAIN ? 0 : -errno;
-        if (k == 0)
+                return (int) k;
+        if (k == 0) {
+                if (handle_cmsg)
+                        cmsg_close_all(&mh); /* On EOF we shouldn't have gotten an fd, but let's make sure */
                 return -ECONNRESET;
+        }
 
         bus->rbuffer_size += k;
 
@@ -1251,21 +1275,15 @@ int bus_socket_read_message(sd_bus *bus) {
 }
 
 int bus_socket_process_opening(sd_bus *b) {
-        int error = 0;
+        int error = 0, events, r;
         socklen_t slen = sizeof(error);
-        struct pollfd p = {
-                .fd = b->output_fd,
-                .events = POLLOUT,
-        };
-        int r;
 
         assert(b->state == BUS_OPENING);
 
-        r = poll(&p, 1, 0);
-        if (r < 0)
-                return -errno;
-
-        if (!(p.revents & (POLLOUT|POLLERR|POLLHUP)))
+        events = fd_wait_for_event(b->output_fd, POLLOUT, 0);
+        if (events < 0)
+                return events;
+        if (!(events & (POLLOUT|POLLERR|POLLHUP)))
                 return 0;
 
         r = getsockopt(b->output_fd, SOL_SOCKET, SO_ERROR, &error, &slen);
@@ -1273,7 +1291,7 @@ int bus_socket_process_opening(sd_bus *b) {
                 b->last_connect_error = errno;
         else if (error != 0)
                 b->last_connect_error = error;
-        else if (p.revents & (POLLERR|POLLHUP))
+        else if (events & (POLLERR|POLLHUP))
                 b->last_connect_error = ECONNREFUSED;
         else
                 return bus_socket_start_auth(b);

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <ctype.h>
 #include <errno.h>
@@ -115,11 +115,9 @@ int unhexmem_full(const char *p, size_t l, bool secure, void **ret, size_t *ret_
         uint8_t *z;
         int r;
 
-        assert(ret);
-        assert(ret_len);
         assert(p || l == 0);
 
-        if (l == (size_t) -1)
+        if (l == SIZE_MAX)
                 l = strlen(p);
 
         /* Note that the calculation of memory size is an upper boundary, as we ignore whitespace while decoding */
@@ -150,8 +148,10 @@ int unhexmem_full(const char *p, size_t l, bool secure, void **ret, size_t *ret_
 
         *z = 0;
 
-        *ret_len = (size_t) (z - buf);
-        *ret = TAKE_PTR(buf);
+        if (ret_len)
+                *ret_len = (size_t) (z - buf);
+        if (ret)
+                *ret = TAKE_PTR(buf);
 
         return 0;
 
@@ -309,7 +309,7 @@ int unbase32hexmem(const char *p, size_t l, bool padding, void **mem, size_t *_l
         assert(mem);
         assert(_len);
 
-        if (l == (size_t) -1)
+        if (l == SIZE_MAX)
                 l = strlen(p);
 
         /* padding ensures any base32hex input has input divisible by 8 */
@@ -526,6 +526,16 @@ char base64char(int x) {
         return table[x & 63];
 }
 
+/* This is almost base64char(), but not entirely, as it uses the "url and filename safe" alphabet,
+ * since we don't want "/" appear in interface names (since interfaces appear in sysfs as filenames).
+ * See section #5 of RFC 4648. */
+char urlsafe_base64char(int x) {
+        static const char table[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                      "abcdefghijklmnopqrstuvwxyz"
+                                      "0123456789-_";
+        return table[x & 63];
+}
+
 int unbase64char(char c) {
         unsigned offset;
 
@@ -599,13 +609,13 @@ ssize_t base64mem(const void *p, size_t l, char **out) {
 
 static int base64_append_width(
                 char **prefix, int plen,
-                const char *sep, int indent,
+                char sep, int indent,
                 const void *p, size_t l,
                 int width) {
 
         _cleanup_free_ char *x = NULL;
         char *t, *s;
-        ssize_t len, slen, avail, line, lines;
+        ssize_t len, avail, line, lines;
 
         len = base64mem(p, l, &x);
         if (len <= 0)
@@ -613,21 +623,20 @@ static int base64_append_width(
 
         lines = DIV_ROUND_UP(len, width);
 
-        slen = strlen_ptr(sep);
-        if (plen >= SSIZE_MAX - 1 - slen ||
-            lines > (SSIZE_MAX - plen - 1 - slen) / (indent + width + 1))
+        if ((size_t) plen >= SSIZE_MAX - 1 - 1 ||
+            lines > (SSIZE_MAX - plen - 1 - 1) / (indent + width + 1))
                 return -ENOMEM;
 
-        t = realloc(*prefix, (ssize_t) plen + 1 + slen + (indent + width + 1) * lines);
+        t = realloc(*prefix, (ssize_t) plen + 1 + 1 + (indent + width + 1) * lines);
         if (!t)
                 return -ENOMEM;
 
-        memcpy_safe(t + plen, sep, slen);
+        t[plen] = sep;
 
-        for (line = 0, s = t + plen + slen, avail = len; line < lines; line++) {
+        for (line = 0, s = t + plen + 1, avail = len; line < lines; line++) {
                 int act = MIN(width, avail);
 
-                if (line > 0 || sep) {
+                if (line > 0 || sep == '\n') {
                         memset(s, ' ', indent);
                         s += indent;
                 }
@@ -650,10 +659,10 @@ int base64_append(
 
         if (plen > width / 2 || plen + indent > width)
                 /* leave indent on the left, keep last column free */
-                return base64_append_width(prefix, plen, "\n", indent, p, l, width - indent - 1);
+                return base64_append_width(prefix, plen, '\n', indent, p, l, width - indent - 1);
         else
                 /* leave plen on the left, keep last column free */
-                return base64_append_width(prefix, plen, " ", plen, p, l, width - plen - 1);
+                return base64_append_width(prefix, plen, ' ', plen + 1, p, l, width - plen - 1);
 }
 
 static int unbase64_next(const char **p, size_t *l) {
@@ -706,10 +715,8 @@ int unbase64mem_full(const char *p, size_t l, bool secure, void **ret, size_t *r
         int r;
 
         assert(p || l == 0);
-        assert(ret);
-        assert(ret_size);
 
-        if (l == (size_t) -1)
+        if (l == SIZE_MAX)
                 l = strlen(p);
 
         /* A group of four input bytes needs three output bytes, in case of padding we need to add two or three extra
@@ -803,8 +810,10 @@ int unbase64mem_full(const char *p, size_t l, bool secure, void **ret, size_t *r
 
         *z = 0;
 
-        *ret_size = (size_t) (z - buf);
-        *ret = TAKE_PTR(buf);
+        if (ret_size)
+                *ret_size = (size_t) (z - buf);
+        if (ret)
+                *ret = TAKE_PTR(buf);
 
         return 0;
 

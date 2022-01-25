@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <getopt.h>
@@ -15,6 +15,7 @@
 #include "main-func.h"
 #include "nulstr-util.h"
 #include "pager.h"
+#include "parse-argument.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "pretty-print.h"
@@ -290,7 +291,7 @@ static int enumerate_dir(
         _cleanup_closedir_ DIR *d = NULL;
         struct dirent *de;
         _cleanup_strv_free_ char **files = NULL, **dirs = NULL;
-        size_t n_files = 0, allocated_files = 0, n_dirs = 0, allocated_dirs = 0;
+        size_t n_files = 0, n_dirs = 0;
         char **t;
         int r;
 
@@ -310,10 +311,8 @@ static int enumerate_dir(
         }
 
         FOREACH_DIRENT_ALL(de, d, return -errno) {
-                dirent_ensure_type(d, de);
-
                 if (dropins && de->d_type == DT_DIR && endswith(de->d_name, ".d")) {
-                        if (!GREEDY_REALLOC0(dirs, allocated_dirs, n_dirs + 2))
+                        if (!GREEDY_REALLOC0(dirs, n_dirs + 2))
                                 return -ENOMEM;
 
                         dirs[n_dirs] = strdup(de->d_name);
@@ -325,7 +324,7 @@ static int enumerate_dir(
                 if (!dirent_is_file(de))
                         continue;
 
-                if (!GREEDY_REALLOC0(files, allocated_files, n_files + 2))
+                if (!GREEDY_REALLOC0(files, n_files + 2))
                         return -ENOMEM;
 
                 files[n_files] = strdup(de->d_name);
@@ -401,13 +400,9 @@ static int should_skip_path(const char *prefix, const char *suffix) {
 
 static int process_suffix(const char *suffix, const char *onlyprefix) {
         const char *p;
-        char *f;
-        OrderedHashmap *top, *bottom, *drops;
-        OrderedHashmap *h;
-        char *key;
-        int r = 0, k;
-        Iterator i, j;
-        int n_found = 0;
+        char *f, *key;
+        OrderedHashmap *top, *bottom, *drops, *h;
+        int r = 0, k, n_found = 0;
         bool dropins;
 
         assert(suffix);
@@ -441,7 +436,7 @@ static int process_suffix(const char *suffix, const char *onlyprefix) {
                         r = k;
         }
 
-        ORDERED_HASHMAP_FOREACH_KEY(f, key, top, i) {
+        ORDERED_HASHMAP_FOREACH_KEY(f, key, top) {
                 char *o;
 
                 o = ordered_hashmap_get(bottom, key);
@@ -461,7 +456,7 @@ static int process_suffix(const char *suffix, const char *onlyprefix) {
 
                 h = ordered_hashmap_get(drops, key);
                 if (h)
-                        ORDERED_HASHMAP_FOREACH(o, h, j)
+                        ORDERED_HASHMAP_FOREACH(o, h)
                                 if (!onlyprefix || startswith(o, onlyprefix))
                                         n_found += notify_override_extended(f, o);
         }
@@ -470,7 +465,7 @@ finish:
         ordered_hashmap_free_free(top);
         ordered_hashmap_free_free(bottom);
 
-        ORDERED_HASHMAP_FOREACH_KEY(h, key, drops, i) {
+        ORDERED_HASHMAP_FOREACH_KEY(h, key, drops) {
                 ordered_hashmap_free_free(ordered_hashmap_remove(drops, key));
                 ordered_hashmap_remove(drops, key);
                 free(key);
@@ -536,37 +531,41 @@ static int help(void) {
                "     --no-pager       Do not pipe output into a pager\n"
                "     --diff[=1|0]     Show a diff when overridden files differ\n"
                "  -t --type=LIST...   Only display a selected set of override types\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , link
-        );
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               link);
 
         return 0;
 }
 
 static int parse_flags(const char *flag_str, int flags) {
-        const char *word, *state;
-        size_t l;
+        for (;;) {
+                _cleanup_free_ char *word = NULL;
+                int r;
 
-        FOREACH_WORD_SEPARATOR(word, l, flag_str, ",", state) {
-                if (strneq("masked", word, l))
+                r = extract_first_word(&flag_str, &word, ",", EXTRACT_DONT_COALESCE_SEPARATORS);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        return flags;
+
+                if (streq(word, "masked"))
                         flags |= SHOW_MASKED;
-                else if (strneq ("equivalent", word, l))
+                else if (streq(word, "equivalent"))
                         flags |= SHOW_EQUIVALENT;
-                else if (strneq("redirected", word, l))
+                else if (streq(word, "redirected"))
                         flags |= SHOW_REDIRECTED;
-                else if (strneq("overridden", word, l))
+                else if (streq(word, "overridden"))
                         flags |= SHOW_OVERRIDDEN;
-                else if (strneq("unchanged", word, l))
+                else if (streq(word, "unchanged"))
                         flags |= SHOW_UNCHANGED;
-                else if (strneq("extended", word, l))
+                else if (streq(word, "extended"))
                         flags |= SHOW_EXTENDED;
-                else if (strneq("default", word, l))
+                else if (streq(word, "default"))
                         flags |= SHOW_DEFAULTS;
                 else
                         return -EINVAL;
         }
-        return flags;
 }
 
 static int parse_argv(int argc, char *argv[]) {
@@ -586,7 +585,7 @@ static int parse_argv(int argc, char *argv[]) {
                 {}
         };
 
-        int c;
+        int c, r;
 
         assert(argc >= 1);
         assert(argv);
@@ -616,18 +615,10 @@ static int parse_argv(int argc, char *argv[]) {
                 }
 
                 case ARG_DIFF:
-                        if (!optarg)
-                                arg_diff = 1;
-                        else {
-                                int b;
-
-                                b = parse_boolean(optarg);
-                                if (b < 0)
-                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
-                                                               "Failed to parse diff boolean.");
-
-                                arg_diff = b;
-                        }
+                        r = parse_boolean_argument("--diff", optarg, NULL);
+                        if (r < 0)
+                                return r;
+                        arg_diff = r;
                         break;
 
                 case '?':
@@ -643,9 +634,7 @@ static int parse_argv(int argc, char *argv[]) {
 static int run(int argc, char *argv[]) {
         int r, k, n_found = 0;
 
-        log_show_color(true);
-        log_parse_environment();
-        log_open();
+        log_setup();
 
         r = parse_argv(argc, argv);
         if (r <= 0)
@@ -665,7 +654,7 @@ static int run(int argc, char *argv[]) {
                 int i;
 
                 for (i = optind; i < argc; i++) {
-                        path_simplify(argv[i], false);
+                        path_simplify(argv[i]);
 
                         k = process_suffix_chop(argv[i]);
                         if (k < 0)

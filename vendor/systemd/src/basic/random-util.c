@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #if defined(__i386__) || defined(__x86_64__)
 #include <cpuid.h>
@@ -7,11 +7,13 @@
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/random.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 
 #if HAVE_SYS_AUXV_H
@@ -19,6 +21,8 @@
 #endif
 
 #include "alloc-util.h"
+#include "env-util.h"
+#include "errno-util.h"
 #include "fd-util.h"
 #include "fileio.h"
 #include "io-util.h"
@@ -74,7 +78,7 @@ int rdrand(unsigned long *ret) {
          *           hash functions for its hash tables, with a seed generated randomly. The hash tables
          *           systemd employs watch the fill level closely and reseed if necessary. This allows use of
          *           a low quality RNG initially, as long as it improves should a hash table be under attack:
-         *           the attacker after all needs to to trigger many collisions to exploit it for the purpose
+         *           the attacker after all needs to trigger many collisions to exploit it for the purpose
          *           of DoS, but if doing so improves the seed the attack surface is reduced as the attack
          *           takes place.
          *
@@ -113,6 +117,15 @@ int rdrand(unsigned long *ret) {
 #endif
 
                 have_rdrand = !!(ecx & bit_RDRND);
+
+                if (have_rdrand > 0) {
+                        /* Allow disabling use of RDRAND with SYSTEMD_RDRAND=0
+                           If it is unset getenv_bool_secure will return a negative value. */
+                        if (getenv_bool_secure("SYSTEMD_RDRAND") == 0) {
+                                have_rdrand = false;
+                                return -EOPNOTSUPP;
+                        }
+                }
         }
 
         if (have_rdrand == 0)
@@ -175,7 +188,7 @@ int genuine_random_bytes(void *p, size_t n, RandomFlags flags) {
                  * invocations or so. That's because we don't really care about the quality here. We
                  * generally prefer using RDRAND if the caller allows us to, since this way we won't upset
                  * the kernel's random subsystem by accessing it before the pool is initialized (after all it
-                 * will kmsg log about every attempt to do so)..*/
+                 * will kmsg log about every attempt to do so). */
                 for (;;) {
                         unsigned long u;
                         size_t m;
@@ -207,7 +220,9 @@ int genuine_random_bytes(void *p, size_t n, RandomFlags flags) {
         if (have_syscall != 0 && !HAS_FEATURE_MEMORY_SANITIZER) {
 
                 for (;;) {
-                        r = getrandom(p, n, FLAGS_SET(flags, RANDOM_BLOCK) ? 0 : GRND_NONBLOCK);
+                        r = getrandom(p, n,
+                                      (FLAGS_SET(flags, RANDOM_BLOCK) ? 0 : GRND_NONBLOCK) |
+                                      (FLAGS_SET(flags, RANDOM_ALLOW_INSECURE) ? GRND_INSECURE : 0));
                         if (r > 0) {
                                 have_syscall = true;
 
@@ -237,7 +252,7 @@ int genuine_random_bytes(void *p, size_t n, RandomFlags flags) {
                                 have_syscall = true;
                                 return -EIO;
 
-                        } else if (errno == ENOSYS) {
+                        } else if (ERRNO_IS_NOT_SUPPORTED(errno)) {
                                 /* We lack the syscall, continue with reading from /dev/urandom. */
                                 have_syscall = false;
                                 break;
@@ -263,6 +278,18 @@ int genuine_random_bytes(void *p, size_t n, RandomFlags flags) {
 
                                 /* Use /dev/urandom instead */
                                 break;
+
+                        } else if (errno == EINVAL) {
+
+                                /* Most likely: unknown flag. We know that GRND_INSECURE might cause this,
+                                 * hence try without. */
+
+                                if (FLAGS_SET(flags, RANDOM_ALLOW_INSECURE)) {
+                                        flags = flags &~ RANDOM_ALLOW_INSECURE;
+                                        continue;
+                                }
+
+                                return -errno;
                         } else
                                 return -errno;
                 }
@@ -325,9 +352,11 @@ void initialize_srand(void) {
 
 /* INT_MAX gives us only 31 bits, so use 24 out of that. */
 #if RAND_MAX >= INT_MAX
+assert_cc(RAND_MAX >= 16777215);
 #  define RAND_STEP 3
 #else
-/* SHORT_INT_MAX or lower gives at most 15 bits, we just just 8 out of that. */
+/* SHORT_INT_MAX or lower gives at most 15 bits, we just use 8 out of that. */
+assert_cc(RAND_MAX >= 255);
 #  define RAND_STEP 1
 #endif
 
@@ -392,7 +421,7 @@ void random_bytes(void *p, size_t n) {
          * This function is hence not useful for generating UUIDs or cryptographic key material.
          */
 
-        if (genuine_random_bytes(p, n, RANDOM_EXTEND_WITH_PSEUDO|RANDOM_MAY_FAIL|RANDOM_ALLOW_RDRAND) >= 0)
+        if (genuine_random_bytes(p, n, RANDOM_EXTEND_WITH_PSEUDO|RANDOM_MAY_FAIL|RANDOM_ALLOW_RDRAND|RANDOM_ALLOW_INSECURE) >= 0)
                 return;
 
         /* If for some reason some user made /dev/urandom unavailable to us, or the kernel has no entropy, use a PRNG instead. */
@@ -420,4 +449,67 @@ size_t random_pool_size(void) {
 
         /* Use the minimum as default, if we can't retrieve the correct value */
         return RANDOM_POOL_SIZE_MIN;
+}
+
+int random_write_entropy(int fd, const void *seed, size_t size, bool credit) {
+        _cleanup_close_ int opened_fd = -1;
+        int r;
+
+        assert(seed || size == 0);
+
+        if (size == 0)
+                return 0;
+
+        if (fd < 0) {
+                opened_fd = open("/dev/urandom", O_WRONLY|O_CLOEXEC|O_NOCTTY);
+                if (opened_fd < 0)
+                        return -errno;
+
+                fd = opened_fd;
+        }
+
+        if (credit) {
+                _cleanup_free_ struct rand_pool_info *info = NULL;
+
+                /* The kernel API only accepts "int" as entropy count (which is in bits), let's avoid any
+                 * chance for confusion here. */
+                if (size > INT_MAX / 8)
+                        return -EOVERFLOW;
+
+                info = malloc(offsetof(struct rand_pool_info, buf) + size);
+                if (!info)
+                        return -ENOMEM;
+
+                info->entropy_count = size * 8;
+                info->buf_size = size;
+                memcpy(info->buf, seed, size);
+
+                if (ioctl(fd, RNDADDENTROPY, info) < 0)
+                        return -errno;
+        } else {
+                r = loop_write(fd, seed, size, false);
+                if (r < 0)
+                        return r;
+        }
+
+        return 1;
+}
+
+uint64_t random_u64_range(uint64_t m) {
+        uint64_t x, remainder;
+
+        /* Generates a random number in the range 0…m-1, unbiased. (Java's algorithm) */
+
+        if (m == 0) /* Let's take m == 0 as special case to return an integer from the full range */
+                return random_u64();
+        if (m == 1)
+                return 0;
+
+        remainder = UINT64_MAX % m;
+
+        do {
+                x = random_u64();
+        } while (x >= UINT64_MAX - remainder);
+
+        return x % m;
 }

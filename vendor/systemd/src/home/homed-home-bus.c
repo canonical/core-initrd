@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <linux/capability.h>
 
@@ -95,7 +95,7 @@ int bus_home_get_record_json(
                 trusted = false;
         }
 
-        flags = USER_RECORD_REQUIRE_REGULAR|USER_RECORD_ALLOW_PER_MACHINE|USER_RECORD_ALLOW_BINDING|USER_RECORD_STRIP_SECRET|USER_RECORD_ALLOW_STATUS|USER_RECORD_ALLOW_SIGNATURE;
+        flags = USER_RECORD_REQUIRE_REGULAR|USER_RECORD_ALLOW_PER_MACHINE|USER_RECORD_ALLOW_BINDING|USER_RECORD_STRIP_SECRET|USER_RECORD_ALLOW_STATUS|USER_RECORD_ALLOW_SIGNATURE|USER_RECORD_PERMISSIVE;
         if (trusted)
                 flags |= USER_RECORD_ALLOW_PRIVILEGED;
         else
@@ -443,7 +443,7 @@ int bus_home_method_update(
         assert(message);
         assert(h);
 
-        r = bus_message_read_home_record(message, USER_RECORD_REQUIRE_REGULAR|USER_RECORD_REQUIRE_SECRET|USER_RECORD_ALLOW_PRIVILEGED|USER_RECORD_ALLOW_PER_MACHINE|USER_RECORD_ALLOW_SIGNATURE, &hr, error);
+        r = bus_message_read_home_record(message, USER_RECORD_REQUIRE_REGULAR|USER_RECORD_REQUIRE_SECRET|USER_RECORD_ALLOW_PRIVILEGED|USER_RECORD_ALLOW_PER_MACHINE|USER_RECORD_ALLOW_SIGNATURE|USER_RECORD_PERMISSIVE, &hr, error);
         if (r < 0)
                 return r;
 
@@ -669,6 +669,7 @@ int bus_home_method_ref(
                 return sd_bus_error_setf(error, BUS_ERROR_HOME_ABSENT, "Home %s is currently missing or not plugged in.", h->user_name);
         case HOME_UNFIXATED:
         case HOME_INACTIVE:
+        case HOME_DIRTY:
                 return sd_bus_error_setf(error, BUS_ERROR_HOME_NOT_ACTIVE, "Home %s not active.", h->user_name);
         case HOME_LOCKED:
                 return sd_bus_error_setf(error, BUS_ERROR_HOME_LOCKED, "Home %s is currently locked.", h->user_name);
@@ -712,38 +713,13 @@ int bus_home_method_release(
 /* We map a uid_t as uint32_t bus property, let's ensure this is safe. */
 assert_cc(sizeof(uid_t) == sizeof(uint32_t));
 
-const sd_bus_vtable home_vtable[] = {
-        SD_BUS_VTABLE_START(0),
-        SD_BUS_PROPERTY("UserName", "s", NULL, offsetof(Home, user_name), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("UID", "u", NULL, offsetof(Home, uid), SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
-        SD_BUS_PROPERTY("UnixRecord", "(suusss)", property_get_unix_record, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
-        SD_BUS_PROPERTY("State", "s", property_get_state, 0, 0),
-        SD_BUS_PROPERTY("UserRecord", "(sb)", property_get_user_record, 0, SD_BUS_VTABLE_PROPERTY_EMITS_INVALIDATION|SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Activate", "s", NULL, bus_home_method_activate, SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Deactivate", NULL, NULL, bus_home_method_deactivate, 0),
-        SD_BUS_METHOD("Unregister", NULL, NULL, bus_home_method_unregister, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("Realize", "s", NULL, bus_home_method_realize, SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Remove", NULL, NULL, bus_home_method_remove, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("Fixate", "s", NULL, bus_home_method_fixate, SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Authenticate", "s", NULL, bus_home_method_authenticate, SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Update", "s", NULL, bus_home_method_update, SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Resize", "ts", NULL, bus_home_method_resize, SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("ChangePassword", "ss", NULL, bus_home_method_change_password, SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Lock", NULL, NULL, bus_home_method_lock, 0),
-        SD_BUS_METHOD("Unlock", "s", NULL, bus_home_method_unlock, SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Acquire", "sb", "h", bus_home_method_acquire, SD_BUS_VTABLE_SENSITIVE),
-        SD_BUS_METHOD("Ref", "b", "h", bus_home_method_ref, 0),
-        SD_BUS_METHOD("Release", NULL, NULL, bus_home_method_release, 0),
-        SD_BUS_VTABLE_END
-};
-
 int bus_home_path(Home *h, char **ret) {
         assert(ret);
 
         return sd_bus_path_encode("/org/freedesktop/home1/home", h->user_name, ret);
 }
 
-int bus_home_object_find(
+static int bus_home_object_find(
                 sd_bus *bus,
                 const char *path,
                 const char *interface,
@@ -772,7 +748,7 @@ int bus_home_object_find(
         return 1;
 }
 
-int bus_home_node_enumerator(
+static int bus_home_node_enumerator(
                 sd_bus *bus,
                 const char *path,
                 void *userdata,
@@ -782,7 +758,6 @@ int bus_home_node_enumerator(
         _cleanup_strv_free_ char **l = NULL;
         Manager *m = userdata;
         size_t k = 0;
-        Iterator i;
         Home *h;
         int r;
 
@@ -792,7 +767,7 @@ int bus_home_node_enumerator(
         if (!l)
                 return -ENOMEM;
 
-        HASHMAP_FOREACH(h, m->homes_by_uid, i) {
+        HASHMAP_FOREACH(h, m->homes_by_uid) {
                 r = bus_home_path(h, l + k);
                 if (r < 0)
                         return r;
@@ -802,6 +777,107 @@ int bus_home_node_enumerator(
         return 1;
 }
 
+const sd_bus_vtable home_vtable[] = {
+        SD_BUS_VTABLE_START(0),
+
+        SD_BUS_PROPERTY("UserName", "s",
+                        NULL, offsetof(Home, user_name),
+                        SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("UID", "u",
+                        NULL, offsetof(Home, uid),
+                        SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("UnixRecord", "(suusss)",
+                        property_get_unix_record, 0,
+                        SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+        SD_BUS_PROPERTY("State", "s",
+                        property_get_state, 0,
+                        0),
+        SD_BUS_PROPERTY("UserRecord", "(sb)",
+                        property_get_user_record, 0,
+                        SD_BUS_VTABLE_PROPERTY_EMITS_INVALIDATION|SD_BUS_VTABLE_SENSITIVE),
+
+        SD_BUS_METHOD_WITH_NAMES("Activate",
+                                 "s",
+                                 SD_BUS_PARAM(secret),
+                                 NULL,,
+                                 bus_home_method_activate,
+                                 SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD("Deactivate", NULL, NULL, bus_home_method_deactivate, 0),
+        SD_BUS_METHOD("Unregister", NULL, NULL, bus_home_method_unregister, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("Realize",
+                                 "s",
+                                 SD_BUS_PARAM(secret),
+                                 NULL,,
+                                 bus_home_method_realize,
+                                 SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
+
+        SD_BUS_METHOD("Remove", NULL, NULL, bus_home_method_remove, SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("Fixate",
+                                 "s",
+                                 SD_BUS_PARAM(secret),
+                                 NULL,,
+                                 bus_home_method_fixate,
+                                 SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD_WITH_NAMES("Authenticate",
+                                 "s",
+                                 SD_BUS_PARAM(secret),
+                                 NULL,,
+                                 bus_home_method_authenticate,
+                                 SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD_WITH_NAMES("Update",
+                                 "s",
+                                 SD_BUS_PARAM(user_record),
+                                 NULL,,
+                                 bus_home_method_update,
+                                 SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD_WITH_NAMES("Resize",
+                                 "ts",
+                                 SD_BUS_PARAM(size)
+                                 SD_BUS_PARAM(secret),
+                                 NULL,,
+                                 bus_home_method_resize,
+                                 SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD_WITH_NAMES("ChangePassword",
+                                 "ss",
+                                 SD_BUS_PARAM(new_secret)
+                                 SD_BUS_PARAM(old_secret),
+                                 NULL,,
+                                 bus_home_method_change_password,
+                                 SD_BUS_VTABLE_UNPRIVILEGED|SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD("Lock", NULL, NULL, bus_home_method_lock, 0),
+        SD_BUS_METHOD_WITH_NAMES("Unlock",
+                                 "s",
+                                 SD_BUS_PARAM(secret),
+                                 NULL,,
+                                 bus_home_method_unlock,
+                                 SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD_WITH_NAMES("Acquire",
+                                 "sb",
+                                 SD_BUS_PARAM(secret)
+                                 SD_BUS_PARAM(please_suspend),
+                                 "h",
+                                 SD_BUS_PARAM(send_fd),
+                                 bus_home_method_acquire,
+                                 SD_BUS_VTABLE_SENSITIVE),
+        SD_BUS_METHOD_WITH_NAMES("Ref",
+                                 "b",
+                                 SD_BUS_PARAM(please_suspend),
+                                 "h",
+                                 SD_BUS_PARAM(send_fd),
+                                 bus_home_method_ref,
+                                 0),
+        SD_BUS_METHOD("Release", NULL, NULL, bus_home_method_release, 0),
+        SD_BUS_VTABLE_END
+};
+
+const BusObjectImplementation home_object = {
+        "/org/freedesktop/home1/home",
+        "org.freedesktop.home1.Home",
+        .fallback_vtables = BUS_FALLBACK_VTABLES({home_vtable, bus_home_object_find}),
+        .node_enumerator = bus_home_node_enumerator,
+        .manager = true,
+};
+
 static int on_deferred_change(sd_event_source *s, void *userdata) {
         _cleanup_free_ char *path = NULL;
         Home *h = userdata;
@@ -809,7 +885,7 @@ static int on_deferred_change(sd_event_source *s, void *userdata) {
 
         assert(h);
 
-        h->deferred_change_event_source = sd_event_source_unref(h->deferred_change_event_source);
+        h->deferred_change_event_source = sd_event_source_disable_unref(h->deferred_change_event_source);
 
         r = bus_home_path(h, &path);
         if (r < 0) {

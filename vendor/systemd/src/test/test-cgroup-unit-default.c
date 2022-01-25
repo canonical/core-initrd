@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdio.h>
 
@@ -22,7 +22,9 @@ static int test_default_memory_low(void) {
         if (r == -ENOMEDIUM)
                 return log_tests_skipped("cgroupfs not available");
 
-        assert_se(set_unit_path(get_testdata_dir()) >= 0);
+        _cleanup_free_ char *unit_dir = NULL;
+        assert_se(get_testdata_dir("units", &unit_dir) >= 0);
+        assert_se(set_unit_path(unit_dir) >= 0);
         assert_se(runtime_dir = setup_fake_runtime_dir());
         r = manager_new(UNIT_FILE_USER, MANAGER_TEST_RUN_BASIC, &m);
         if (IN_SET(r, -EPERM, -EACCES)) {
@@ -70,7 +72,7 @@ static int test_default_memory_low(void) {
          *
          * 3. dml-discard.slice sets DefaultMemoryLow= with no rvalue. As such,
          *    dml-discard-empty.service should end up with a value of 0.
-         *    dml-discard-explicit-ml.service sets MemoryLow=70, and as such should have that override the
+         *    dml-discard-set-ml.service sets MemoryLow=15, and as such should have that override the
          *    reset DefaultMemoryLow value. dml-discard.slice should still have an eventual memory.low of 50.
          *
          *                           ┌───────────┐
@@ -89,28 +91,28 @@ static int test_default_memory_low(void) {
         assert_se(manager_load_startable_unit_or_warn(m, "dml.slice", NULL, &dml) >= 0);
 
         assert_se(manager_load_startable_unit_or_warn(m, "dml-passthrough.slice", NULL, &dml_passthrough) >= 0);
-        assert_se(UNIT_DEREF(dml_passthrough->slice) == dml);
+        assert_se(UNIT_GET_SLICE(dml_passthrough) == dml);
         assert_se(manager_load_startable_unit_or_warn(m, "dml-passthrough-empty.service", NULL, &dml_passthrough_empty) >= 0);
-        assert_se(UNIT_DEREF(dml_passthrough_empty->slice) == dml_passthrough);
+        assert_se(UNIT_GET_SLICE(dml_passthrough_empty) == dml_passthrough);
         assert_se(manager_load_startable_unit_or_warn(m, "dml-passthrough-set-dml.service", NULL, &dml_passthrough_set_dml) >= 0);
-        assert_se(UNIT_DEREF(dml_passthrough_set_dml->slice) == dml_passthrough);
+        assert_se(UNIT_GET_SLICE(dml_passthrough_set_dml) == dml_passthrough);
         assert_se(manager_load_startable_unit_or_warn(m, "dml-passthrough-set-ml.service", NULL, &dml_passthrough_set_ml) >= 0);
-        assert_se(UNIT_DEREF(dml_passthrough_set_ml->slice) == dml_passthrough);
+        assert_se(UNIT_GET_SLICE(dml_passthrough_set_ml) == dml_passthrough);
 
         assert_se(manager_load_startable_unit_or_warn(m, "dml-override.slice", NULL, &dml_override) >= 0);
-        assert_se(UNIT_DEREF(dml_override->slice) == dml);
+        assert_se(UNIT_GET_SLICE(dml_override) == dml);
         assert_se(manager_load_startable_unit_or_warn(m, "dml-override-empty.service", NULL, &dml_override_empty) >= 0);
-        assert_se(UNIT_DEREF(dml_override_empty->slice) == dml_override);
+        assert_se(UNIT_GET_SLICE(dml_override_empty) == dml_override);
 
         assert_se(manager_load_startable_unit_or_warn(m, "dml-discard.slice", NULL, &dml_discard) >= 0);
-        assert_se(UNIT_DEREF(dml_discard->slice) == dml);
+        assert_se(UNIT_GET_SLICE(dml_discard) == dml);
         assert_se(manager_load_startable_unit_or_warn(m, "dml-discard-empty.service", NULL, &dml_discard_empty) >= 0);
-        assert_se(UNIT_DEREF(dml_discard_empty->slice) == dml_discard);
+        assert_se(UNIT_GET_SLICE(dml_discard_empty) == dml_discard);
         assert_se(manager_load_startable_unit_or_warn(m, "dml-discard-set-ml.service", NULL, &dml_discard_set_ml) >= 0);
-        assert_se(UNIT_DEREF(dml_discard_set_ml->slice) == dml_discard);
+        assert_se(UNIT_GET_SLICE(dml_discard_set_ml) == dml_discard);
 
-        root = UNIT_DEREF(dml->slice);
-        assert_se(!UNIT_ISSET(root->slice));
+        assert_se(root = UNIT_GET_SLICE(dml));
+        assert_se(!UNIT_GET_SLICE(root));
 
         assert_se(unit_get_ancestor_memory_low(root) == CGROUP_LIMIT_MIN);
 

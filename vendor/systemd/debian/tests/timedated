@@ -163,7 +163,7 @@ wait_mon() {
     done
     assert_in "$2" "$(cat $mon)"
     kill $MONPID
-    wait
+    wait $MONPID 2>/dev/null || true
 }
 
 echo 'disable NTP'

@@ -1,22 +1,14 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # Copyright © 2016 Zeal Jagannatha
 
 # This is a settings file for OS image generation using mkosi (https://github.com/systemd/mkosi).
-# Simply invoke "mkosi" in the project directory to build an OS image.
+# Symlink this file to mkosi.default in the project root directory and invoke "mkosi" to build an OS image.
 
 [Distribution]
 Distribution=arch
 
-[Output]
-Format=raw_btrfs
-Bootable=yes
-
-[Partitions]
-RootSize=3G
-
 [Packages]
-Cache=/var/cache/pacman/pkg/
 BuildPackages=
         acl
         bzip2
@@ -39,20 +31,24 @@ BuildPackages=
         libidn2
         libmicrohttpd
         libseccomp
-        libtool
         libutil-linux
         libxkbcommon
         libxslt
         lz4
-        m4
         meson
         pam
         pkgconfig
         python
         python-lxml
+        python-jinja
         qrencode
+        rsync
         xz
+        zstd
 
 Packages=
+        gdb
         libidn2
+        nano
         qrencode
+        strace

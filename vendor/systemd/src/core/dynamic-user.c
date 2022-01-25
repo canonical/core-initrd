@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -19,6 +19,7 @@
 #include "stdio-util.h"
 #include "string-util.h"
 #include "strv.h"
+#include "user-record.h"
 #include "user-util.h"
 
 /* Takes a value generated randomly or by hashing and turns it into a UID in the right range */
@@ -116,7 +117,7 @@ static int dynamic_user_acquire(Manager *m, const char *name, DynamicUser** ret)
                 return 0;
         }
 
-        if (!valid_user_group_name_or_id(name))
+        if (!valid_user_group_name(name, VALID_USER_ALLOW_NUMERIC))
                 return -EINVAL;
 
         if (socketpair(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0, storage_socket) < 0)
@@ -611,7 +612,6 @@ static DynamicUser* dynamic_user_destroy(DynamicUser *d) {
 
 int dynamic_user_serialize(Manager *m, FILE *f, FDSet *fds) {
         DynamicUser *d;
-        Iterator i;
 
         assert(m);
         assert(f);
@@ -619,7 +619,7 @@ int dynamic_user_serialize(Manager *m, FILE *f, FDSet *fds) {
 
         /* Dump the dynamic user database into the manager serialization, to deal with daemon reloads. */
 
-        HASHMAP_FOREACH(d, m->dynamic_users, i) {
+        HASHMAP_FOREACH(d, m->dynamic_users) {
                 int copy0, copy1;
 
                 copy0 = fdset_put_dup(fds, d->storage_socket[0]);
@@ -674,7 +674,6 @@ void dynamic_user_deserialize_one(Manager *m, const char *value, FDSet *fds) {
 
 void dynamic_user_vacuum(Manager *m, bool close_user) {
         DynamicUser *d;
-        Iterator i;
 
         assert(m);
 
@@ -682,7 +681,7 @@ void dynamic_user_vacuum(Manager *m, bool close_user) {
          * to which no reference exist. This is called after a daemon reload finished, in order to destroy users which
          * might not be referenced anymore. */
 
-        HASHMAP_FOREACH(d, m->dynamic_users, i) {
+        HASHMAP_FOREACH(d, m->dynamic_users) {
                 if (d->n_ref > 0)
                         continue;
 

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #if !ENABLE_DNS_OVER_TLS || !DNS_OVER_TLS_USE_GNUTLS
 #error This source file requires DNS-over-TLS to be enabled and GnuTLS to be available.
@@ -8,9 +8,10 @@
 
 #include "resolved-dns-stream.h"
 #include "resolved-dnstls.h"
+#include "resolved-manager.h"
 
 #define TLS_PROTOCOL_PRIORITY "NORMAL:-VERS-ALL:+VERS-TLS1.3:+VERS-TLS1.2"
-DEFINE_TRIVIAL_CLEANUP_FUNC(gnutls_session_t, gnutls_deinit);
+DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(gnutls_session_t, gnutls_deinit, NULL);
 
 static ssize_t dnstls_stream_writev(gnutls_transport_ptr_t p, const giovec_t *iov, int iovcnt) {
         int r;
@@ -27,7 +28,7 @@ static ssize_t dnstls_stream_writev(gnutls_transport_ptr_t p, const giovec_t *io
 }
 
 int dnstls_stream_connect_tls(DnsStream *stream, DnsServer *server) {
-        _cleanup_(gnutls_deinitp) gnutls_session_t gs;
+        _cleanup_(gnutls_deinitp) gnutls_session_t gs = NULL;
         int r;
 
         assert(stream);
@@ -56,15 +57,19 @@ int dnstls_stream_connect_tls(DnsStream *stream, DnsServer *server) {
         }
 
         if (server->manager->dns_over_tls_mode == DNS_OVER_TLS_YES) {
-                stream->dnstls_data.validation.type = GNUTLS_DT_IP_ADDRESS;
-                if (server->family == AF_INET) {
-                        stream->dnstls_data.validation.data = (unsigned char*) &server->address.in.s_addr;
-                        stream->dnstls_data.validation.size = 4;
-                } else {
-                        stream->dnstls_data.validation.data = server->address.in6.s6_addr;
-                        stream->dnstls_data.validation.size = 16;
+                if (server->server_name)
+                        gnutls_session_set_verify_cert(gs, server->server_name, 0);
+                else {
+                        stream->dnstls_data.validation.type = GNUTLS_DT_IP_ADDRESS;
+                        if (server->family == AF_INET) {
+                                stream->dnstls_data.validation.data = (unsigned char*) &server->address.in.s_addr;
+                                stream->dnstls_data.validation.size = 4;
+                        } else {
+                                stream->dnstls_data.validation.data = server->address.in6.s6_addr;
+                                stream->dnstls_data.validation.size = 16;
+                        }
+                        gnutls_session_set_verify_cert2(gs, &stream->dnstls_data.validation, 1, 0);
                 }
-                gnutls_session_set_verify_cert2(gs, &stream->dnstls_data.validation, 1, 0);
         }
 
         if (server->server_name) {

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <inttypes.h>
@@ -17,6 +17,35 @@
 /* The default disk size to use when nothing else is specified, relative to free disk space */
 #define USER_DISK_SIZE_DEFAULT_PERCENT 85
 
+bool uid_is_system(uid_t uid);
+bool gid_is_system(gid_t gid);
+
+static inline bool uid_is_dynamic(uid_t uid) {
+        return DYNAMIC_UID_MIN <= uid && uid <= DYNAMIC_UID_MAX;
+}
+
+static inline bool gid_is_dynamic(gid_t gid) {
+        return uid_is_dynamic((uid_t) gid);
+}
+
+static inline bool uid_is_container(uid_t uid) {
+        return CONTAINER_UID_BASE_MIN <= uid && uid <= CONTAINER_UID_BASE_MAX;
+}
+
+static inline bool gid_is_container(gid_t gid) {
+        return uid_is_container((uid_t) gid);
+}
+
+typedef struct UGIDAllocationRange {
+        uid_t system_alloc_uid_min;
+        uid_t system_uid_max;
+        gid_t system_alloc_gid_min;
+        gid_t system_gid_max;
+} UGIDAllocationRange;
+
+int read_login_defs(UGIDAllocationRange *ret_defs, const char *path, const char *root);
+const UGIDAllocationRange *acquire_ugid_allocation_range(void);
+
 typedef enum UserDisposition {
         USER_INTRINSIC,   /* root and nobody */
         USER_SYSTEM,      /* statically allocated users for system services */
@@ -25,7 +54,7 @@ typedef enum UserDisposition {
         USER_CONTAINER,   /* UID ranges allocated for container uses */
         USER_RESERVED,    /* Range above 2^31 */
         _USER_DISPOSITION_MAX,
-        _USER_DISPOSITION_INVALID = -1,
+        _USER_DISPOSITION_INVALID = -EINVAL,
 } UserDisposition;
 
 typedef enum UserHomeStorage {
@@ -36,7 +65,7 @@ typedef enum UserHomeStorage {
         USER_FSCRYPT,
         USER_CIFS,
         _USER_STORAGE_MAX,
-        _USER_STORAGE_INVALID = -1
+        _USER_STORAGE_INVALID = -EINVAL,
 } UserStorage;
 
 typedef enum UserRecordMask {
@@ -140,6 +169,9 @@ typedef enum UserRecordLoadFlags {
 
         /* Whether to ignore errors and load what we can */
         USER_RECORD_PERMISSIVE          = 1U << 29,
+
+        /* Whether an empty record is OK */
+        USER_RECORD_EMPTY_OK            = 1U << 30,
 } UserRecordLoadFlags;
 
 static inline UserRecordLoadFlags USER_RECORD_REQUIRE(UserRecordMask m) {
@@ -188,6 +220,34 @@ typedef struct Pkcs11EncryptedKey {
          * the only. */
         char *hashed_password;
 } Pkcs11EncryptedKey;
+
+typedef struct Fido2HmacCredential {
+        void *id;
+        size_t size;
+} Fido2HmacCredential;
+
+typedef struct Fido2HmacSalt {
+        /* The FIDO2 Cridential ID to use */
+        Fido2HmacCredential credential;
+
+        /* The FIDO2 salt value */
+        void *salt;
+        size_t salt_size;
+
+        /* What to test the hashed salt value against, usually UNIX password hash here. */
+        char *hashed_password;
+
+        /* Whether the 'up', 'uv', 'clientPin' features are enabled. */
+        int uv, up, client_pin;
+} Fido2HmacSalt;
+
+typedef struct RecoveryKey {
+        /* The type of recovery key, must be "modhex64" right now */
+        char *type;
+
+        /* A UNIX password hash of the normalized form of modhex64 */
+        char *hashed_password;
+} RecoveryKey;
 
 typedef struct UserRecord {
         /* The following three fields are not part of the JSON record */
@@ -239,7 +299,7 @@ typedef struct UserRecord {
         char **hashed_password;
         char **ssh_authorized_keys;
         char **password;
-        char **pkcs11_pin;
+        char **token_pin;
 
         char *cifs_domain;
         char *cifs_user_name;
@@ -261,6 +321,7 @@ typedef struct UserRecord {
         sd_id128_t file_system_uuid;
 
         int luks_discard;
+        int luks_offline_discard;
         char *luks_cipher;
         char *luks_cipher_mode;
         uint64_t luks_volume_key_size;
@@ -308,6 +369,17 @@ typedef struct UserRecord {
         size_t n_pkcs11_encrypted_key;
         int pkcs11_protected_authentication_path_permitted;
 
+        Fido2HmacCredential *fido2_hmac_credential;
+        size_t n_fido2_hmac_credential;
+        Fido2HmacSalt *fido2_hmac_salt;
+        size_t n_fido2_hmac_salt;
+        int fido2_user_presence_permitted;
+        int fido2_user_verification_permitted;
+
+        char **recovery_key_type;
+        RecoveryKey *recovery_key;
+        size_t n_recovery_key;
+
         JsonVariant *json;
 } UserRecord;
 
@@ -332,6 +404,7 @@ const char *user_record_cifs_user_name(UserRecord *h);
 const char *user_record_shell(UserRecord *h);
 const char *user_record_real_name(UserRecord *h);
 bool user_record_luks_discard(UserRecord *h);
+bool user_record_luks_offline_discard(UserRecord *h);
 const char *user_record_luks_cipher(UserRecord *h);
 const char *user_record_luks_cipher_mode(UserRecord *h);
 uint64_t user_record_luks_volume_key_size(UserRecord *h);
@@ -347,6 +420,8 @@ usec_t user_record_ratelimit_interval_usec(UserRecord *h);
 uint64_t user_record_ratelimit_burst(UserRecord *h);
 bool user_record_can_authenticate(UserRecord *h);
 
+int user_record_build_image_path(UserStorage storage, const char *user_name_and_realm, char **ret);
+
 bool user_record_equal(UserRecord *a, UserRecord *b);
 bool user_record_compatible(UserRecord *a, UserRecord *b);
 int user_record_compare_last_change(UserRecord *a, UserRecord *b);
@@ -361,6 +436,7 @@ int user_record_test_password_change_required(UserRecord *h);
 
 /* The following six are user by group-record.c, that's why we export them here */
 int json_dispatch_realm(const char *name, JsonVariant *variant, JsonDispatchFlags flags, void *userdata);
+int json_dispatch_gecos(const char *name, JsonVariant *variant, JsonDispatchFlags flags, void *userdata);
 int json_dispatch_user_group_list(const char *name, JsonVariant *variant, JsonDispatchFlags flags, void *userdata);
 int json_dispatch_user_disposition(const char *name, JsonVariant *variant, JsonDispatchFlags flags, void *userdata);
 

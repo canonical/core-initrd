@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <stdarg.h>
@@ -77,8 +77,10 @@ static int files_add(
                 /* Is this a masking entry? */
                 if ((flags & CONF_FILES_FILTER_MASKED))
                         if (null_or_empty(&st)) {
+                                assert(masked);
+
                                 /* Mark this one as masked */
-                                r = set_put_strdup(masked, de->d_name);
+                                r = set_put_strdup(&masked, de->d_name);
                                 if (r < 0)
                                         return r;
 
@@ -90,7 +92,7 @@ static int files_add(
                 if (flags & (CONF_FILES_REGULAR|CONF_FILES_DIRECTORY))
                         if (!((flags & CONF_FILES_DIRECTORY) && S_ISDIR(st.st_mode)) &&
                             !((flags & CONF_FILES_REGULAR) && S_ISREG(st.st_mode))) {
-                                log_debug("Ignoring '%s/%s', as it is not a of the right type.", dirpath, de->d_name);
+                                log_debug("Ignoring '%s/%s', as it does not have the right type.", dirpath, de->d_name);
                                 continue;
                         }
 

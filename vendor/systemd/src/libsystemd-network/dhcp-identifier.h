@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include "sd-id128.h"
@@ -8,13 +8,15 @@
 #include "time-util.h"
 #include "unaligned.h"
 
+#define SYSTEMD_PEN    43793
+
 typedef enum DUIDType {
         DUID_TYPE_LLT       = 1,
         DUID_TYPE_EN        = 2,
         DUID_TYPE_LL        = 3,
         DUID_TYPE_UUID      = 4,
         _DUID_TYPE_MAX,
-        _DUID_TYPE_INVALID  = -1,
+        _DUID_TYPE_INVALID  = -EINVAL,
 } DUIDType;
 
 /* RFC 3315 section 9.1:
@@ -57,4 +59,4 @@ int dhcp_identifier_set_duid_llt(struct duid *duid, usec_t t, const uint8_t *add
 int dhcp_identifier_set_duid_ll(struct duid *duid, const uint8_t *addr, size_t addr_len, uint16_t arp_type, size_t *len);
 int dhcp_identifier_set_duid_en(struct duid *duid, size_t *len);
 int dhcp_identifier_set_duid_uuid(struct duid *duid, size_t *len);
-int dhcp_identifier_set_iaid(int ifindex, const uint8_t *mac, size_t mac_len, bool legacy_unstable_byteorder, void *_id);
+int dhcp_identifier_set_iaid(int ifindex, const uint8_t *mac, size_t mac_len, bool legacy_unstable_byteorder, bool use_mac, void *_id);

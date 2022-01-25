@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 # Message catalog for systemd's own messages
 
@@ -89,7 +89,7 @@ about the file being truncated.
 Subject: A new session @SESSION_ID@ has been created for user @USER_ID@
 Defined-By: systemd
 Support: %SUPPORT_URL%
-Documentation: https://www.freedesktop.org/wiki/Software/systemd/multiseat
+Documentation: sd-login(3)
 
 A new session with the ID @SESSION_ID@ has been created for the user @USER_ID@.
 
@@ -99,7 +99,7 @@ The leading process of the session is @LEADER@.
 Subject: Session @SESSION_ID@ has been terminated
 Defined-By: systemd
 Support: %SUPPORT_URL%
-Documentation: https://www.freedesktop.org/wiki/Software/systemd/multiseat
+Documentation: sd-login(3)
 
 A session with the ID @SESSION_ID@ has been terminated.
 
@@ -107,7 +107,7 @@ A session with the ID @SESSION_ID@ has been terminated.
 Subject: A new seat @SEAT_ID@ is now available
 Defined-By: systemd
 Support: %SUPPORT_URL%
-Documentation: https://www.freedesktop.org/wiki/Software/systemd/multiseat
+Documentation: sd-login(3)
 
 A new seat @SEAT_ID@ has been configured and is now available.
 
@@ -115,7 +115,7 @@ A new seat @SEAT_ID@ has been configured and is now available.
 Subject: Seat @SEAT_ID@ has now been removed
 Defined-By: systemd
 Support: %SUPPORT_URL%
-Documentation: https://www.freedesktop.org/wiki/Software/systemd/multiseat
+Documentation: sd-login(3)
 
 A seat @SEAT_ID@ has been removed and is no longer available.
 
@@ -302,7 +302,8 @@ shut down.
 Subject: DNSSEC mode has been turned off, as server doesn't support it
 Defined-By: systemd
 Support: %SUPPORT_URL%
-Documentation: man:systemd-resolved.service(8) resolved.conf(5)
+Documentation: man:systemd-resolved.service(8)
+Documentation: man:resolved.conf(5)
 
 The resolver service (systemd-resolved.service) has detected that the
 configured DNS server does not support DNSSEC, and DNSSEC validation has been
@@ -412,3 +413,107 @@ as the best process to terminate and has been forcibly terminated by the
 kernel.
 
 Note that the memory pressure might or might not have been caused by @UNIT@.
+
+-- b61fdac612e94b9182285b998843061f
+Subject: Accepting user/group name @USER_GROUP_NAME@, which does not match strict user/group name rules.
+Defined-By: systemd
+Support: %SUPPORT_URL%
+Documentation: https://systemd.io/USER_NAMES
+
+The user/group name @USER_GROUP_NAME@ has been specified, which is accepted
+according the relaxed user/group name rules, but does not qualify under the
+strict rules.
+
+The strict user/group name rules written as regular expression are:
+
+^[a-zA-Z_][a-zA-Z0-9_-]{0,30}$
+
+The relaxed user/group name rules accept all names, except for the empty
+string; names containing NUL bytes, control characters, colon or slash
+characters; names not valid UTF-8; names with leading or trailing whitespace;
+the strings "." or ".."; fully numeric strings, or strings beginning in a
+hyphen and otherwise fully numeric.
+
+-- 1b3bb94037f04bbf81028e135a12d293
+Subject: Failed to generate valid unit name from path '@MOUNT_POINT@'.
+Defined-By: systemd
+Support: %SUPPORT_URL%
+
+The following mount point path could not be converted into a valid .mount
+unit name:
+
+    @MOUNT_POINT@
+
+Typically this means that the path to the mount point is longer than allowed
+for valid unit names.
+
+systemd dynamically synthesizes .mount units for all mount points appearing on
+the system. For that a simple escaping algorithm is applied: the absolute path
+name is used, with all "/" characters replaced by "-" (the leading one is
+removed). Moreover, any non-alphanumeric characters (as well as any of ":",
+"-", "_", ".", "\") are replaced by "\xNN" where "NN" is the hexadecimal code
+of the character. Finally, ".mount" is suffixed. The resulting string must be
+under 256 characters in length to be a valid unit name. This restriction is
+made in order for all unit names to also be suitable as file names. If a mount
+point appears that — after escaping — is longer than this limit it cannot be
+mapped to a unit. In this case systemd will refrain from synthesizing a unit
+and cannot be used to manage the mount point. It will not appear in the service
+manager's unit table and thus also not be torn down safely and automatically at
+system shutdown.
+
+It is generally recommended to avoid such overly long mount point paths, or —
+if used anyway – manage them independently of systemd, i.e. establish them as
+well as tear them down automatically at system shutdown by other software.
+
+-- b480325f9c394a7b802c231e51a2752c
+Subject: Special user @OFFENDING_USER@ configured, this is not safe!
+Defined-By: systemd
+Support: %SUPPORT_URL%
+Documentation: https://systemd.io/UIDS-GIDS
+
+The unit @UNIT@ is configured to use User=@OFFENDING_USER@.
+
+This is not safe. The @OFFENDING_USER@ user's main purpose on Linux-based
+operating systems is to be the owner of files that otherwise cannot be mapped
+to any local user. It's used by the NFS client and Linux user namespacing,
+among others. By running a unit's processes under the identity of this user
+they might possibly get read and even write access to such files that cannot
+otherwise be mapped.
+
+It is strongly recommended to avoid running services under this user identity,
+in particular on systems using NFS or running containers. Allocate a user ID
+specific to this service, either statically via systemd-sysusers or dynamically
+via the DynamicUser= service setting.
+
+-- 1c0454c1bd2241e0ac6fefb4bc631433
+Subject: systemd-udev-settle.service is deprecated.
+Defined-By: systemd
+Support: %SUPPORT_URL%
+
+Usage of the systemd service unit systemd-udev-settle.service is deprecated. It
+inserts artificial delays into the boot process without providing the
+guarantees other subsystems traditionally assumed it provides. Relying on this
+service is racy, and it is generally a bug to make use of it and depend on it.
+
+Traditionally, this service's job was to wait until all devices a system
+possesses have been fully probed and initialized, delaying boot until this
+phase is completed. However, today's systems and hardware generally don't work
+this way anymore, hardware today may show up any time and take any time to be
+probed and initialized. Thus, in the general case, it's no longer possible to
+correctly delay boot until "all devices" have been processed, as it is not
+clear what "all devices" means and when they have been found. This is in
+particular the case if USB hardware or network-attached hardware is used.
+
+Modern software that requires some specific hardware (such as a network device
+or block device) to operate should only wait for the specific devices it needs
+to show up, and otherwise operate asynchronously initializing devices as they
+appear during boot and during runtime without delaying the boot process.
+
+It is a defect of the software in question if it doesn't work this way, and
+still pulls systemd-udev-settle.service into the boot process.
+
+Please file a bug report against the following units, with a request for it to
+be updated to operate in a hotplug fashion without depending on
+systemd-udev-settle.service:
+
+    @OFFENDING_UNITS@

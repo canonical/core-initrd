@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
 #include <errno.h>
 
 #include "dhcp-lease-internal.h"
@@ -87,4 +89,5 @@ int main(int argc, char *argv[]) {
         test_dhcp_lease_parse_search_domains_no_data();
         test_dhcp_lease_parse_search_domains_loops();
         test_dhcp_lease_parse_search_domains_wrong_len();
+        return 0;
 }

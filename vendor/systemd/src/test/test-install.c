@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdio.h>
 #include <string.h>
@@ -12,9 +12,9 @@ static void dump_changes(UnitFileChange *c, unsigned n) {
         assert_se(n == 0 || c);
 
         for (i = 0; i < n; i++) {
-                if (c[i].type == UNIT_FILE_UNLINK)
+                if (c[i].type_or_errno == UNIT_FILE_UNLINK)
                         printf("rm '%s'\n", c[i].path);
-                else if (c[i].type == UNIT_FILE_SYMLINK)
+                else if (c[i].type_or_errno == UNIT_FILE_SYMLINK)
                         printf("ln -s '%s' '%s'\n", c[i].source, c[i].path);
         }
 }
@@ -22,7 +22,6 @@ static void dump_changes(UnitFileChange *c, unsigned n) {
 int main(int argc, char* argv[]) {
         Hashmap *h;
         UnitFileList *p;
-        Iterator i;
         int r;
         const char *const files[] = { "avahi-daemon.service", NULL };
         const char *const files2[] = { "/home/lennart/test.service", NULL };
@@ -36,7 +35,7 @@ int main(int argc, char* argv[]) {
         r = unit_file_get_list(UNIT_FILE_SYSTEM, NULL, h, NULL, NULL);
         assert_se(r == 0);
 
-        HASHMAP_FOREACH(p, h, i) {
+        HASHMAP_FOREACH(p, h) {
                 UnitFileState s = _UNIT_FILE_STATE_INVALID;
 
                 r = unit_file_get_state(UNIT_FILE_SYSTEM, NULL, basename(p->path), &s);

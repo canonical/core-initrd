@@ -1,14 +1,17 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <unistd.h>
 
 #include "alloc-util.h"
+#include "copy.h"
 #include "fd-util.h"
+#include "fileio.h"
 #include "fs-util.h"
 #include "id128-util.h"
 #include "macro.h"
 #include "mkdir.h"
 #include "path-util.h"
+#include "random-util.h"
 #include "rm-rf.h"
 #include "stdio-util.h"
 #include "string-util.h"
@@ -329,7 +332,7 @@ static void test_chase_symlinks(void) {
         assert_se(S_ISLNK(st.st_mode));
         result = mfree(result);
 
-        /* Test CHASE_ONE */
+        /* Test CHASE_STEP */
 
         p = strjoina(temp, "/start");
         r = chase_symlinks(p, NULL, CHASE_STEP, &result, NULL);
@@ -340,7 +343,7 @@ static void test_chase_symlinks(void) {
 
         r = chase_symlinks(p, NULL, CHASE_STEP, &result, NULL);
         assert_se(r == 0);
-        p = strjoina(temp, "/top/./dotdota");
+        p = strjoina(temp, "/top/dotdota");
         assert_se(streq(p, result));
         result = mfree(result);
 
@@ -615,8 +618,8 @@ static void test_touch_file(void) {
         assert_se(timespec_load(&st.st_mtim) == test_mtime);
 
         if (geteuid() == 0) {
-                a = strjoina(p, "/cdev");
-                r = mknod(a, 0775 | S_IFCHR, makedev(0, 0));
+                a = strjoina(p, "/bdev");
+                r = mknod(a, 0775 | S_IFBLK, makedev(0, 0));
                 if (r < 0 && errno == EPERM && detect_container() > 0) {
                         log_notice("Running in unprivileged container? Skipping remaining tests in %s", __func__);
                         return;
@@ -626,17 +629,17 @@ static void test_touch_file(void) {
                 assert_se(lstat(a, &st) >= 0);
                 assert_se(st.st_uid == test_uid);
                 assert_se(st.st_gid == test_gid);
-                assert_se(S_ISCHR(st.st_mode));
+                assert_se(S_ISBLK(st.st_mode));
                 assert_se((st.st_mode & 0777) == 0640);
                 assert_se(timespec_load(&st.st_mtim) == test_mtime);
 
-                a = strjoina(p, "/bdev");
-                assert_se(mknod(a, 0775 | S_IFBLK, makedev(0, 0)) >= 0);
+                a = strjoina(p, "/cdev");
+                assert_se(mknod(a, 0775 | S_IFCHR, makedev(0, 0)) >= 0);
                 assert_se(touch_file(a, false, test_mtime, test_uid, test_gid, 0640) >= 0);
                 assert_se(lstat(a, &st) >= 0);
                 assert_se(st.st_uid == test_uid);
                 assert_se(st.st_gid == test_gid);
-                assert_se(S_ISBLK(st.st_mode));
+                assert_se(S_ISCHR(st.st_mode));
                 assert_se((st.st_mode & 0777) == 0640);
                 assert_se(timespec_load(&st.st_mtim) == test_mtime);
         }
@@ -670,7 +673,7 @@ static void test_unlinkat_deallocate(void) {
         assert_se(st.st_blocks > 0);
         assert_se(st.st_nlink == 1);
 
-        assert_se(unlinkat_deallocate(AT_FDCWD, p, 0) >= 0);
+        assert_se(unlinkat_deallocate(AT_FDCWD, p, UNLINK_ERASE) >= 0);
 
         assert_se(fstat(fd, &st) >= 0);
         assert_se(IN_SET(st.st_size, 0, 6)); /* depending on whether hole punching worked the size will be 6
@@ -802,48 +805,64 @@ static void test_chmod_and_chown(void) {
         assert_se(S_ISLNK(st.st_mode));
 }
 
-static void test_chmod_and_chown_unsafe(void) {
-        _cleanup_(rm_rf_physical_and_freep) char *d = NULL;
-        _unused_ _cleanup_umask_ mode_t u = umask(0000);
-        struct stat st;
-        const char *p;
+static void create_binary_file(const char *p, const void *data, size_t l) {
+        _cleanup_close_ int fd = -1;
 
-        if (geteuid() != 0)
-                return;
+        fd = open(p, O_CREAT|O_WRONLY|O_EXCL|O_CLOEXEC, 0600);
+        assert_se(fd >= 0);
+        assert_se(write(fd, data, l) == (ssize_t) l);
+}
 
-        log_info("/* %s */", __func__);
+static void test_conservative_rename(void) {
+        _cleanup_(unlink_and_freep) char *p = NULL;
+        _cleanup_free_ char *q = NULL;
+        size_t l = 16*1024 + random_u64() % (32 * 1024); /* some randomly sized buffer 16k…48k */
+        uint8_t buffer[l+1];
 
-        assert_se(mkdtemp_malloc(NULL, &d) >= 0);
+        random_bytes(buffer, l);
 
-        p = strjoina(d, "/reg");
-        assert_se(mknod(p, S_IFREG | 0123, 0) >= 0);
+        assert_se(tempfn_random_child(NULL, NULL, &p) >= 0);
+        create_binary_file(p, buffer, l);
 
-        assert_se(chmod_and_chown_unsafe(p, S_IFREG | 0321, 1, 2) >= 0);
-        assert_se(chmod_and_chown_unsafe(p, S_IFDIR | 0555, 3, 4) == -EINVAL);
+        assert_se(tempfn_random_child(NULL, NULL, &q) >= 0);
 
-        assert_se(lstat(p, &st) >= 0);
-        assert_se(S_ISREG(st.st_mode));
-        assert_se((st.st_mode & 07777) == 0321);
+        /* Check that the hardlinked "copy" is detected */
+        assert_se(link(p, q) >= 0);
+        assert_se(conservative_renameat(AT_FDCWD, q, AT_FDCWD, p) == 0);
+        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 
-        p = strjoina(d, "/dir");
-        assert_se(mkdir(p, 0123) >= 0);
+        /* Check that a manual copy is detected */
+        assert_se(copy_file(p, q, 0, MODE_INVALID, 0, 0, COPY_REFLINK) >= 0);
+        assert_se(conservative_renameat(AT_FDCWD, q, AT_FDCWD, p) == 0);
+        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 
-        assert_se(chmod_and_chown_unsafe(p, S_IFDIR | 0321, 1, 2) >= 0);
-        assert_se(chmod_and_chown_unsafe(p, S_IFREG | 0555, 3, 4) == -EINVAL);
+        /* Check that a manual new writeout is also detected */
+        create_binary_file(q, buffer, l);
+        assert_se(conservative_renameat(AT_FDCWD, q, AT_FDCWD, p) == 0);
+        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 
-        assert_se(lstat(p, &st) >= 0);
-        assert_se(S_ISDIR(st.st_mode));
-        assert_se((st.st_mode & 07777) == 0321);
+        /* Check that a minimally changed version is detected */
+        buffer[47] = ~buffer[47];
+        create_binary_file(q, buffer, l);
+        assert_se(conservative_renameat(AT_FDCWD, q, AT_FDCWD, p) > 0);
+        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 
-        p = strjoina(d, "/lnk");
-        assert_se(symlink("idontexist", p) >= 0);
+        /* Check that this really is new updated version */
+        create_binary_file(q, buffer, l);
+        assert_se(conservative_renameat(AT_FDCWD, q, AT_FDCWD, p) == 0);
+        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 
-        assert_se(chmod_and_chown_unsafe(p, S_IFLNK | 0321, 1, 2) >= 0);
-        assert_se(chmod_and_chown_unsafe(p, S_IFREG | 0555, 3, 4) == -EINVAL);
-        assert_se(chmod_and_chown_unsafe(p, S_IFDIR | 0555, 3, 4) == -EINVAL);
+        /* Make sure we detect extended files */
+        buffer[l++] = 47;
+        create_binary_file(q, buffer, l);
+        assert_se(conservative_renameat(AT_FDCWD, q, AT_FDCWD, p) > 0);
+        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 
-        assert_se(lstat(p, &st) >= 0);
-        assert_se(S_ISLNK(st.st_mode));
+        /* Make sure we detect truncated files */
+        l--;
+        create_binary_file(q, buffer, l);
+        assert_se(conservative_renameat(AT_FDCWD, q, AT_FDCWD, p) > 0);
+        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 }
 
 int main(int argc, char *argv[]) {
@@ -863,7 +882,7 @@ int main(int argc, char *argv[]) {
         test_fsync_directory_of_file();
         test_rename_noreplace();
         test_chmod_and_chown();
-        test_chmod_and_chown_unsafe();
+        test_conservative_rename();
 
         return 0;
 }

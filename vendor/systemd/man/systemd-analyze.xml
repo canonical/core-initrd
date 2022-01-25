@@ -1,9 +1,9 @@
 <?xml version='1.0'?> <!--*-nxml-*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-<!-- SPDX-License-Identifier: LGPL-2.1+ -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
-<refentry id="systemd-analyze"
+<refentry id="systemd-analyze" conditional='ENABLE_ANALYZE'
     xmlns:xi="http://www.w3.org/2001/XInclude">
 
   <refentryinfo>
@@ -69,6 +69,12 @@
       <arg choice="opt" rep="repeat">OPTIONS</arg>
       <arg choice="plain">exit-status</arg>
       <arg choice="opt" rep="repeat"><replaceable>STATUS</replaceable></arg>
+    </cmdsynopsis>
+    <cmdsynopsis>
+      <command>systemd-analyze</command>
+      <arg choice="opt" rep="repeat">OPTIONS</arg>
+      <arg choice="plain">capability</arg>
+      <arg choice="opt" rep="repeat"><replaceable>CAPABILITY</replaceable></arg>
     </cmdsynopsis>
     <cmdsynopsis>
       <command>systemd-analyze</command>
@@ -328,7 +334,7 @@ $ eog targets.svg</programlisting>
       definition (one of <literal>glibc</literal>, <literal>systemd</literal>, <literal>LSB</literal>, or
       <literal>BSD</literal>), see the Process Exit Codes section in
       <citerefentry><refentrytitle>systemd.exec</refentrytitle><manvolnum>5</manvolnum></citerefentry>.
-      If no additional arguments are specified, all known statuses are are shown. Otherwise, only the
+      If no additional arguments are specified, all known statuses are shown. Otherwise, only the
       definitions for the specified codes are shown.</para>
 
       <example>
@@ -342,6 +348,30 @@ FAILURE 1      glibc
 USAGE   64     BSD
 DATAERR 65     BSD
 </programlisting>
+      </example>
+    </refsect2>
+
+    <refsect2>
+      <title><command>systemd-analyze capability <optional><replaceable>CAPABILITY</replaceable>...</optional></command></title>
+
+      <para>This command prints a list of Linux capabilities along with their numeric IDs. See <citerefentry
+      project='man-pages'><refentrytitle>capabilities</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+      for details. If no argument is specified the full list of capabilities known to the service manager and
+      the kernel is shown. Capabilities defined by the kernel but not known to the service manager are shown
+      as <literal>cap_???</literal>. Optionally, if arguments are specified they may refer to specific
+      cabilities by name or numeric ID, in which case only the indicated capabilities are shown in the
+      table.</para>
+
+      <example>
+        <title><command>Show some example capability names</command></title>
+
+        <programlisting>$ systemd-analyze capability 0 1 {30..32}
+NAME              NUMBER
+cap_chown              0
+cap_dac_override       1
+cap_audit_control     30
+cap_setfcap           31
+cap_mac_override      32</programlisting>
       </example>
     </refsect2>
 
@@ -509,9 +539,9 @@ NAutoVTs=8
       <para>This command will load unit files and print warnings if any errors are detected. Files specified
       on the command line will be loaded, but also any other units referenced by them. The full unit search
       path is formed by combining the directories for all command line arguments, and the usual unit load
-      paths (variable <varname>$SYSTEMD_UNIT_PATH</varname> is supported, and may be used to replace or
+      paths. The variable <varname>$SYSTEMD_UNIT_PATH</varname> is supported, and may be used to replace or
       augment the compiled in set of unit load paths; see
-      <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>).  All
+      <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>. All
       units files present in the directories containing the command line arguments will be used in preference
       to the other paths.</para>
 
@@ -669,7 +699,7 @@ Service b@0.service not loaded, b.socket cannot be started.
         <command>dot</command> command (see above), this selects which
         relationships are shown in the dependency graph. Both options
         require a
-        <citerefentry project='die-net'><refentrytitle>glob</refentrytitle><manvolnum>7</manvolnum></citerefentry>
+        <citerefentry project='man-pages'><refentrytitle>glob</refentrytitle><manvolnum>7</manvolnum></citerefentry>
         pattern as an argument, which will be matched against the
         left-hand and the right-hand, respectively, nodes of a
         relationship.</para>
@@ -700,9 +730,9 @@ Service b@0.service not loaded, b.socket cannot be started.
       <varlistentry>
         <term><option>--man=no</option></term>
 
-        <listitem><para>Do not invoke man to verify the existence of
-        man pages listed in <varname>Documentation=</varname>.
-        </para></listitem>
+        <listitem><para>Do not invoke
+        <citerefentry project='man-pages'><refentrytitle>man</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+        to verify the existence of man pages listed in <varname>Documentation=</varname>.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -752,7 +782,7 @@ Service b@0.service not loaded, b.socket cannot be started.
     otherwise.</para>
   </refsect1>
 
-  <xi:include href="less-variables.xml" />
+  <xi:include href="common-variables.xml" />
 
   <refsect1>
     <title>See Also</title>

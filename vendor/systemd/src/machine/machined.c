@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <string.h>
@@ -10,17 +10,21 @@
 
 #include "alloc-util.h"
 #include "bus-error.h"
+#include "bus-locator.h"
+#include "bus-log-control-api.h"
 #include "bus-polkit.h"
 #include "cgroup-util.h"
 #include "dirent-util.h"
+#include "discover-image.h"
 #include "fd-util.h"
 #include "format-util.h"
 #include "hostname-util.h"
 #include "label.h"
-#include "machine-image.h"
+#include "machined-varlink.h"
 #include "machined.h"
 #include "main-func.h"
 #include "process-util.h"
+#include "service-util.h"
 #include "signal-util.h"
 #include "special.h"
 
@@ -79,9 +83,13 @@ static Manager* manager_unref(Manager *m) {
         hashmap_free(m->image_cache);
 
         sd_event_source_unref(m->image_cache_defer_event);
+#if ENABLE_NSCD
         sd_event_source_unref(m->nscd_cache_flush_event);
+#endif
 
         bus_verify_polkit_async_registry_free(m->polkit_registry);
+
+        manager_varlink_done(m);
 
         sd_bus_flush_close_unref(m->bus);
         sd_event_unref(m->event);
@@ -130,7 +138,7 @@ static int manager_add_host_machine(Manager *m) {
 static int manager_enumerate_machines(Manager *m) {
         _cleanup_closedir_ DIR *d = NULL;
         struct dirent *de;
-        int r = 0;
+        int r;
 
         assert(m);
 
@@ -158,7 +166,7 @@ static int manager_enumerate_machines(Manager *m) {
                 if (startswith(de->d_name, "unit:"))
                         continue;
 
-                if (!machine_name_is_valid(de->d_name))
+                if (!hostname_is_valid(de->d_name, 0))
                         continue;
 
                 k = manager_add_machine(m, de->d_name, &machine);
@@ -187,45 +195,15 @@ static int manager_connect_bus(Manager *m) {
         if (r < 0)
                 return log_error_errno(r, "Failed to connect to system bus: %m");
 
-        r = sd_bus_add_object_vtable(m->bus, NULL, "/org/freedesktop/machine1", "org.freedesktop.machine1.Manager", manager_vtable, m);
+        r = bus_add_implementation(m->bus, &manager_object, m);
         if (r < 0)
-                return log_error_errno(r, "Failed to add manager object vtable: %m");
+                return r;
 
-        r = sd_bus_add_fallback_vtable(m->bus, NULL, "/org/freedesktop/machine1/machine", "org.freedesktop.machine1.Machine", machine_vtable, machine_object_find, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to add machine object vtable: %m");
-
-        r = sd_bus_add_node_enumerator(m->bus, NULL, "/org/freedesktop/machine1/machine", machine_node_enumerator, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to add machine enumerator: %m");
-
-        r = sd_bus_add_fallback_vtable(m->bus, NULL, "/org/freedesktop/machine1/image", "org.freedesktop.machine1.Image", image_vtable, image_object_find, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to add image object vtable: %m");
-
-        r = sd_bus_add_node_enumerator(m->bus, NULL, "/org/freedesktop/machine1/image", image_node_enumerator, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to add image enumerator: %m");
-
-        r = sd_bus_match_signal_async(
-                        m->bus,
-                        NULL,
-                        "org.freedesktop.systemd1",
-                        "/org/freedesktop/systemd1",
-                        "org.freedesktop.systemd1.Manager",
-                        "JobRemoved",
-                        match_job_removed, NULL, m);
+        r = bus_match_signal_async(m->bus, NULL, bus_systemd_mgr, "JobRemoved", match_job_removed, NULL, m);
         if (r < 0)
                 return log_error_errno(r, "Failed to add match for JobRemoved: %m");
 
-        r = sd_bus_match_signal_async(
-                        m->bus,
-                        NULL,
-                        "org.freedesktop.systemd1",
-                        "/org/freedesktop/systemd1",
-                        "org.freedesktop.systemd1.Manager",
-                        "UnitRemoved",
-                        match_unit_removed, NULL, m);
+        r = bus_match_signal_async(m->bus, NULL, bus_systemd_mgr, "UnitRemoved", match_unit_removed, NULL, m);
         if (r < 0)
                 return log_error_errno(r, "Failed to request match for UnitRemoved: %m");
 
@@ -240,28 +218,17 @@ static int manager_connect_bus(Manager *m) {
         if (r < 0)
                 return log_error_errno(r, "Failed to request match for PropertiesChanged: %m");
 
-        r = sd_bus_match_signal_async(
-                        m->bus,
-                        NULL,
-                        "org.freedesktop.systemd1",
-                        "/org/freedesktop/systemd1",
-                        "org.freedesktop.systemd1.Manager",
-                        "Reloading",
-                        match_reloading, NULL, m);
+        r = bus_match_signal_async(m->bus, NULL, bus_systemd_mgr, "Reloading", match_reloading, NULL, m);
         if (r < 0)
                 return log_error_errno(r, "Failed to request match for Reloading: %m");
 
-        r = sd_bus_call_method_async(
-                        m->bus,
-                        NULL,
-                        "org.freedesktop.systemd1",
-                        "/org/freedesktop/systemd1",
-                        "org.freedesktop.systemd1.Manager",
-                        "Subscribe",
-                        NULL, NULL,
-                        NULL);
+        r = bus_call_method_async(m->bus, NULL, bus_systemd_mgr, "Subscribe", NULL, NULL, NULL);
         if (r < 0)
                 return log_error_errno(r, "Failed to enable subscription: %m");
+
+        r = bus_log_control_api_register(m->bus);
+        if (r < 0)
+                return r;
 
         r = sd_bus_request_name_async(m->bus, NULL, "org.freedesktop.machine1", 0, NULL, NULL);
         if (r < 0)
@@ -300,13 +267,17 @@ static void manager_gc(Manager *m, bool drop_not_started) {
 
 static int manager_startup(Manager *m) {
         Machine *machine;
-        Iterator i;
         int r;
 
         assert(m);
 
         /* Connect to the bus */
         r = manager_connect_bus(m);
+        if (r < 0)
+                return r;
+
+        /* Set up Varlink service */
+        r = manager_varlink_init(m);
         if (r < 0)
                 return r;
 
@@ -317,7 +288,7 @@ static int manager_startup(Manager *m) {
         manager_gc(m, false);
 
         /* And start everything */
-        HASHMAP_FOREACH(machine, m->machines, i)
+        HASHMAP_FOREACH(machine, m->machines)
                 machine_start(machine, NULL, NULL);
 
         return 0;
@@ -327,6 +298,9 @@ static bool check_idle(void *userdata) {
         Manager *m = userdata;
 
         if (m->operations)
+                return false;
+
+        if (varlink_server_current_connections(m->varlink_server) > 0)
                 return false;
 
         manager_gc(m, true);
@@ -350,14 +324,17 @@ static int run(int argc, char *argv[]) {
         int r;
 
         log_set_facility(LOG_AUTH);
-        log_setup_service();
+        log_setup();
+
+        r = service_parse_argv("systemd-machined.service",
+                               "Manage registrations of local VMs and containers.",
+                               BUS_IMPLEMENTATIONS(&manager_object,
+                                                   &log_control_object),
+                               argc, argv);
+        if (r <= 0)
+                return r;
 
         umask(0022);
-
-        if (argc != 1) {
-                log_error("This program takes no arguments.");
-                return -EINVAL;
-        }
 
         /* Always create the directories people can create inotify watches in. Note that some applications might check
          * for the existence of /run/systemd/machines/ to determine whether machined is available, so please always

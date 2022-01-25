@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #pragma once
 
@@ -15,7 +15,7 @@ typedef enum BootEntryType {
         BOOT_ENTRY_UNIFIED,  /* Type #2 entries: *.efi files */
         BOOT_ENTRY_LOADER,   /* Additional entries augmented from LoaderEntries EFI var */
         _BOOT_ENTRY_MAX,
-        _BOOT_ENTRY_INVALID = -1,
+        _BOOT_ENTRY_INVALID = -EINVAL,
 } BootEntryType;
 
 typedef struct BootEntry {
@@ -76,13 +76,7 @@ static inline BootEntry* boot_config_default_entry(BootConfig *config) {
 void boot_config_free(BootConfig *config);
 int boot_entries_load_config(const char *esp_path, const char *xbootldr_path, BootConfig *config);
 int boot_entries_load_config_auto(const char *override_esp_path, const char *override_xbootldr_path, BootConfig *config);
-#if ENABLE_EFI
-int boot_entries_augment_from_loader(BootConfig *config, bool only_auto);
-#else
-static inline int boot_entries_augment_from_loader(BootConfig *config, bool only_auto) {
-        return -EOPNOTSUPP;
-}
-#endif
+int boot_entries_augment_from_loader(BootConfig *config, char **list, bool only_auto);
 
 static inline const char* boot_entry_title(const BootEntry *entry) {
         return entry->show_title ?: entry->title ?: entry->id;

@@ -1,9 +1,12 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <net/if.h>
 #include <netinet/in.h>
+#include <unistd.h>
 
 #include "alloc-util.h"
+#include "bareudp.h"
+#include "batadv.h"
 #include "bond.h"
 #include "bridge.h"
 #include "conf-files.h"
@@ -21,9 +24,11 @@
 #include "netdev.h"
 #include "netdevsim.h"
 #include "netlink-util.h"
-#include "network-internal.h"
 #include "networkd-manager.h"
+#include "networkd-queue.h"
+#include "networkd-setlink.h"
 #include "nlmon.h"
+#include "path-lookup.h"
 #include "siphash24.h"
 #include "stat-util.h"
 #include "string-table.h"
@@ -41,6 +46,7 @@
 #include "xfrm.h"
 
 const NetDevVTable * const netdev_vtable[_NETDEV_KIND_MAX] = {
+        [NETDEV_KIND_BATADV] = &batadv_vtable,
         [NETDEV_KIND_BRIDGE] = &bridge_vtable,
         [NETDEV_KIND_BOND] = &bond_vtable,
         [NETDEV_KIND_VLAN] = &vlan_vtable,
@@ -75,9 +81,12 @@ const NetDevVTable * const netdev_vtable[_NETDEV_KIND_MAX] = {
         [NETDEV_KIND_NLMON] = &nlmon_vtable,
         [NETDEV_KIND_XFRM] = &xfrm_vtable,
         [NETDEV_KIND_IFB] = &ifb_vtable,
+        [NETDEV_KIND_BAREUDP] = &bare_udp_vtable,
 };
 
 static const char* const netdev_kind_table[_NETDEV_KIND_MAX] = {
+        [NETDEV_KIND_BAREUDP] = "bareudp",
+        [NETDEV_KIND_BATADV] = "batadv",
         [NETDEV_KIND_BRIDGE] = "bridge",
         [NETDEV_KIND_BOND] = "bond",
         [NETDEV_KIND_VLAN] = "vlan",
@@ -135,12 +144,12 @@ int config_parse_netdev_kind(
 
         k = netdev_kind_from_string(rvalue);
         if (k < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, 0, "Failed to parse netdev kind, ignoring assignment: %s", rvalue);
+                log_syntax(unit, LOG_WARNING, filename, line, k, "Failed to parse netdev kind, ignoring assignment: %s", rvalue);
                 return 0;
         }
 
         if (*kind != _NETDEV_KIND_INVALID && *kind != k) {
-                log_syntax(unit, LOG_ERR, filename, line, 0,
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
                            "Specified netdev kind is different from the previous value '%s', ignoring assignment: %s",
                            netdev_kind_to_string(*kind), rvalue);
                 return 0;
@@ -149,19 +158,6 @@ int config_parse_netdev_kind(
         *kind = k;
 
         return 0;
-}
-
-static void netdev_callbacks_clear(NetDev *netdev) {
-        netdev_join_callback *callback;
-
-        if (!netdev)
-                return;
-
-        while ((callback = netdev->callbacks)) {
-                LIST_REMOVE(callbacks, netdev->callbacks, callback);
-                link_unref(callback->link);
-                free(callback);
-        }
 }
 
 bool netdev_is_managed(NetDev *netdev) {
@@ -178,8 +174,6 @@ static void netdev_detach_from_manager(NetDev *netdev) {
 
 static NetDev *netdev_free(NetDev *netdev) {
         assert(netdev);
-
-        netdev_callbacks_clear(netdev);
 
         netdev_detach_from_manager(netdev);
 
@@ -215,12 +209,8 @@ void netdev_drop(NetDev *netdev) {
 
         log_netdev_debug(netdev, "netdev removed");
 
-        netdev_callbacks_clear(netdev);
-
         netdev_detach_from_manager(netdev);
-
         netdev_unref(netdev);
-
         return;
 }
 
@@ -244,55 +234,10 @@ int netdev_get(Manager *manager, const char *name, NetDev **ret) {
 
 static int netdev_enter_failed(NetDev *netdev) {
         netdev->state = NETDEV_STATE_FAILED;
-
-        netdev_callbacks_clear(netdev);
-
-        return 0;
-}
-
-static int netdev_enslave_ready(NetDev *netdev, Link* link, link_netlink_message_handler_t callback) {
-        _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *req = NULL;
-        int r;
-
-        assert(netdev);
-        assert(netdev->state == NETDEV_STATE_READY);
-        assert(netdev->manager);
-        assert(netdev->manager->rtnl);
-        assert(IN_SET(netdev->kind, NETDEV_KIND_BRIDGE, NETDEV_KIND_BOND, NETDEV_KIND_VRF));
-        assert(link);
-        assert(callback);
-
-        if (link->flags & IFF_UP && netdev->kind == NETDEV_KIND_BOND) {
-                log_netdev_debug(netdev, "Link '%s' was up when attempting to enslave it. Bringing link down.", link->ifname);
-                r = link_down(link, NULL);
-                if (r < 0)
-                        return log_netdev_error_errno(netdev, r, "Could not bring link down: %m");
-        }
-
-        r = sd_rtnl_message_new_link(netdev->manager->rtnl, &req, RTM_SETLINK, link->ifindex);
-        if (r < 0)
-                return log_netdev_error_errno(netdev, r, "Could not allocate RTM_SETLINK message: %m");
-
-        r = sd_netlink_message_append_u32(req, IFLA_MASTER, netdev->ifindex);
-        if (r < 0)
-                return log_netdev_error_errno(netdev, r, "Could not append IFLA_MASTER attribute: %m");
-
-        r = netlink_call_async(netdev->manager->rtnl, NULL, req, callback,
-                               link_netlink_destroy_callback, link);
-        if (r < 0)
-                return log_netdev_error_errno(netdev, r, "Could not send rtnetlink message: %m");
-
-        link_ref(link);
-
-        log_netdev_debug(netdev, "Enslaving link '%s'", link->ifname);
-
         return 0;
 }
 
 static int netdev_enter_ready(NetDev *netdev) {
-        netdev_join_callback *callback, *callback_next;
-        int r;
-
         assert(netdev);
         assert(netdev->ifname);
 
@@ -302,18 +247,6 @@ static int netdev_enter_ready(NetDev *netdev) {
         netdev->state = NETDEV_STATE_READY;
 
         log_netdev_info(netdev, "netdev ready");
-
-        LIST_FOREACH_SAFE(callbacks, callback, callback_next, netdev->callbacks) {
-                /* enslave the links that were attempted to be enslaved before the
-                 * link was ready */
-                r = netdev_enslave_ready(netdev, callback->link, callback->callback);
-                if (r < 0)
-                        return r;
-
-                LIST_REMOVE(callbacks, netdev->callbacks, callback);
-                link_unref(callback->link);
-                free(callback);
-        }
 
         if (NETDEV_VTABLE(netdev)->post_create)
                 NETDEV_VTABLE(netdev)->post_create(netdev, NULL, NULL);
@@ -343,45 +276,6 @@ static int netdev_create_handler(sd_netlink *rtnl, sd_netlink_message *m, NetDev
         return 1;
 }
 
-static int netdev_enslave(NetDev *netdev, Link *link, link_netlink_message_handler_t callback) {
-        int r;
-
-        assert(netdev);
-        assert(netdev->manager);
-        assert(netdev->manager->rtnl);
-        assert(IN_SET(netdev->kind, NETDEV_KIND_BRIDGE, NETDEV_KIND_BOND, NETDEV_KIND_VRF));
-
-        if (netdev->state == NETDEV_STATE_READY) {
-                r = netdev_enslave_ready(netdev, link, callback);
-                if (r < 0)
-                        return r;
-        } else if (IN_SET(netdev->state, NETDEV_STATE_LINGER, NETDEV_STATE_FAILED)) {
-                _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *m = NULL;
-
-                r = rtnl_message_new_synthetic_error(netdev->manager->rtnl, -ENODEV, 0, &m);
-                if (r >= 0)
-                        callback(netdev->manager->rtnl, m, link);
-        } else {
-                /* the netdev is not yet read, save this request for when it is */
-                netdev_join_callback *cb;
-
-                cb = new(netdev_join_callback, 1);
-                if (!cb)
-                        return log_oom();
-
-                *cb = (netdev_join_callback) {
-                        .callback = callback,
-                        .link = link_ref(link),
-                };
-
-                LIST_PREPEND(callbacks, netdev->callbacks, cb);
-
-                log_netdev_debug(netdev, "Will enslave '%s', when ready", link->ifname);
-        }
-
-        return 0;
-}
-
 int netdev_set_ifindex(NetDev *netdev, sd_netlink_message *message) {
         uint16_t type;
         const char *kind;
@@ -396,10 +290,8 @@ int netdev_set_ifindex(NetDev *netdev, sd_netlink_message *message) {
         if (r < 0)
                 return log_netdev_error_errno(netdev, r, "Could not get rtnl message type: %m");
 
-        if (type != RTM_NEWLINK) {
-                log_netdev_error(netdev, "Cannot set ifindex from unexpected rtnl message type.");
-                return -EINVAL;
-        }
+        if (type != RTM_NEWLINK)
+                return log_netdev_error_errno(netdev, SYNTHETIC_ERRNO(EINVAL), "Cannot set ifindex from unexpected rtnl message type.");
 
         r = sd_rtnl_message_link_get_ifindex(message, &ifindex);
         if (r < 0) {
@@ -430,7 +322,7 @@ int netdev_set_ifindex(NetDev *netdev, sd_netlink_message *message) {
         if (!streq(netdev->ifname, received_name)) {
                 log_netdev_error(netdev, "Received newlink with wrong IFNAME %s", received_name);
                 netdev_enter_failed(netdev);
-                return r;
+                return -EINVAL;
         }
 
         r = sd_netlink_message_enter_container(message, IFLA_LINKINFO);
@@ -458,11 +350,10 @@ int netdev_set_ifindex(NetDev *netdev, sd_netlink_message *message) {
         }
 
         if (!streq(kind, received_kind)) {
-                log_netdev_error(netdev,
-                                 "Received newlink with wrong KIND %s, "
-                                 "expected %s", received_kind, kind);
+                log_netdev_error(netdev, "Received newlink with wrong KIND %s, expected %s",
+                                 received_kind, kind);
                 netdev_enter_failed(netdev);
-                return r;
+                return -EINVAL;
         }
 
         netdev->ifindex = ifindex;
@@ -551,7 +442,7 @@ static int netdev_create(NetDev *netdev, Link *link, link_netlink_message_handle
                                 return log_netdev_error_errno(netdev, r, "Could not append IFLA_ADDRESS attribute: %m");
                 }
 
-                if (netdev->mtu) {
+                if (netdev->mtu != 0) {
                         r = sd_netlink_message_append_u32(m, IFLA_MTU, netdev->mtu);
                         if (r < 0)
                                 return log_netdev_error_errno(netdev, r, "Could not append IFLA_MTU attribute: %m");
@@ -617,7 +508,6 @@ static int netdev_create_after_configured(NetDev *netdev, Link *link) {
         return NETDEV_VTABLE(netdev)->create_after_configured(netdev, link);
 }
 
-/* the callback must be called, possibly after a timeout, as otherwise the Link will hang */
 int netdev_join(NetDev *netdev, Link *link, link_netlink_message_handler_t callback) {
         int r;
 
@@ -626,12 +516,6 @@ int netdev_join(NetDev *netdev, Link *link, link_netlink_message_handler_t callb
         assert(netdev->manager->rtnl);
 
         switch (netdev_get_create_type(netdev)) {
-        case NETDEV_CREATE_MASTER:
-                r = netdev_enslave(netdev, link, callback);
-                if (r < 0)
-                        return r;
-
-                break;
         case NETDEV_CREATE_STACKED:
                 r = netdev_create(netdev, link, callback);
                 if (r < 0)
@@ -644,15 +528,148 @@ int netdev_join(NetDev *netdev, Link *link, link_netlink_message_handler_t callb
                         return r;
                 break;
         default:
-                assert_not_reached("Can not join independent netdev");
+                assert_not_reached("Cannot join independent netdev");
         }
 
         return 0;
 }
 
+static bool netdev_is_ready_to_create(NetDev *netdev, Link *link) {
+        Request req;
+
+        assert(netdev);
+        assert(link);
+
+        if (netdev->state != NETDEV_STATE_LOADING)
+                return false;
+        if (!IN_SET(link->state, LINK_STATE_INITIALIZED, LINK_STATE_CONFIGURING, LINK_STATE_CONFIGURED))
+                return false;
+        if (netdev_get_create_type(netdev) == NETDEV_CREATE_AFTER_CONFIGURED &&
+            link->state != LINK_STATE_CONFIGURED)
+                return false;
+
+        req = (Request) {
+                .link = link,
+                .type = REQUEST_TYPE_SET_LINK,
+                .set_link_operation_ptr = INT_TO_PTR(SET_LINK_MTU),
+        };
+
+        if (ordered_set_contains(link->manager->request_queue, &req))
+                return false;
+
+        return true;
+}
+
+int request_process_create_stacked_netdev(Request *req) {
+        int r;
+
+        assert(req);
+        assert(req->link);
+        assert(req->type == REQUEST_TYPE_CREATE_STACKED_NETDEV);
+        assert(req->netdev);
+        assert(req->netlink_handler);
+
+        if (!netdev_is_ready_to_create(req->netdev, req->link))
+                return 0;
+
+        r = netdev_join(req->netdev, req->link, req->netlink_handler);
+        if (r < 0)
+                return log_link_error_errno(req->link, r, "Failed to create stacked netdev '%s': %m", req->netdev->ifname);
+
+        return 1;
+}
+
+static int link_create_stacked_netdev_handler_internal(sd_netlink *rtnl, sd_netlink_message *m, Link *link) {
+        int r;
+
+        assert(m);
+        assert(link);
+
+        if (IN_SET(link->state, LINK_STATE_FAILED, LINK_STATE_LINGER))
+                return 0;
+
+        r = sd_netlink_message_get_errno(m);
+        if (r < 0 && r != -EEXIST) {
+                log_link_message_warning_errno(link, m, r, "Could not create stacked netdev");
+                link_enter_failed(link);
+                return 0;
+        }
+
+        return 1;
+}
+
+static int link_create_stacked_netdev_handler(sd_netlink *rtnl, sd_netlink_message *m, Link *link) {
+        assert(link);
+        assert(link->create_stacked_netdev_messages > 0);
+
+        link->create_stacked_netdev_messages--;
+
+        if (link_create_stacked_netdev_handler_internal(rtnl, m, link) <= 0)
+                return 0;
+
+        if (link->create_stacked_netdev_messages == 0) {
+                link->stacked_netdevs_created = true;
+                log_link_debug(link, "Stacked netdevs created.");
+        }
+
+        return 0;
+}
+
+static int link_create_stacked_netdev_after_configured_handler(sd_netlink *rtnl, sd_netlink_message *m, Link *link) {
+        assert(link);
+        assert(link->create_stacked_netdev_after_configured_messages > 0);
+
+        link->create_stacked_netdev_after_configured_messages--;
+
+        if (link_create_stacked_netdev_handler_internal(rtnl, m, link) <= 0)
+                return 0;
+
+        if (link->create_stacked_netdev_after_configured_messages == 0) {
+                link->stacked_netdevs_after_configured_created = true;
+                log_link_debug(link, "Stacked netdevs created.");
+        }
+
+        return 0;
+}
+
+int link_request_to_crate_stacked_netdev(Link *link, NetDev *netdev) {
+        NetDevCreateType create_type;
+        int r;
+
+        assert(link);
+        assert(netdev);
+
+        create_type = netdev_get_create_type(netdev);
+        if (!IN_SET(create_type, NETDEV_CREATE_STACKED, NETDEV_CREATE_AFTER_CONFIGURED))
+                return -EINVAL;
+
+        if (netdev->state != NETDEV_STATE_LOADING || netdev->ifindex > 0)
+                /* Already created (or removed?) */
+                return 0;
+
+        if (create_type == NETDEV_CREATE_STACKED) {
+                link->stacked_netdevs_created = false;
+                r = link_queue_request(link, REQUEST_TYPE_CREATE_STACKED_NETDEV, netdev, false,
+                                       &link->create_stacked_netdev_messages,
+                                       link_create_stacked_netdev_handler,
+                                       NULL);
+        } else {
+                link->stacked_netdevs_after_configured_created = false;
+                r = link_queue_request(link, REQUEST_TYPE_CREATE_STACKED_NETDEV, netdev, false,
+                                       &link->create_stacked_netdev_after_configured_messages,
+                                       link_create_stacked_netdev_after_configured_handler,
+                                       NULL);
+        }
+        if (r < 0)
+                return log_link_error_errno(link, r, "Failed to request to create stacked netdev '%s': %m",
+                                            netdev->ifname);
+
+        log_link_debug(link, "Requested to create stacked netdev '%s'", netdev->ifname);
+        return 0;
+}
+
 int netdev_load_one(Manager *manager, const char *filename) {
         _cleanup_(netdev_unrefp) NetDev *netdev_raw = NULL, *netdev = NULL;
-        _cleanup_fclose_ FILE *file = NULL;
         const char *dropin_dirname;
         bool independent = false;
         int r;
@@ -660,15 +677,12 @@ int netdev_load_one(Manager *manager, const char *filename) {
         assert(manager);
         assert(filename);
 
-        file = fopen(filename, "re");
-        if (!file) {
-                if (errno == ENOENT)
-                        return 0;
-
-                return -errno;
-        }
-
-        if (null_or_empty_fd(fileno(file))) {
+        r = null_or_empty_path(filename);
+        if (r == -ENOENT)
+                return 0;
+        if (r < 0)
+                return r;
+        if (r > 0) {
                 log_debug("Skipping empty file: %s", filename);
                 return 0;
         }
@@ -684,15 +698,18 @@ int netdev_load_one(Manager *manager, const char *filename) {
         };
 
         dropin_dirname = strjoina(basename(filename), ".d");
-        r = config_parse_many(filename, NETWORK_DIRS, dropin_dirname,
-                              NETDEV_COMMON_SECTIONS NETDEV_OTHER_SECTIONS,
-                              config_item_perf_lookup, network_netdev_gperf_lookup,
-                              CONFIG_PARSE_WARN, netdev_raw);
+        r = config_parse_many(
+                        STRV_MAKE_CONST(filename), NETWORK_DIRS, dropin_dirname,
+                        NETDEV_COMMON_SECTIONS NETDEV_OTHER_SECTIONS,
+                        config_item_perf_lookup, network_netdev_gperf_lookup,
+                        CONFIG_PARSE_WARN,
+                        netdev_raw,
+                        NULL);
         if (r < 0)
                 return r;
 
         /* skip out early if configuration does not match the environment */
-        if (!condition_test_list(netdev_raw->conditions, NULL, NULL, NULL)) {
+        if (!condition_test_list(netdev_raw->conditions, environ, NULL, NULL, NULL)) {
                 log_debug("%s: Conditions in the file do not match the system environment, skipping.", filename);
                 return 0;
         }
@@ -707,10 +724,6 @@ int netdev_load_one(Manager *manager, const char *filename) {
                 return 0;
         }
 
-        r = fseek(file, 0, SEEK_SET);
-        if (r < 0)
-                return -errno;
-
         netdev = malloc0(NETDEV_VTABLE(netdev_raw)->object_size);
         if (!netdev)
                 return log_oom();
@@ -724,10 +737,12 @@ int netdev_load_one(Manager *manager, const char *filename) {
         if (NETDEV_VTABLE(netdev)->init)
                 NETDEV_VTABLE(netdev)->init(netdev);
 
-        r = config_parse_many(filename, NETWORK_DIRS, dropin_dirname,
-                              NETDEV_VTABLE(netdev)->sections,
-                              config_item_perf_lookup, network_netdev_gperf_lookup,
-                              CONFIG_PARSE_WARN, netdev);
+        r = config_parse_many(
+                        STRV_MAKE_CONST(filename), NETWORK_DIRS, dropin_dirname,
+                        NETDEV_VTABLE(netdev)->sections,
+                        config_item_perf_lookup, network_netdev_gperf_lookup,
+                        CONFIG_PARSE_WARN,
+                        netdev, NULL);
         if (r < 0)
                 return r;
 
@@ -746,23 +761,20 @@ int netdev_load_one(Manager *manager, const char *filename) {
                 r = netdev_get_mac(netdev->ifname, &netdev->mac);
                 if (r < 0)
                         return log_netdev_error_errno(netdev, r,
-                                                      "Failed to generate predictable MAC address for %s: %m",
-                                                      netdev->ifname);
+                                                      "Failed to generate predictable MAC address: %m");
         }
 
-        r = hashmap_ensure_allocated(&netdev->manager->netdevs, &string_hash_ops);
-        if (r < 0)
-                return r;
-
-        r = hashmap_put(netdev->manager->netdevs, netdev->ifname, netdev);
+        r = hashmap_ensure_put(&netdev->manager->netdevs, &string_hash_ops, netdev->ifname, netdev);
+        if (r == -ENOMEM)
+                return log_oom();
         if (r == -EEXIST) {
                 NetDev *n = hashmap_get(netdev->manager->netdevs, netdev->ifname);
 
                 assert(n);
                 if (!streq(netdev->filename, n->filename))
                         log_netdev_warning_errno(netdev, r,
-                                                 "The setting Name=%s in %s conflicts with the one in %s, ignoring",
-                                                 netdev->ifname, netdev->filename, n->filename);
+                                                 "Device was already configured by file %s, ignoring %s.",
+                                                 n->filename, netdev->filename);
 
                 /* Clear ifname before netdev_free() is called. Otherwise, the NetDev object 'n' is
                  * removed from the hashmap 'manager->netdevs'. */
@@ -771,8 +783,6 @@ int netdev_load_one(Manager *manager, const char *filename) {
         }
         if (r < 0)
                 return r;
-
-        LIST_HEAD_INIT(netdev->callbacks);
 
         log_netdev_debug(netdev, "loaded %s", netdev_kind_to_string(netdev->kind));
 
@@ -815,6 +825,9 @@ int netdev_load_one(Manager *manager, const char *filename) {
                 break;
         case NETDEV_KIND_XFRM:
                 independent = XFRM(netdev)->independent;
+                break;
+        case NETDEV_KIND_VXLAN:
+                independent = VXLAN(netdev)->independent;
                 break;
         default:
                 break;

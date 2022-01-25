@@ -1,9 +1,14 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 /* linux/in6.h or netinet/in.h */
 #ifndef IPV6_UNICAST_IF
 #define IPV6_UNICAST_IF 76
+#endif
+
+/* linux/in6.h or netinet/in.h */
+#ifndef IPV6_TRANSPARENT
+#define IPV6_TRANSPARENT 75
 #endif
 
 /* Not exposed but defined at include/net/ip.h */

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /***
   Copyright © 2016 Canonical Ltd.
 ***/
@@ -49,7 +49,7 @@ static void test_clock_is_localtime(void) {
                 log_info("scenario #%zu:, expected result %i", i, scenarios[i].expected_result);
                 log_info("%s", scenarios[i].contents);
                 rewind(f);
-                ftruncate(fileno(f), 0);
+                assert_se(ftruncate(fileno(f), 0) == 0);
                 assert_se(write_string_stream(f, scenarios[i].contents, WRITE_STRING_FILE_AVOID_NEWLINE) == 0);
                 assert_se(clock_is_localtime(adjtime) == scenarios[i].expected_result);
         }
@@ -60,14 +60,14 @@ static void test_clock_is_localtime_system(void) {
         int r;
         r = clock_is_localtime(NULL);
 
-        if (access("/etc/adjtime", F_OK) == 0) {
-                log_info("/etc/adjtime exists, clock_is_localtime() == %i", r);
+        if (access("/etc/adjtime", R_OK) == 0) {
+                log_info("/etc/adjtime is readable, clock_is_localtime() == %i", r);
                 /* if /etc/adjtime exists we expect some answer, no error or
                  * crash */
                 assert_se(IN_SET(r, 0, 1));
         } else
                 /* default is UTC if there is no /etc/adjtime */
-                assert_se(r == 0);
+                assert_se(r == 0 || ERRNO_IS_PRIVILEGE(r));
 }
 
 int main(int argc, char *argv[]) {

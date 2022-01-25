@@ -1,0 +1,6 @@
+#!/bin/sh
+# run upstream unit tests
+set -e
+
+export ARTIFACT_DIRECTORY=$AUTOPKGTEST_ARTIFACTS
+test/run-unit-tests.py

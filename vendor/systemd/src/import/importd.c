@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <sys/prctl.h>
 #include <sys/wait.h>
@@ -7,8 +7,11 @@
 
 #include "alloc-util.h"
 #include "bus-common-errors.h"
+#include "bus-get-properties.h"
+#include "bus-log-control-api.h"
 #include "bus-polkit.h"
 #include "def.h"
+#include "env-util.h"
 #include "fd-util.h"
 #include "float.h"
 #include "hostname-util.h"
@@ -19,7 +22,9 @@
 #include "mkdir.h"
 #include "parse-util.h"
 #include "path-util.h"
+#include "percent-util.h"
 #include "process-util.h"
+#include "service-util.h"
 #include "signal-util.h"
 #include "socket-util.h"
 #include "stat-util.h"
@@ -42,7 +47,7 @@ typedef enum TransferType {
         TRANSFER_PULL_TAR,
         TRANSFER_PULL_RAW,
         _TRANSFER_TYPE_MAX,
-        _TRANSFER_TYPE_INVALID = -1,
+        _TRANSFER_TYPE_INVALID = -EINVAL,
 } TransferType;
 
 struct Transfer {
@@ -146,10 +151,6 @@ static int transfer_new(Manager *m, Transfer **ret) {
         if (hashmap_size(m->transfers) >= TRANSFERS_MAX)
                 return -E2BIG;
 
-        r = hashmap_ensure_allocated(&m->transfers, &trivial_hash_ops);
-        if (r < 0)
-                return r;
-
         t = new(Transfer, 1);
         if (!t)
                 return -ENOMEM;
@@ -160,7 +161,7 @@ static int transfer_new(Manager *m, Transfer **ret) {
                 .stdin_fd = -1,
                 .stdout_fd = -1,
                 .verify = _IMPORT_VERIFY_INVALID,
-                .progress_percent= (unsigned) -1,
+                .progress_percent= UINT_MAX,
         };
 
         id = m->current_transfer_id + 1;
@@ -168,7 +169,7 @@ static int transfer_new(Manager *m, Transfer **ret) {
         if (asprintf(&t->object_path, "/org/freedesktop/import1/transfer/_%" PRIu32, id) < 0)
                 return -ENOMEM;
 
-        r = hashmap_put(m->transfers, UINT32_TO_PTR(id), t);
+        r = hashmap_ensure_put(&m->transfers, &trivial_hash_ops, UINT32_TO_PTR(id), t);
         if (r < 0)
                 return r;
 
@@ -185,7 +186,7 @@ static int transfer_new(Manager *m, Transfer **ret) {
 static double transfer_percent_as_double(Transfer *t) {
         assert(t);
 
-        if (t->progress_percent == (unsigned) -1)
+        if (t->progress_percent == UINT_MAX)
                 return -DBL_MAX;
 
         return (double) t->progress_percent / 100.0;
@@ -404,6 +405,10 @@ static int transfer_start(Transfer *t) {
                         _exit(EXIT_FAILURE);
                 }
 
+                r = setenv_systemd_exec_pid(true);
+                if (r < 0)
+                        log_warning_errno(r, "Failed to update $SYSTEMD_EXEC_PID, ignoring: %m");
+
                 switch (t->type) {
 
                 case TRANSFER_IMPORT_TAR:
@@ -487,11 +492,13 @@ static int transfer_start(Transfer *t) {
 
         t->stdin_fd = safe_close(t->stdin_fd);
 
-        r = sd_event_add_child(t->manager->event, &t->pid_event_source, t->pid, WEXITED, transfer_on_pid, t);
+        r = sd_event_add_child(t->manager->event, &t->pid_event_source,
+                               t->pid, WEXITED, transfer_on_pid, t);
         if (r < 0)
                 return r;
 
-        r = sd_event_add_io(t->manager->event, &t->log_event_source, t->log_fd, EPOLLIN, transfer_on_log, t);
+        r = sd_event_add_io(t->manager->event, &t->log_event_source,
+                            t->log_fd, EPOLLIN, transfer_on_log, t);
         if (r < 0)
                 return r;
 
@@ -545,53 +552,41 @@ static int manager_on_notify(sd_event_source *s, int fd, uint32_t revents, void 
                 .iov_base = buf,
                 .iov_len = sizeof(buf)-1,
         };
-        union {
-                struct cmsghdr cmsghdr;
-                uint8_t buf[CMSG_SPACE(sizeof(struct ucred)) +
-                            CMSG_SPACE(sizeof(int) * NOTIFY_FD_MAX)];
-        } control = {};
+        CMSG_BUFFER_TYPE(CMSG_SPACE(sizeof(struct ucred)) +
+                         CMSG_SPACE(sizeof(int) * NOTIFY_FD_MAX)) control;
         struct msghdr msghdr = {
                 .msg_iov = &iovec,
                 .msg_iovlen = 1,
                 .msg_control = &control,
                 .msg_controllen = sizeof(control),
         };
-        struct ucred *ucred = NULL;
+        struct ucred *ucred;
         Manager *m = userdata;
-        struct cmsghdr *cmsg;
         char *p, *e;
         Transfer *t;
-        Iterator i;
         ssize_t n;
         int r;
 
-        n = recvmsg(fd, &msghdr, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
-        if (n < 0) {
-                if (IN_SET(errno, EAGAIN, EINTR))
-                        return 0;
-
-                return -errno;
-        }
+        n = recvmsg_safe(fd, &msghdr, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
+        if (IN_SET(n, -EAGAIN, -EINTR))
+                return 0;
+        if (n < 0)
+                return (int) n;
 
         cmsg_close_all(&msghdr);
-
-        CMSG_FOREACH(cmsg, &msghdr)
-                if (cmsg->cmsg_level == SOL_SOCKET &&
-                    cmsg->cmsg_type == SCM_CREDENTIALS &&
-                    cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)))
-                        ucred = (struct ucred*) CMSG_DATA(cmsg);
 
         if (msghdr.msg_flags & MSG_TRUNC) {
                 log_warning("Got overly long notification datagram, ignoring.");
                 return 0;
         }
 
+        ucred = CMSG_FIND_DATA(&msghdr, SOL_SOCKET, SCM_CREDENTIALS, struct ucred);
         if (!ucred || ucred->pid <= 0) {
                 log_warning("Got notification datagram lacking credential information, ignoring.");
                 return 0;
         }
 
-        HASHMAP_FOREACH(t, m->transfers, i)
+        HASHMAP_FOREACH(t, m->transfers)
                 if (ucred->pid == t->pid)
                         break;
 
@@ -664,7 +659,8 @@ static int manager_new(Manager **ret) {
         if (r < 0)
                 return r;
 
-        r = sd_event_add_io(m->event, &m->notify_event_source, m->notify_fd, EPOLLIN, manager_on_notify, m);
+        r = sd_event_add_io(m->event, &m->notify_event_source,
+                            m->notify_fd, EPOLLIN, manager_on_notify, m);
         if (r < 0)
                 return r;
 
@@ -675,13 +671,12 @@ static int manager_new(Manager **ret) {
 
 static Transfer *manager_find(Manager *m, TransferType type, const char *remote) {
         Transfer *t;
-        Iterator i;
 
         assert(m);
         assert(type >= 0);
         assert(type < _TRANSFER_TYPE_MAX);
 
-        HASHMAP_FOREACH(t, m->transfers, i)
+        HASHMAP_FOREACH(t, m->transfers)
                 if (t->type == type && streq_ptr(t->remote, remote))
                         return t;
 
@@ -724,14 +719,16 @@ static int method_import_tar_or_raw(sd_bus_message *msg, void *userdata, sd_bus_
         if (!S_ISREG(st.st_mode) && !S_ISFIFO(st.st_mode))
                 return -EINVAL;
 
-        if (!machine_name_is_valid(local))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Local name %s is invalid", local);
+        if (!hostname_is_valid(local, 0))
+                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+                                         "Local name %s is invalid", local);
 
         r = setup_machine_directory(error);
         if (r < 0)
                 return r;
 
-        type = streq_ptr(sd_bus_message_get_member(msg), "ImportTar") ? TRANSFER_IMPORT_TAR : TRANSFER_IMPORT_RAW;
+        type = streq_ptr(sd_bus_message_get_member(msg), "ImportTar") ?
+                TRANSFER_IMPORT_TAR : TRANSFER_IMPORT_RAW;
 
         r = transfer_new(m, &t);
         if (r < 0)
@@ -792,8 +789,9 @@ static int method_import_fs(sd_bus_message *msg, void *userdata, sd_bus_error *e
         if (r < 0)
                 return r;
 
-        if (!machine_name_is_valid(local))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Local name %s is invalid", local);
+        if (!hostname_is_valid(local, 0))
+                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+                                         "Local name %s is invalid", local);
 
         r = setup_machine_directory(error);
         if (r < 0)
@@ -856,8 +854,9 @@ static int method_export_tar_or_raw(sd_bus_message *msg, void *userdata, sd_bus_
         if (r < 0)
                 return r;
 
-        if (!machine_name_is_valid(local))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Local name %s is invalid", local);
+        if (!hostname_is_valid(local, 0))
+                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+                                         "Local name %s is invalid", local);
 
         if (fstat(fd, &st) < 0)
                 return -errno;
@@ -865,7 +864,8 @@ static int method_export_tar_or_raw(sd_bus_message *msg, void *userdata, sd_bus_
         if (!S_ISREG(st.st_mode) && !S_ISFIFO(st.st_mode))
                 return -EINVAL;
 
-        type = streq_ptr(sd_bus_message_get_member(msg), "ExportTar") ? TRANSFER_EXPORT_TAR : TRANSFER_EXPORT_RAW;
+        type = streq_ptr(sd_bus_message_get_member(msg), "ExportTar") ?
+                TRANSFER_EXPORT_TAR : TRANSFER_EXPORT_RAW;
 
         r = transfer_new(m, &t);
         if (r < 0)
@@ -929,28 +929,33 @@ static int method_pull_tar_or_raw(sd_bus_message *msg, void *userdata, sd_bus_er
                 return r;
 
         if (!http_url_is_valid(remote))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "URL %s is invalid", remote);
+                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+                                         "URL %s is invalid", remote);
 
         if (isempty(local))
                 local = NULL;
-        else if (!machine_name_is_valid(local))
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Local name %s is invalid", local);
+        else if (!hostname_is_valid(local, 0))
+                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+                                         "Local name %s is invalid", local);
 
         if (isempty(verify))
                 v = IMPORT_VERIFY_SIGNATURE;
         else
                 v = import_verify_from_string(verify);
         if (v < 0)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Unknown verification mode %s", verify);
+                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS,
+                                         "Unknown verification mode %s", verify);
 
         r = setup_machine_directory(error);
         if (r < 0)
                 return r;
 
-        type = streq_ptr(sd_bus_message_get_member(msg), "PullTar") ? TRANSFER_PULL_TAR : TRANSFER_PULL_RAW;
+        type = streq_ptr(sd_bus_message_get_member(msg), "PullTar") ?
+                TRANSFER_PULL_TAR : TRANSFER_PULL_RAW;
 
         if (manager_find(m, type, remote))
-                return sd_bus_error_setf(error, BUS_ERROR_TRANSFER_IN_PROGRESS, "Transfer for %s already in progress.", remote);
+                return sd_bus_error_setf(error, BUS_ERROR_TRANSFER_IN_PROGRESS,
+                                         "Transfer for %s already in progress.", remote);
 
         r = transfer_new(m, &t);
         if (r < 0)
@@ -985,7 +990,6 @@ static int method_list_transfers(sd_bus_message *msg, void *userdata, sd_bus_err
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
         Manager *m = userdata;
         Transfer *t;
-        Iterator i;
         int r;
 
         assert(msg);
@@ -999,7 +1003,7 @@ static int method_list_transfers(sd_bus_message *msg, void *userdata, sd_bus_err
         if (r < 0)
                 return r;
 
-        HASHMAP_FOREACH(t, m->transfers, i) {
+        HASHMAP_FOREACH(t, m->transfers) {
 
                 r = sd_bus_message_append(
                                 reply,
@@ -1076,7 +1080,7 @@ static int method_cancel_transfer(sd_bus_message *msg, void *userdata, sd_bus_er
         if (r < 0)
                 return r;
         if (id <= 0)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid transfer id");
+                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid transfer id");
 
         t = hashmap_get(m->transfers, UINT32_TO_PTR(id));
         if (!t)
@@ -1110,36 +1114,14 @@ static int property_get_progress(
 static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_type, transfer_type, TransferType);
 static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_verify, import_verify, ImportVerify);
 
-static const sd_bus_vtable transfer_vtable[] = {
-        SD_BUS_VTABLE_START(0),
-        SD_BUS_PROPERTY("Id", "u", NULL, offsetof(Transfer, id), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Local", "s", NULL, offsetof(Transfer, local), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Remote", "s", NULL, offsetof(Transfer, remote), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Type", "s", property_get_type, offsetof(Transfer, type), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Verify", "s", property_get_verify, offsetof(Transfer, verify), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("Progress", "d", property_get_progress, 0, 0),
-        SD_BUS_METHOD("Cancel", NULL, NULL, method_cancel, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_SIGNAL("LogMessage", "us", 0),
-        SD_BUS_VTABLE_END,
-};
+static int transfer_object_find(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                void *userdata,
+                void **found,
+                sd_bus_error *error) {
 
-static const sd_bus_vtable manager_vtable[] = {
-        SD_BUS_VTABLE_START(0),
-        SD_BUS_METHOD("ImportTar", "hsbb", "uo", method_import_tar_or_raw, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ImportRaw", "hsbb", "uo", method_import_tar_or_raw, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ImportFileSystem", "hsbb", "uo", method_import_fs, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ExportTar", "shs", "uo", method_export_tar_or_raw, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ExportRaw", "shs", "uo", method_export_tar_or_raw, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("PullTar", "sssb", "uo", method_pull_tar_or_raw, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("PullRaw", "sssb", "uo", method_pull_tar_or_raw, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("ListTransfers", NULL, "a(usssdo)", method_list_transfers, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD("CancelTransfer", "u", NULL, method_cancel_transfer, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_SIGNAL("TransferNew", "uo", 0),
-        SD_BUS_SIGNAL("TransferRemoved", "uos", 0),
-        SD_BUS_VTABLE_END,
-};
-
-static int transfer_object_find(sd_bus *bus, const char *path, const char *interface, void *userdata, void **found, sd_bus_error *error) {
         Manager *m = userdata;
         Transfer *t;
         const char *p;
@@ -1168,18 +1150,23 @@ static int transfer_object_find(sd_bus *bus, const char *path, const char *inter
         return 1;
 }
 
-static int transfer_node_enumerator(sd_bus *bus, const char *path, void *userdata, char ***nodes, sd_bus_error *error) {
+static int transfer_node_enumerator(
+                sd_bus *bus,
+                const char *path,
+                void *userdata,
+                char ***nodes,
+                sd_bus_error *error) {
+
         _cleanup_strv_free_ char **l = NULL;
         Manager *m = userdata;
         Transfer *t;
         unsigned k = 0;
-        Iterator i;
 
         l = new0(char*, hashmap_size(m->transfers) + 1);
         if (!l)
                 return -ENOMEM;
 
-        HASHMAP_FOREACH(t, m->transfers, i) {
+        HASHMAP_FOREACH(t, m->transfers) {
 
                 l[k] = strdup(t->object_path);
                 if (!l[k])
@@ -1193,22 +1180,159 @@ static int transfer_node_enumerator(sd_bus *bus, const char *path, void *userdat
         return 1;
 }
 
+static const sd_bus_vtable transfer_vtable[] = {
+        SD_BUS_VTABLE_START(0),
+
+        SD_BUS_PROPERTY("Id", "u", NULL, offsetof(Transfer, id), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Local", "s", NULL, offsetof(Transfer, local), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Remote", "s", NULL, offsetof(Transfer, remote), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Type", "s", property_get_type, offsetof(Transfer, type), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Verify", "s", property_get_verify, offsetof(Transfer, verify), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("Progress", "d", property_get_progress, 0, 0),
+
+        SD_BUS_METHOD("Cancel", NULL, NULL, method_cancel, SD_BUS_VTABLE_UNPRIVILEGED),
+
+        SD_BUS_SIGNAL_WITH_NAMES("LogMessage",
+                                 "us",
+                                 SD_BUS_PARAM(priority)
+                                 SD_BUS_PARAM(line),
+                                 0),
+
+        SD_BUS_VTABLE_END,
+};
+
+static const BusObjectImplementation transfer_object = {
+        "/org/freedesktop/import1/transfer",
+        "org.freedesktop.import1.Transfer",
+        .fallback_vtables = BUS_FALLBACK_VTABLES({transfer_vtable, transfer_object_find}),
+        .node_enumerator = transfer_node_enumerator,
+};
+
+static const sd_bus_vtable manager_vtable[] = {
+        SD_BUS_VTABLE_START(0),
+
+        SD_BUS_METHOD_WITH_NAMES("ImportTar",
+                                 "hsbb",
+                                 SD_BUS_PARAM(fd)
+                                 SD_BUS_PARAM(local_name)
+                                 SD_BUS_PARAM(force)
+                                 SD_BUS_PARAM(read_only),
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 method_import_tar_or_raw,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("ImportRaw",
+                                 "hsbb",
+                                 SD_BUS_PARAM(fd)
+                                 SD_BUS_PARAM(local_name)
+                                 SD_BUS_PARAM(force)
+                                 SD_BUS_PARAM(read_only),
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 method_import_tar_or_raw,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("ImportFileSystem",
+                                 "hsbb",
+                                 SD_BUS_PARAM(fd)
+                                 SD_BUS_PARAM(local_name)
+                                 SD_BUS_PARAM(force)
+                                 SD_BUS_PARAM(read_only),
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 method_import_fs,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("ExportTar",
+                                 "shs",
+                                 SD_BUS_PARAM(local_name)
+                                 SD_BUS_PARAM(fd)
+                                 SD_BUS_PARAM(format),
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 method_export_tar_or_raw,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("ExportRaw",
+                                 "shs",
+                                 SD_BUS_PARAM(local_name)
+                                 SD_BUS_PARAM(fd)
+                                 SD_BUS_PARAM(format),
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 method_export_tar_or_raw,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("PullTar",
+                                 "sssb",
+                                 SD_BUS_PARAM(url)
+                                 SD_BUS_PARAM(local_name)
+                                 SD_BUS_PARAM(verify_mode)
+                                 SD_BUS_PARAM(force),
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 method_pull_tar_or_raw,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("PullRaw",
+                                 "sssb",
+                                 SD_BUS_PARAM(url)
+                                 SD_BUS_PARAM(local_name)
+                                 SD_BUS_PARAM(verify_mode)
+                                 SD_BUS_PARAM(force),
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 method_pull_tar_or_raw,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("ListTransfers",
+                                 NULL,,
+                                 "a(usssdo)",
+                                 SD_BUS_PARAM(transfers),
+                                 method_list_transfers,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_NAMES("CancelTransfer",
+                                 "u",
+                                 SD_BUS_PARAM(transfer_id),
+                                 NULL,,
+                                 method_cancel_transfer,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
+
+        SD_BUS_SIGNAL_WITH_NAMES("TransferNew",
+                                 "uo",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path),
+                                 0),
+        SD_BUS_SIGNAL_WITH_NAMES("TransferRemoved",
+                                 "uos",
+                                 SD_BUS_PARAM(transfer_id)
+                                 SD_BUS_PARAM(transfer_path)
+                                 SD_BUS_PARAM(result),
+                                 0),
+
+        SD_BUS_VTABLE_END,
+};
+
+static const BusObjectImplementation manager_object = {
+        "/org/freedesktop/import1",
+        "org.freedesktop.import1.Manager",
+        .vtables = BUS_VTABLES(manager_vtable),
+        .children = BUS_IMPLEMENTATIONS(&transfer_object),
+};
+
 static int manager_add_bus_objects(Manager *m) {
         int r;
 
         assert(m);
 
-        r = sd_bus_add_object_vtable(m->bus, NULL, "/org/freedesktop/import1", "org.freedesktop.import1.Manager", manager_vtable, m);
+        r = bus_add_implementation(m->bus, &manager_object, m);
         if (r < 0)
-                return log_error_errno(r, "Failed to register object: %m");
+                return r;
 
-        r = sd_bus_add_fallback_vtable(m->bus, NULL, "/org/freedesktop/import1/transfer", "org.freedesktop.import1.Transfer", transfer_vtable, transfer_object_find, m);
+        r = bus_log_control_api_register(m->bus);
         if (r < 0)
-                return log_error_errno(r, "Failed to register object: %m");
-
-        r = sd_bus_add_node_enumerator(m->bus, NULL, "/org/freedesktop/import1/transfer", transfer_node_enumerator, m);
-        if (r < 0)
-                return log_error_errno(r, "Failed to add transfer enumerator: %m");
+                return r;
 
         r = sd_bus_request_name_async(m->bus, NULL, "org.freedesktop.import1", 0, NULL, NULL);
         if (r < 0)
@@ -1243,14 +1367,17 @@ static int run(int argc, char *argv[]) {
         _cleanup_(manager_unrefp) Manager *m = NULL;
         int r;
 
-        log_setup_service();
+        log_setup();
+
+        r = service_parse_argv("systemd-importd.service",
+                               "VM and container image import and export service.",
+                               BUS_IMPLEMENTATIONS(&manager_object,
+                                                   &log_control_object),
+                               argc, argv);
+        if (r <= 0)
+                return r;
 
         umask(0022);
-
-        if (argc != 1) {
-                log_error("This program takes no arguments.");
-                return -EINVAL;
-        }
 
         assert_se(sigprocmask_many(SIG_BLOCK, NULL, SIGCHLD, -1) >= 0);
 

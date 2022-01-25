@@ -1,0 +1,45 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Fri, 21 May 2021 11:46:56 +0200
+Subject: src/test/test-mount-util.c: Skip parts of test-mount-util in LXC
+
+LP: #1878051
+---
+ src/test/test-mount-util.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/test/test-mount-util.c b/src/test/test-mount-util.c
+index d3d0040..3038b03 100644
+--- a/src/test/test-mount-util.c
++++ b/src/test/test-mount-util.c
+@@ -19,6 +19,7 @@
+ #include "strv.h"
+ #include "tests.h"
+ #include "tmpfile-util.h"
++#include "virt.h"
+ 
+ static void test_mount_option_mangle(void) {
+         char *opts = NULL;
+@@ -134,6 +135,11 @@ static void test_bind_remount_recursive(void) {
+         _cleanup_free_ char *subdir = NULL;
+         const char *p;
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
++
+         log_info("/* %s */", __func__);
+ 
+         if (geteuid() != 0 || have_effective_cap(CAP_SYS_ADMIN) <= 0) {
+@@ -196,6 +202,11 @@ static void test_bind_remount_one(void) {
+                 return;
+         }
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
++
+         pid = fork();
+         assert_se(pid >= 0);
+ 

@@ -5,7 +5,9 @@ libudev.so.1 libudev1 #MINVER#
  LIBUDEV_196@LIBUDEV_196 196
  LIBUDEV_199@LIBUDEV_199 199
  LIBUDEV_215@LIBUDEV_215 215
+ LIBUDEV_247@LIBUDEV_247 247
  udev_device_get_action@LIBUDEV_183 183
+ udev_device_get_current_tags_list_entry@LIBUDEV_247 247
  udev_device_get_devlinks_list_entry@LIBUDEV_183 183
  udev_device_get_devnode@LIBUDEV_183 183
  udev_device_get_devnum@LIBUDEV_183 183
@@ -27,6 +29,7 @@ libudev.so.1 libudev1 #MINVER#
  udev_device_get_tags_list_entry@LIBUDEV_183 183
  udev_device_get_udev@LIBUDEV_183 183
  udev_device_get_usec_since_initialized@LIBUDEV_183 183
+ udev_device_has_current_tag@LIBUDEV_247 247
  udev_device_has_tag@LIBUDEV_183 183
  udev_device_new_from_device_id@LIBUDEV_189 189
  udev_device_new_from_devnum@LIBUDEV_183 183

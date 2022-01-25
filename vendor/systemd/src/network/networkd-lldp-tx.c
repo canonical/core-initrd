@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <endian.h>
 #include <inttypes.h>
@@ -7,6 +7,7 @@
 
 #include "alloc-util.h"
 #include "env-file.h"
+#include "escape.h"
 #include "fd-util.h"
 #include "hostname-util.h"
 #include "missing_network.h"
@@ -16,8 +17,11 @@
 #include "parse-util.h"
 #include "random-util.h"
 #include "socket-util.h"
+#include "string-table.h"
 #include "string-util.h"
+#include "strv.h"
 #include "unaligned.h"
+#include "web-util.h"
 
 /* The LLDP spec calls this "txFastInit", see 9.2.5.19 */
 #define LLDP_TX_FAST_INIT 4U
@@ -52,6 +56,9 @@ bool link_lldp_emit_enabled(Link *link) {
         if (!link->network)
                 return false;
 
+        if (link->kind && STR_IN_SET(link->kind, "bridge", "bond"))
+                return false;
+
         return link->network->lldp_emit != LLDP_EMIT_NO;
 }
 
@@ -81,9 +88,11 @@ static int lldp_make_packet(
                 const char *pretty_hostname,
                 uint16_t system_capabilities,
                 uint16_t enabled_capabilities,
+                char *mud,
                 void **ret, size_t *sz) {
 
-        size_t machine_id_length, ifname_length, port_description_length = 0, hostname_length = 0, pretty_hostname_length = 0;
+        size_t machine_id_length, ifname_length, port_description_length = 0, hostname_length = 0,
+                pretty_hostname_length = 0, mud_length = 0;
         _cleanup_free_ void *packet = NULL;
         struct ether_header *h;
         uint8_t *p;
@@ -110,6 +119,9 @@ static int lldp_make_packet(
         if (pretty_hostname)
                 pretty_hostname_length = strlen(pretty_hostname);
 
+        if (mud)
+                mud_length = strlen(mud);
+
         l = sizeof(struct ether_header) +
                 /* Chassis ID */
                 2 + 1 + machine_id_length +
@@ -133,6 +145,10 @@ static int lldp_make_packet(
         /* System Description */
         if (pretty_hostname)
                 l += 2 + pretty_hostname_length;
+
+        /* MUD URL */
+        if (mud)
+                l += 2 + sizeof(SD_LLDP_OUI_MUD) + 1 + mud_length;
 
         packet = malloc(l);
         if (!packet)
@@ -184,6 +200,32 @@ static int lldp_make_packet(
                 p = mempcpy(p, pretty_hostname, pretty_hostname_length);
         }
 
+        if (mud) {
+                uint8_t oui_mud[sizeof(SD_LLDP_OUI_MUD)] = {0x00, 0x00, 0x5E};
+                /*
+                 * +--------+--------+----------+---------+--------------
+                 * |TLV Type|  len   |   OUI    |subtype  | MUDString
+                 * |  =127  |        |= 00 00 5E|  = 1    |
+                 * |(7 bits)|(9 bits)|(3 octets)|(1 octet)|(1-255 octets)
+                 * +--------+--------+----------+---------+--------------
+                 * where:
+
+                 * o  TLV Type = 127 indicates a vendor-specific TLV
+                 * o  len = indicates the TLV string length
+                 * o  OUI = 00 00 5E is the organizationally unique identifier of IANA
+                 * o  subtype = 1 (as assigned by IANA for the MUDstring)
+                 * o  MUDstring = the length MUST NOT exceed 255 octets
+                 */
+
+                r = lldp_write_tlv_header(&p, SD_LLDP_TYPE_PRIVATE, sizeof(SD_LLDP_OUI_MUD) + 1 + mud_length);
+                if (r < 0)
+                        return r;
+
+                p = mempcpy(p, &oui_mud, sizeof(SD_LLDP_OUI_MUD));
+                *(p++) = SD_LLDP_OUI_SUBTYPE_MUD_USAGE_DESCRIPTION;
+                p = mempcpy(p, mud, mud_length);
+        }
+
         r = lldp_write_tlv_header(&p, SD_LLDP_TYPE_SYSTEM_CAPABILITIES, 4);
         if (r < 0)
                 return r;
@@ -226,7 +268,7 @@ static int lldp_send_packet(
 
         memcpy(sa.ll.sll_addr, address, ETH_ALEN);
 
-        fd = socket(PF_PACKET, SOCK_RAW|SOCK_CLOEXEC, IPPROTO_RAW);
+        fd = socket(AF_PACKET, SOCK_RAW|SOCK_CLOEXEC, IPPROTO_RAW);
         if (fd < 0)
                 return -errno;
 
@@ -272,7 +314,7 @@ static int link_send_lldp(Link *link) {
                 SD_LLDP_SYSTEM_CAPABILITIES_STATION;
 
         r = lldp_make_packet(link->network->lldp_emit,
-                             &link->mac,
+                             &link->hw_addr.ether,
                              sd_id128_to_string(machine_id, machine_id_string),
                              link->ifname,
                              (uint16_t) ttl,
@@ -281,6 +323,7 @@ static int link_send_lldp(Link *link) {
                              pretty_hostname,
                              SD_LLDP_SYSTEM_CAPABILITIES_STATION|SD_LLDP_SYSTEM_CAPABILITIES_BRIDGE|SD_LLDP_SYSTEM_CAPABILITIES_ROUTER,
                              caps,
+                             link->network ? link->network->lldp_mud : NULL,
                              &packet, &packet_size);
         if (r < 0)
                 return r;
@@ -290,7 +333,7 @@ static int link_send_lldp(Link *link) {
 
 static int on_lldp_timer(sd_event_source *s, usec_t t, void *userdata) {
         Link *link = userdata;
-        usec_t current, delay, next;
+        usec_t delay;
         int r;
 
         assert(s);
@@ -305,12 +348,10 @@ static int on_lldp_timer(sd_event_source *s, usec_t t, void *userdata) {
         if (link->lldp_tx_fast > 0)
                 link->lldp_tx_fast--;
 
-        assert_se(sd_event_now(sd_event_source_get_event(s), clock_boottime_or_monotonic(), &current) >= 0);
-
         delay = link->lldp_tx_fast > 0 ? LLDP_FAST_TX_USEC : LLDP_TX_INTERVAL_USEC;
-        next = usec_add(usec_add(current, delay), (usec_t) random_u64() % LLDP_JITTER_USEC);
+        delay = usec_add(delay, (usec_t) random_u64() % LLDP_JITTER_USEC);
 
-        r = sd_event_source_set_time(s, next);
+        r = sd_event_source_set_time_relative(s, delay);
         if (r < 0)
                 return log_link_error_errno(link, r, "Failed to restart LLDP timer: %m");
 
@@ -327,7 +368,7 @@ int link_lldp_emit_start(Link *link) {
 
         assert(link);
 
-        if (!link->network || link->network->lldp_emit == LLDP_EMIT_NO) {
+        if (!link_lldp_emit_enabled(link)) {
                 link_lldp_emit_stop(link);
                 return 0;
         }
@@ -337,7 +378,7 @@ int link_lldp_emit_start(Link *link) {
         link->lldp_tx_fast = LLDP_TX_FAST_INIT;
 
         next = usec_add(usec_add(now(clock_boottime_or_monotonic()), LLDP_FAST_TX_USEC),
-                     (usec_t) random_u64() % LLDP_JITTER_USEC);
+                        (usec_t) random_u64() % LLDP_JITTER_USEC);
 
         if (link->lldp_emit_event_source) {
                 usec_t old;
@@ -372,10 +413,10 @@ int link_lldp_emit_start(Link *link) {
 void link_lldp_emit_stop(Link *link) {
         assert(link);
 
-        link->lldp_emit_event_source = sd_event_source_unref(link->lldp_emit_event_source);
+        link->lldp_emit_event_source = sd_event_source_disable_unref(link->lldp_emit_event_source);
 }
 
-int config_parse_lldp_emit(
+int config_parse_lldp_mud(
                 const char *unit,
                 const char *filename,
                 unsigned line,
@@ -387,30 +428,37 @@ int config_parse_lldp_emit(
                 void *data,
                 void *userdata) {
 
-        LLDPEmit *emit = data;
+        _cleanup_free_ char *unescaped = NULL;
+        Network *n = data;
         int r;
 
         assert(filename);
         assert(lvalue);
         assert(rvalue);
 
-        if (isempty(rvalue))
-                *emit = LLDP_EMIT_NO;
-        else if (streq(rvalue, "nearest-bridge"))
-                *emit = LLDP_EMIT_NEAREST_BRIDGE;
-        else if (streq(rvalue, "non-tpmr-bridge"))
-                *emit = LLDP_EMIT_NON_TPMR_BRIDGE;
-        else if (streq(rvalue, "customer-bridge"))
-                *emit = LLDP_EMIT_CUSTOMER_BRIDGE;
-        else {
-                r = parse_boolean(rvalue);
-                if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, 0, "Failed to parse LLDP emission setting, ignoring: %s", rvalue);
-                        return 0;
-                }
-
-                *emit = r ? LLDP_EMIT_NEAREST_BRIDGE : LLDP_EMIT_NO;
+        r = cunescape(rvalue, 0, &unescaped);
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r,
+                           "Failed to Failed to unescape LLDP MUD URL, ignoring: %s", rvalue);
+                return 0;
         }
 
-        return 0;
+        if (!http_url_is_valid(unescaped) || strlen(unescaped) > 255) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
+                           "Failed to parse LLDP MUD URL '%s', ignoring: %m", rvalue);
+
+                return 0;
+        }
+
+        return free_and_replace(n->lldp_mud, unescaped);
 }
+
+static const char * const lldp_emit_table[_LLDP_EMIT_MAX] = {
+        [LLDP_EMIT_NO]              = "no",
+        [LLDP_EMIT_NEAREST_BRIDGE]  = "nearest-bridge",
+        [LLDP_EMIT_NON_TPMR_BRIDGE] = "non-tpmr-bridge",
+        [LLDP_EMIT_CUSTOMER_BRIDGE] = "customer-bridge",
+};
+
+DEFINE_PRIVATE_STRING_TABLE_LOOKUP_FROM_STRING_WITH_BOOLEAN(lldp_emit, LLDPEmit, LLDP_EMIT_NEAREST_BRIDGE);
+DEFINE_CONFIG_PARSE_ENUM_WITH_DEFAULT(config_parse_lldp_emit, lldp_emit, LLDPEmit, LLDP_EMIT_NO, "Failed to parse LLDP emission setting");

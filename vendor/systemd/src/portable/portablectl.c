@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <getopt.h>
@@ -7,8 +7,8 @@
 
 #include "alloc-util.h"
 #include "bus-error.h"
+#include "bus-locator.h"
 #include "bus-unit-util.h"
-#include "bus-util.h"
 #include "bus-wait-for-jobs.h"
 #include "def.h"
 #include "dirent-util.h"
@@ -18,12 +18,14 @@
 #include "format-table.h"
 #include "fs-util.h"
 #include "locale-util.h"
-#include "machine-image.h"
 #include "main-func.h"
+#include "os-util.h"
 #include "pager.h"
+#include "parse-argument.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "pretty-print.h"
+#include "portable.h"
 #include "spawn-polkit-agent.h"
 #include "string-util.h"
 #include "strv.h"
@@ -44,6 +46,13 @@ static const char *arg_host = NULL;
 static bool arg_enable = false;
 static bool arg_now = false;
 static bool arg_no_block = false;
+static char **arg_extension_images = NULL;
+
+STATIC_DESTRUCTOR_REGISTER(arg_extension_images, strv_freep);
+
+static bool is_portable_managed(const char *unit) {
+        return ENDSWITH_SET(unit, ".service", ".target", ".socket", ".path", ".timer");
+}
 
 static int determine_image(const char *image, bool permit_non_existing, char **ret) {
         int r;
@@ -75,6 +84,38 @@ static int determine_image(const char *image, bool permit_non_existing, char **r
         r = chase_symlinks(image, NULL, CHASE_TRAIL_SLASH | (permit_non_existing ? CHASE_NONEXISTENT : 0), ret, NULL);
         if (r < 0)
                 return log_error_errno(r, "Cannot normalize specified image path '%s': %m", image);
+
+        return 0;
+}
+
+static int attach_extensions_to_message(sd_bus_message *m, char **extensions) {
+        char **p;
+        int r;
+
+        assert(m);
+
+        if (strv_isempty(extensions))
+                return 0;
+
+        r = sd_bus_message_open_container(m, 'a', "s");
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        STRV_FOREACH(p, extensions) {
+                _cleanup_free_ char *resolved_extension_image = NULL;
+
+                r = determine_image(*p, false, &resolved_extension_image);
+                if (r < 0)
+                        return r;
+
+                r = sd_bus_message_append(m, "s", resolved_extension_image);
+                if (r < 0)
+                        return bus_log_create_error(r);
+        }
+
+        r = sd_bus_message_close_container(m);
+        if (r < 0)
+                return bus_log_create_error(r);
 
         return 0;
 }
@@ -178,7 +219,7 @@ static int acquire_bus(sd_bus **bus) {
 
         r = bus_connect_transport(arg_transport, arg_host, false, bus);
         if (r < 0)
-                return log_error_errno(r, "Failed to connect to bus: %m");
+                return bus_log_connect_error(r);
 
         (void) sd_bus_set_allow_interactive_authorization(*bus, arg_ask_password);
 
@@ -215,15 +256,55 @@ static int maybe_reload(sd_bus **bus) {
         return 0;
 }
 
-static int inspect_image(int argc, char *argv[], void *userdata) {
-        _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL, *reply = NULL;
+static int get_image_metadata(sd_bus *bus, const char *image, char **matches, sd_bus_message **reply) {
+        _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        const char *method;
+        uint64_t flags = 0;
+        int r;
+
+        assert(bus);
+        assert(reply);
+
+        method = strv_isempty(arg_extension_images) ? "GetImageMetadata" : "GetImageMetadataWithExtensions";
+
+        r = bus_message_new_method_call(bus, &m, bus_portable_mgr, method);
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        r = sd_bus_message_append(m, "s", image);
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        r = attach_extensions_to_message(m, arg_extension_images);
+        if (r < 0)
+                return r;
+
+        r = sd_bus_message_append_strv(m, matches);
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        if (!strv_isempty(arg_extension_images)) {
+                r = sd_bus_message_append(m, "t", flags);
+                if (r < 0)
+                        return bus_log_create_error(r);
+        }
+
+        r = sd_bus_call(bus, m, 0, &error, reply);
+        if (r < 0)
+                return log_error_errno(r, "Failed to inspect image metadata: %s", bus_error_message(&error, r));
+
+        return 0;
+}
+
+static int inspect_image(int argc, char *argv[], void *userdata) {
+        _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         _cleanup_strv_free_ char **matches = NULL;
         _cleanup_free_ char *image = NULL;
         bool nl = false, header = false;
-        const void *data;
         const char *path;
+        const void *data;
         size_t sz;
         int r;
 
@@ -239,27 +320,9 @@ static int inspect_image(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return r;
 
-        r = sd_bus_message_new_method_call(
-                                bus,
-                                &m,
-                                "org.freedesktop.portable1",
-                                "/org/freedesktop/portable1",
-                                "org.freedesktop.portable1.Manager",
-                                "GetImageMetadata");
+        r = get_image_metadata(bus, image, matches, &reply);
         if (r < 0)
-                return bus_log_create_error(r);
-
-        r = sd_bus_message_append(m, "s", image);
-        if (r < 0)
-                return bus_log_create_error(r);
-
-        r = sd_bus_message_append_strv(m, matches);
-        if (r < 0)
-                return bus_log_create_error(r);
-
-        r = sd_bus_call(bus, m, 0, &error, &reply);
-        if (r < 0)
-                return log_error_errno(r, "Failed to inspect image metadata: %s", bus_error_message(&error, r));
+                return r;
 
         r = sd_bus_message_read(reply, "s", &path);
         if (r < 0)
@@ -278,7 +341,7 @@ static int inspect_image(int argc, char *argv[], void *userdata) {
                 nl = true;
         } else {
                 _cleanup_free_ char *pretty_portable = NULL, *pretty_os = NULL;
-                _cleanup_fclose_ FILE *f;
+                _cleanup_fclose_ FILE *f = NULL;
 
                 f = fmemopen_unlocked((void*) data, sz, "re");
                 if (!f)
@@ -398,6 +461,7 @@ static int maybe_enable_disable(sd_bus *bus, const char *path, bool enable) {
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_strv_free_ char **names = NULL;
         UnitFileChange *changes = NULL;
+        const uint64_t flags = UNIT_FILE_PORTABLE | (arg_runtime ? UNIT_FILE_RUNTIME : 0);
         size_t n_changes = 0;
         int r;
 
@@ -414,7 +478,7 @@ static int maybe_enable_disable(sd_bus *bus, const char *path, bool enable) {
                 "org.freedesktop.systemd1",
                 "/org/freedesktop/systemd1",
                 "org.freedesktop.systemd1.Manager",
-                enable ? "EnableUnitFiles" : "DisableUnitFiles");
+                enable ? "EnableUnitFilesWithFlags" : "DisableUnitFilesWithFlags");
         if (r < 0)
                 return bus_log_create_error(r);
 
@@ -422,15 +486,9 @@ static int maybe_enable_disable(sd_bus *bus, const char *path, bool enable) {
         if (r < 0)
                 return bus_log_create_error(r);
 
-        r = sd_bus_message_append(m, "b", arg_runtime);
+        r = sd_bus_message_append(m, "t", flags);
         if (r < 0)
                 return bus_log_create_error(r);
-
-        if (enable) {
-                r = sd_bus_message_append(m, "b", false);
-                if (r < 0)
-                        return bus_log_create_error(r);
-        }
 
         r = sd_bus_call(bus, m, 0, &error, &reply);
         if (r < 0)
@@ -447,11 +505,13 @@ static int maybe_enable_disable(sd_bus *bus, const char *path, bool enable) {
         return 0;
 }
 
-static int maybe_start_stop(sd_bus *bus, const char *path, bool start, BusWaitForJobs *wait) {
+static int maybe_start_stop_restart(sd_bus *bus, const char *path, const char *method, BusWaitForJobs *wait) {
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         char *name = (char *)basename(path), *job = NULL;
         int r;
+
+        assert(STR_IN_SET(method, "StartUnit", "StopUnit", "RestartUnit"));
 
         if (!arg_now)
                 return 0;
@@ -461,13 +521,13 @@ static int maybe_start_stop(sd_bus *bus, const char *path, bool start, BusWaitFo
                         "org.freedesktop.systemd1",
                         "/org/freedesktop/systemd1",
                         "org.freedesktop.systemd1.Manager",
-                        start ? "StartUnit" : "StopUnit",
+                        method,
                         &error,
                         &reply,
                         "ss", name, "replace");
         if (r < 0)
-                return log_error_errno(r, "Failed to %s the portable service %s: %s",
-                                       start ? "start" : "stop",
+                return log_error_errno(r, "Failed to call %s on the portable service %s: %s",
+                                       method,
                                        path,
                                        bus_error_message(&error, r));
 
@@ -476,13 +536,13 @@ static int maybe_start_stop(sd_bus *bus, const char *path, bool start, BusWaitFo
                 return bus_log_parse_error(r);
 
         if (!arg_quiet)
-                log_info("Queued %s to %s portable service %s.", job, start ? "start" : "stop", name);
+                log_info("Queued %s to call %s on portable service %s.", job, method, name);
 
         if (wait) {
                 r = bus_wait_for_jobs_add(wait, job);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to watch %s job for %s %s: %m",
-                                               job, start ? "starting" : "stopping", name);
+                        return log_error_errno(r, "Failed to watch %s job to call %s on %s: %m",
+                                               job, method, name);
         }
 
         return 0;
@@ -517,9 +577,83 @@ static int maybe_enable_start(sd_bus *bus, sd_bus_message *reply) {
                 if (r == 0)
                         break;
 
-                if (STR_IN_SET(type, "symlink", "copy") && ENDSWITH_SET(path, ".service", ".target", ".socket")) {
+                if (STR_IN_SET(type, "symlink", "copy") && is_portable_managed(path)) {
                         (void) maybe_enable_disable(bus, path, true);
-                        (void) maybe_start_stop(bus, path, true, wait);
+                        (void) maybe_start_stop_restart(bus, path, "StartUnit", wait);
+                }
+        }
+
+        r = sd_bus_message_exit_container(reply);
+        if (r < 0)
+                return r;
+
+        if (!arg_no_block) {
+                r = bus_wait_for_jobs(wait, arg_quiet, NULL);
+                if (r < 0)
+                        return r;
+        }
+
+        return 0;
+}
+
+static int maybe_stop_enable_restart(sd_bus *bus, sd_bus_message *reply) {
+        _cleanup_(bus_wait_for_jobs_freep) BusWaitForJobs *wait = NULL;
+        int r;
+
+        if (!arg_enable && !arg_now)
+                return 0;
+
+        if (!arg_no_block) {
+                r = bus_wait_for_jobs_new(bus, &wait);
+                if (r < 0)
+                        return log_error_errno(r, "Could not watch jobs: %m");
+        }
+
+        r = sd_bus_message_rewind(reply, true);
+        if (r < 0)
+                return r;
+
+        /* First we get a list of units that were definitely removed, not just re-attached,
+         * so we can also stop them if the user asked us to. */
+        r = sd_bus_message_enter_container(reply, 'a', "(sss)");
+        if (r < 0)
+                return bus_log_parse_error(r);
+
+        for (;;) {
+                char *type, *path, *source;
+
+                r = sd_bus_message_read(reply, "(sss)", &type, &path, &source);
+                if (r < 0)
+                        return bus_log_parse_error(r);
+                if (r == 0)
+                        break;
+
+                if (streq(type, "unlink") && is_portable_managed(path))
+                        (void) maybe_start_stop_restart(bus, path, "StopUnit", wait);
+        }
+
+        r = sd_bus_message_exit_container(reply);
+        if (r < 0)
+                return r;
+
+        /* Then we get a list of units that were either added or changed, so that we can
+         * enable them and/or restart them if the user asked us to. */
+        r = sd_bus_message_enter_container(reply, 'a', "(sss)");
+        if (r < 0)
+                return bus_log_parse_error(r);
+
+        for (;;) {
+                char *type, *path, *source;
+
+                r = sd_bus_message_read(reply, "(sss)", &type, &path, &source);
+                if (r < 0)
+                        return bus_log_parse_error(r);
+                if (r == 0)
+                        break;
+
+                if (STR_IN_SET(type, "symlink", "copy") && is_portable_managed(path)) {
+                        (void) maybe_enable_disable(bus, path, true);
+                        (void) maybe_start_stop_restart(bus, path, "RestartUnit", wait);
                 }
         }
 
@@ -538,8 +672,7 @@ static int maybe_enable_start(sd_bus *bus, sd_bus_message *reply) {
 
 static int maybe_stop_disable(sd_bus *bus, char *image, char *argv[]) {
         _cleanup_(bus_wait_for_jobs_freep) BusWaitForJobs *wait = NULL;
-        _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL, *reply = NULL;
-        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
         _cleanup_strv_free_ char **matches = NULL;
         int r;
 
@@ -554,27 +687,9 @@ static int maybe_stop_disable(sd_bus *bus, char *image, char *argv[]) {
         if (r < 0)
                 return log_error_errno(r, "Could not watch jobs: %m");
 
-        r = sd_bus_message_new_method_call(
-                                bus,
-                                &m,
-                                "org.freedesktop.portable1",
-                                "/org/freedesktop/portable1",
-                                "org.freedesktop.portable1.Manager",
-                                "GetImageMetadata");
+        r = get_image_metadata(bus, image, matches, &reply);
         if (r < 0)
-                return bus_log_create_error(r);
-
-        r = sd_bus_message_append(m, "s", image);
-        if (r < 0)
-                return bus_log_create_error(r);
-
-        r = sd_bus_message_append_strv(m, matches);
-        if (r < 0)
-                return bus_log_create_error(r);
-
-        r = sd_bus_call(bus, m, 0, &error, &reply);
-        if (r < 0)
-                return log_error_errno(r, "Failed to inspect image metadata: %s", bus_error_message(&error, r));
+                return r;
 
         r = sd_bus_message_skip(reply, "say");
         if (r < 0)
@@ -605,7 +720,7 @@ static int maybe_stop_disable(sd_bus *bus, char *image, char *argv[]) {
                 if (r < 0)
                         return bus_log_parse_error(r);
 
-                (void) maybe_start_stop(bus, name, false, wait);
+                (void) maybe_start_stop_restart(bus, name, "StopUnit", wait);
                 (void) maybe_enable_disable(bus, name, false);
         }
 
@@ -621,13 +736,16 @@ static int maybe_stop_disable(sd_bus *bus, char *image, char *argv[]) {
         return 0;
 }
 
-static int attach_image(int argc, char *argv[], void *userdata) {
+static int attach_reattach_image(int argc, char *argv[], const char *method) {
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL, *reply = NULL;
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         _cleanup_strv_free_ char **matches = NULL;
         _cleanup_free_ char *image = NULL;
         int r;
+
+        assert(method);
+        assert(STR_IN_SET(method, "AttachImage", "ReattachImage", "AttachImageWithExtensions", "ReattachImageWithExtensions"));
 
         r = determine_image(argv[1], false, &image);
         if (r < 0)
@@ -643,13 +761,7 @@ static int attach_image(int argc, char *argv[], void *userdata) {
 
         (void) polkit_agent_open_if_enabled(arg_transport, arg_ask_password);
 
-        r = sd_bus_message_new_method_call(
-                                bus,
-                                &m,
-                                "org.freedesktop.portable1",
-                                "/org/freedesktop/portable1",
-                                "org.freedesktop.portable1.Manager",
-                                "AttachImage");
+        r = bus_message_new_method_call(bus, &m, bus_portable_mgr, method);
         if (r < 0)
                 return bus_log_create_error(r);
 
@@ -657,32 +769,60 @@ static int attach_image(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return bus_log_create_error(r);
 
+        r = attach_extensions_to_message(m, arg_extension_images);
+        if (r < 0)
+                return r;
+
         r = sd_bus_message_append_strv(m, matches);
         if (r < 0)
                 return bus_log_create_error(r);
 
-        r = sd_bus_message_append(m, "sbs", arg_profile, arg_runtime, arg_copy_mode);
+        r = sd_bus_message_append(m, "s", arg_profile);
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        if (STR_IN_SET(method, "AttachImageWithExtensions", "ReattachImageWithExtensions")) {
+                uint64_t flags = arg_runtime ? PORTABLE_RUNTIME : 0;
+
+                r = sd_bus_message_append(m, "st", arg_copy_mode, flags);
+        } else
+                r = sd_bus_message_append(m, "bs", arg_runtime, arg_copy_mode);
         if (r < 0)
                 return bus_log_create_error(r);
 
         r = sd_bus_call(bus, m, 0, &error, &reply);
         if (r < 0)
-                return log_error_errno(r, "Failed to attach image: %s", bus_error_message(&error, r));
+                return log_error_errno(r, "%s failed: %s", method, bus_error_message(&error, r));
 
         (void) maybe_reload(&bus);
 
         print_changes(reply);
 
-        (void) maybe_enable_start(bus, reply);
+        if (STR_IN_SET(method, "AttachImage", "AttachImageWithExtensions"))
+                (void) maybe_enable_start(bus, reply);
+        else {
+                /* ReattachImage returns 2 lists - removed units first, and changed/added second */
+                print_changes(reply);
+                (void) maybe_stop_enable_restart(bus, reply);
+        }
 
         return 0;
 }
 
+static int attach_image(int argc, char *argv[], void *userdata) {
+        return attach_reattach_image(argc, argv, strv_isempty(arg_extension_images) ? "AttachImage" : "AttachImageWithExtensions");
+}
+
+static int reattach_image(int argc, char *argv[], void *userdata) {
+        return attach_reattach_image(argc, argv, strv_isempty(arg_extension_images) ? "ReattachImage" : "ReattachImageWithExtensions");
+}
+
 static int detach_image(int argc, char *argv[], void *userdata) {
-        _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
+        _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL, *reply = NULL;
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         _cleanup_free_ char *image = NULL;
+        const char *method;
         int r;
 
         r = determine_image(argv[1], true, &image);
@@ -697,17 +837,32 @@ static int detach_image(int argc, char *argv[], void *userdata) {
 
         (void) maybe_stop_disable(bus, image, argv);
 
-        r = sd_bus_call_method(
-                        bus,
-                        "org.freedesktop.portable1",
-                        "/org/freedesktop/portable1",
-                        "org.freedesktop.portable1.Manager",
-                        "DetachImage",
-                        &error,
-                        &reply,
-                        "sb", image, arg_runtime);
+        method = strv_isempty(arg_extension_images) ? "DetachImage" : "DetachImageWithExtensions";
+
+        r = bus_message_new_method_call(bus, &m, bus_portable_mgr, method);
         if (r < 0)
-                return log_error_errno(r, "Failed to detach image: %s", bus_error_message(&error, r));
+                return bus_log_create_error(r);
+
+        r = sd_bus_message_append(m, "s", image);
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        r = attach_extensions_to_message(m, arg_extension_images);
+        if (r < 0)
+                return r;
+
+        if (!strv_isempty(arg_extension_images)) {
+                uint64_t flags = arg_runtime ? PORTABLE_RUNTIME : 0;
+
+                r = sd_bus_message_append(m, "t", flags);
+        } else
+                r = sd_bus_message_append(m, "b", arg_runtime);
+        if (r < 0)
+                return bus_log_create_error(r);
+
+        r = sd_bus_call(bus, m, 0, &error, &reply);
+        if (r < 0)
+                return log_error_errno(r, "%s failed: %s", method, bus_error_message(&error, r));
 
         (void) maybe_reload(&bus);
 
@@ -726,15 +881,7 @@ static int list_images(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return r;
 
-        r = sd_bus_call_method(
-                        bus,
-                        "org.freedesktop.portable1",
-                        "/org/freedesktop/portable1",
-                        "org.freedesktop.portable1.Manager",
-                        "ListImages",
-                        &error,
-                        &reply,
-                        NULL);
+        r = bus_call_method(bus, bus_portable_mgr, "ListImages", &error, &reply, NULL);
         if (r < 0)
                 return log_error_errno(r, "Failed to list images: %s", bus_error_message(&error, r));
 
@@ -776,15 +923,15 @@ static int list_images(int argc, char *argv[], void *userdata) {
                 return bus_log_parse_error(r);
 
         if (table_get_rows(table) > 1) {
-                r = table_set_sort(table, (size_t) 0, (size_t) -1);
+                r = table_set_sort(table, (size_t) 0);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to sort table: %m");
+                        return table_log_sort_error(r);
 
                 table_set_header(table, arg_legend);
 
                 r = table_print(table, NULL);
                 if (r < 0)
-                        return log_error_errno(r, "Failed to show table: %m");
+                        return table_log_print_error(r);
         }
 
         if (arg_legend) {
@@ -811,13 +958,7 @@ static int remove_image(int argc, char *argv[], void *userdata) {
                 _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
                 _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
 
-                r = sd_bus_message_new_method_call(
-                                bus,
-                                &m,
-                                "org.freedesktop.portable1",
-                                "/org/freedesktop/portable1",
-                                "org.freedesktop.portable1.Manager",
-                                "RemoveImage");
+                r = bus_message_new_method_call(bus, &m, bus_portable_mgr, "RemoveImage");
                 if (r < 0)
                         return bus_log_create_error(r);
 
@@ -851,15 +992,7 @@ static int read_only_image(int argc, char *argv[], void *userdata) {
 
         (void) polkit_agent_open_if_enabled(arg_transport, arg_ask_password);
 
-        r = sd_bus_call_method(
-                        bus,
-                        "org.freedesktop.portable1",
-                        "/org/freedesktop/portable1",
-                        "org.freedesktop.portable1.Manager",
-                        "MarkImageReadOnly",
-                        &error,
-                        NULL,
-                        "sb", argv[1], b);
+        r = bus_call_method(bus, bus_portable_mgr, "MarkImageReadOnly", &error, NULL, "sb", argv[1], b);
         if (r < 0)
                 return log_error_errno(r, "Could not mark image read-only: %s", bus_error_message(&error, r));
 
@@ -879,7 +1012,7 @@ static int set_limit(int argc, char *argv[], void *userdata) {
         (void) polkit_agent_open_if_enabled(arg_transport, arg_ask_password);
 
         if (STR_IN_SET(argv[argc-1], "-", "none", "infinity"))
-                limit = (uint64_t) -1;
+                limit = UINT64_MAX;
         else {
                 r = parse_size(argv[argc-1], 1024, &limit);
                 if (r < 0)
@@ -888,26 +1021,10 @@ static int set_limit(int argc, char *argv[], void *userdata) {
 
         if (argc > 2)
                 /* With two arguments changes the quota limit of the specified image */
-                r = sd_bus_call_method(
-                                bus,
-                                "org.freedesktop.portable1",
-                                "/org/freedesktop/portable1",
-                                "org.freedesktop.portable1.Manager",
-                                "SetImageLimit",
-                                &error,
-                                NULL,
-                                "st", argv[1], limit);
+                r = bus_call_method(bus, bus_portable_mgr, "SetImageLimit", &error, NULL, "st", argv[1], limit);
         else
                 /* With one argument changes the pool quota limit */
-                r = sd_bus_call_method(
-                                bus,
-                                "org.freedesktop.portable1",
-                                "/org/freedesktop/portable1",
-                                "org.freedesktop.portable1.Manager",
-                                "SetPoolLimit",
-                                &error,
-                                NULL,
-                                "t", limit);
+                r = bus_call_method(bus, bus_portable_mgr, "SetPoolLimit", &error, NULL, "t", limit);
 
         if (r < 0)
                 return log_error_errno(r, "Could not set limit: %s", bus_error_message(&error, r));
@@ -931,15 +1048,7 @@ static int is_image_attached(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return r;
 
-        r = sd_bus_call_method(
-                        bus,
-                        "org.freedesktop.portable1",
-                        "/org/freedesktop/portable1",
-                        "org.freedesktop.portable1.Manager",
-                        "GetImageState",
-                        &error,
-                        &reply,
-                        "s", image);
+        r = bus_call_method(bus, bus_portable_mgr, "GetImageState", &error, &reply, "s", image);
         if (r < 0)
                 return log_error_errno(r, "Failed to get image state: %s", bus_error_message(&error, r));
 
@@ -964,14 +1073,7 @@ static int dump_profiles(void) {
         if (r < 0)
                 return r;
 
-        r = sd_bus_get_property_strv(
-                        bus,
-                        "org.freedesktop.portable1",
-                        "/org/freedesktop/portable1",
-                        "org.freedesktop.portable1.Manager",
-                        "Profiles",
-                        &error,
-                        &l);
+        r = bus_get_property_strv(bus, bus_portable_mgr, "Profiles", &error, &l);
         if (r < 0)
                 return log_error_errno(r, "Failed to acquire list of profiles: %s", bus_error_message(&error, r));
 
@@ -1004,6 +1106,8 @@ static int help(int argc, char *argv[], void *userdata) {
                "                              Attach the specified portable service image\n"
                "  detach NAME|PATH [PREFIX...]\n"
                "                              Detach the specified portable service image\n"
+               "  reattach NAME|PATH [PREFIX...]\n"
+               "                              Reattach the specified portable service image\n"
                "  inspect NAME|PATH [PREFIX...]\n"
                "                              Show details of specified portable service image\n"
                "  is-attached NAME|PATH       Query if portable service image is attached\n"
@@ -1030,17 +1134,18 @@ static int help(int argc, char *argv[], void *userdata) {
                "     --now                    Immediately start/stop the portable service after\n"
                "                              attach/before detach\n"
                "     --no-block               Don't block waiting for attach --now to complete\n"
-               "\nSee the %s for details.\n"
-               , program_invocation_short_name
-               , ansi_highlight()
-               , ansi_normal()
-               , link
-        );
+               "     --extension=PATH         Extend the image with an overlay\n"
+               "\nSee the %s for details.\n",
+               program_invocation_short_name,
+               ansi_highlight(),
+               ansi_normal(),
+               link);
 
         return 0;
 }
 
 static int parse_argv(int argc, char *argv[]) {
+        int r;
 
         enum {
                 ARG_VERSION = 0x100,
@@ -1054,6 +1159,7 @@ static int parse_argv(int argc, char *argv[]) {
                 ARG_ENABLE,
                 ARG_NOW,
                 ARG_NO_BLOCK,
+                ARG_EXTENSION,
         };
 
         static const struct option options[] = {
@@ -1073,6 +1179,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "enable",          no_argument,       NULL, ARG_ENABLE          },
                 { "now",             no_argument,       NULL, ARG_NOW             },
                 { "no-block",        no_argument,       NULL, ARG_NO_BLOCK        },
+                { "extension",       required_argument, NULL, ARG_EXTENSION       },
                 {}
         };
 
@@ -1171,6 +1278,12 @@ static int parse_argv(int argc, char *argv[]) {
                         arg_no_block = true;
                         break;
 
+                case ARG_EXTENSION:
+                        r = strv_extend(&arg_extension_images, optarg);
+                        if (r < 0)
+                                return log_oom();
+                        break;
+
                 case '?':
                         return -EINVAL;
 
@@ -1193,14 +1306,13 @@ static int run(int argc, char *argv[]) {
                 { "read-only",   2,        3,        0,            read_only_image   },
                 { "remove",      2,        VERB_ANY, 0,            remove_image      },
                 { "set-limit",   3,        3,        0,            set_limit         },
+                { "reattach",    2,        VERB_ANY, 0,            reattach_image    },
                 {}
         };
 
         int r;
 
-        log_show_color(true);
-        log_parse_environment();
-        log_open();
+        log_setup();
 
         r = parse_argv(argc, argv);
         if (r <= 0)

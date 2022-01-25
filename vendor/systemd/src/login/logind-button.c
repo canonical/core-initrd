@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -8,13 +8,14 @@
 #include "sd-messages.h"
 
 #include "alloc-util.h"
+#include "async.h"
 #include "fd-util.h"
 #include "logind-button.h"
 #include "missing_input.h"
 #include "string-util.h"
 #include "util.h"
 
-#define CONST_MAX4(a, b, c, d) CONST_MAX(CONST_MAX(a, b), CONST_MAX(c, d))
+#define CONST_MAX5(a, b, c, d, e) CONST_MAX(CONST_MAX(a, b), CONST_MAX(CONST_MAX(c, d), e))
 
 #define ULONG_BITS (sizeof(unsigned long)*8)
 
@@ -59,11 +60,7 @@ void button_free(Button *b) {
         sd_event_source_unref(b->io_event_source);
         sd_event_source_unref(b->check_event_source);
 
-        if (b->fd >= 0)
-                /* If the device has been unplugged close() returns
-                 * ENODEV, let's ignore this, hence we don't use
-                 * safe_close() */
-                (void) close(b->fd);
+        asynchronous_close(b->fd);
 
         free(b->name);
         free(b->seat);
@@ -71,19 +68,9 @@ void button_free(Button *b) {
 }
 
 int button_set_seat(Button *b, const char *sn) {
-        char *s;
-
         assert(b);
-        assert(sn);
 
-        s = strdup(sn);
-        if (!s)
-                return -ENOMEM;
-
-        free(b->seat);
-        b->seat = s;
-
-        return 0;
+        return free_and_strdup(&b->seat, sn);
 }
 
 static void button_lid_switch_handle_action(Manager *manager, bool is_edge) {
@@ -158,7 +145,20 @@ static int button_dispatch(sd_event_source *s, int fd, uint32_t revents, void *u
                         manager_handle_action(b->manager, INHIBIT_HANDLE_POWER_KEY, b->manager->handle_power_key, b->manager->power_key_ignore_inhibited, true);
                         break;
 
-                /* The kernel is a bit confused here:
+                /* The kernel naming is a bit confusing here:
+                   KEY_RESTART was probably introduced for media playback purposes, but
+                   is now being predominantly used to indicate device reboot.
+                */
+
+                case KEY_RESTART:
+                        log_struct(LOG_INFO,
+                                   LOG_MESSAGE("Reboot key pressed."),
+                                   "MESSAGE_ID=" SD_MESSAGE_REBOOT_KEY_STR);
+
+                        manager_handle_action(b->manager, INHIBIT_HANDLE_REBOOT_KEY, b->manager->handle_reboot_key, b->manager->reboot_key_ignore_inhibited, true);
+                        break;
+
+                /* The kernel naming is a bit confusing here:
 
                    KEY_SLEEP   = suspend-to-ram, which everybody else calls "suspend"
                    KEY_SUSPEND = suspend-to-disk, which everybody else calls "hibernate"
@@ -231,7 +231,7 @@ static int button_suitable(int fd) {
                 return -errno;
 
         if (bitset_get(types, EV_KEY)) {
-                unsigned long keys[CONST_MAX4(KEY_POWER, KEY_POWER2, KEY_SLEEP, KEY_SUSPEND)/ULONG_BITS+1];
+                unsigned long keys[CONST_MAX5(KEY_POWER, KEY_POWER2, KEY_SLEEP, KEY_SUSPEND, KEY_RESTART)/ULONG_BITS+1];
 
                 if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys) < 0)
                         return -errno;
@@ -239,7 +239,8 @@ static int button_suitable(int fd) {
                 if (bitset_get(keys, KEY_POWER) ||
                     bitset_get(keys, KEY_POWER2) ||
                     bitset_get(keys, KEY_SLEEP) ||
-                    bitset_get(keys, KEY_SUSPEND))
+                    bitset_get(keys, KEY_SUSPEND) ||
+                    bitset_get(keys, KEY_RESTART))
                         return true;
         }
 
@@ -260,7 +261,7 @@ static int button_suitable(int fd) {
 static int button_set_mask(const char *name, int fd) {
         unsigned long
                 types[CONST_MAX(EV_KEY, EV_SW)/ULONG_BITS+1] = {},
-                keys[CONST_MAX4(KEY_POWER, KEY_POWER2, KEY_SLEEP, KEY_SUSPEND)/ULONG_BITS+1] = {},
+                keys[CONST_MAX5(KEY_POWER, KEY_POWER2, KEY_SLEEP, KEY_SUSPEND, KEY_RESTART)/ULONG_BITS+1] = {},
                 switches[CONST_MAX(SW_LID, SW_DOCK)/ULONG_BITS+1] = {};
         struct input_mask mask;
 
@@ -285,6 +286,7 @@ static int button_set_mask(const char *name, int fd) {
         bitset_put(keys, KEY_POWER2);
         bitset_put(keys, KEY_SLEEP);
         bitset_put(keys, KEY_SUSPEND);
+        bitset_put(keys, KEY_RESTART);
 
         mask = (struct input_mask) {
                 .type = EV_KEY,
@@ -311,14 +313,14 @@ static int button_set_mask(const char *name, int fd) {
 }
 
 int button_open(Button *b) {
-        _cleanup_close_ int fd = -1;
+        _cleanup_(asynchronous_closep) int fd = -1;
         const char *p;
         char name[256];
         int r;
 
         assert(b);
 
-        b->fd = safe_close(b->fd);
+        b->fd = asynchronous_close(b->fd);
 
         p = strjoina("/dev/input/", b->name);
 

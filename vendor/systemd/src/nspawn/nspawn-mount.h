@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <stdbool.h>
@@ -16,6 +16,10 @@ typedef enum MountSettingsMask {
         MOUNT_APPLY_TMPFS_TMP    = 1 << 5, /* if set, /tmp will be mounted as tmpfs */
         MOUNT_ROOT_ONLY          = 1 << 6, /* if set, only root mounts are mounted */
         MOUNT_NON_ROOT_ONLY      = 1 << 7, /* if set, only non-root mounts are mounted */
+        MOUNT_MKDIR              = 1 << 8, /* if set, make directory to mount over first */
+        MOUNT_TOUCH              = 1 << 9, /* if set, touch file to mount over first */
+        MOUNT_PREFIX_ROOT        = 1 << 10,/* if set, prefix the source path with the container's root directory */
+        MOUNT_FOLLOW_SYMLINKS    = 1 << 11,/* if set, we'll follow symlinks for the mount target */
 } MountSettingsMask;
 
 typedef enum CustomMountType {
@@ -25,7 +29,7 @@ typedef enum CustomMountType {
         CUSTOM_MOUNT_INACCESSIBLE,
         CUSTOM_MOUNT_ARBITRARY,
         _CUSTOM_MOUNT_TYPE_MAX,
-        _CUSTOM_MOUNT_TYPE_INVALID = -1
+        _CUSTOM_MOUNT_TYPE_INVALID = -EINVAL,
 } CustomMountType;
 
 typedef struct CustomMount {

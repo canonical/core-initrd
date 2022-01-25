@@ -238,9 +238,9 @@ class CryptsetupTest(FakeDriveTestBase):
         with open('/proc/mounts') as f:
             self.assertNotIn(self.plaintext_name, f.read())
 
-        # device should be formatted with ext2
+        # device should be formatted with ext2 or (with newer systemd) ext4
         out = subprocess.check_output(['blkid', '-ovalue', '-sTYPE', self.plaintext_dev])
-        self.assertEqual(out, b'ext2\n')
+        self.assertRegex(out, b'ext[24]')
 
     def test_luks_fstab(self):
         '''LUKS device in /etc/fstab'''
@@ -257,7 +257,7 @@ class CryptsetupTest(FakeDriveTestBase):
         with open('/etc/fstab', 'a') as f:
             with open('/etc/fstab.systemdtest') as forig:
                 f.write(forig.read())
-            f.write('%s %s ext2 defaults 0 0\n' % (self.plaintext_dev, mountpoint))
+            f.write('%s %s auto defaults 0 0\n' % (self.plaintext_dev, mountpoint))
 
         # this should now be a requirement of local-fs.target
         self.apply('local-fs.target')
@@ -269,7 +269,7 @@ class CryptsetupTest(FakeDriveTestBase):
                 fields = line.split()
                 if fields[0] == self.plaintext_dev:
                     self.assertEqual(fields[1], mountpoint)
-                    self.assertEqual(fields[2], 'ext2')
+                    self.assertRegex(fields[2], 'ext[24]')
                     found = True
                     break
         if not found:

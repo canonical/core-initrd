@@ -10,21 +10,44 @@ http://lists.freedesktop.org/archives/systemd-devel/2014-December/026591.html
 
 Bug-Debian: https://bugs.debian.org/773528
 ---
- src/journal/journald-audit.c | 5 -----
- 1 file changed, 5 deletions(-)
+ man/journald.conf.xml         | 2 +-
+ src/journal/journald-server.c | 2 +-
+ src/journal/journald.conf     | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/src/journal/journald-audit.c b/src/journal/journald-audit.c
-index 339e091..8390767 100644
---- a/src/journal/journald-audit.c
-+++ b/src/journal/journald-audit.c
-@@ -539,10 +539,5 @@ int server_open_audit(Server *s) {
-         if (r < 0)
-                 return log_error_errno(r, "Failed to add audit fd to event loop: %m");
+diff --git a/man/journald.conf.xml b/man/journald.conf.xml
+index ed7e428..0abed9c 100644
+--- a/man/journald.conf.xml
++++ b/man/journald.conf.xml
+@@ -426,7 +426,7 @@
+         <command>systemd-journald</command> collects generated audit records, it just controls whether it
+         tells the kernel to generate them. This means if another tool turns on auditing even if
+         <command>systemd-journald</command> left it off, it will still collect the generated
+-        messages. Defaults to on.</para></listitem>
++        messages. Defaults to off.</para></listitem>
+       </varlistentry>
  
--        /* We are listening now, try to enable audit */
--        r = enable_audit(s->audit_fd, true);
--        if (r < 0)
--                log_warning_errno(r, "Failed to issue audit enable call: %m");
--
-         return 0;
- }
+       <varlistentry>
+diff --git a/src/journal/journald-server.c b/src/journal/journald-server.c
+index 2c1c7ac..8d3b822 100644
+--- a/src/journal/journald-server.c
++++ b/src/journal/journald-server.c
+@@ -2200,7 +2200,7 @@ int server_init(Server *s, const char *namespace) {
+                 .compress.threshold_bytes = UINT64_MAX,
+                 .seal = true,
+ 
+-                .set_audit = true,
++                .set_audit = false,
+ 
+                 .watchdog_usec = USEC_INFINITY,
+ 
+diff --git a/src/journal/journald.conf b/src/journal/journald.conf
+index 64f4d4b..a690681 100644
+--- a/src/journal/journald.conf
++++ b/src/journal/journald.conf
+@@ -44,4 +44,4 @@
+ #MaxLevelWall=emerg
+ #LineMax=48K
+ #ReadKMsg=yes
+-#Audit=yes
++#Audit=no

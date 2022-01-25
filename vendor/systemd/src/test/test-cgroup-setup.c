@@ -1,12 +1,15 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+#include <unistd.h>
 
 #include "alloc-util.h"
-#include "build.h"
 #include "cgroup-setup.h"
+#include "errno-util.h"
 #include "log.h"
 #include "proc-cmdline.h"
 #include "string-util.h"
 #include "tests.h"
+#include "version.h"
 
 static void test_is_wanted_print(bool header) {
         _cleanup_free_ char *cmdline = NULL;
@@ -15,7 +18,7 @@ static void test_is_wanted_print(bool header) {
         assert_se(proc_cmdline(&cmdline) >= 0);
         log_info("cmdline: %s", cmdline);
         if (header) {
-                log_info(_CGROUP_HIERARCHY_);
+                log_info("default-hierarchy=" DEFAULT_HIERARCHY_NAME);
                 (void) system("findmnt -n /sys/fs/cgroup");
         }
 
@@ -58,6 +61,9 @@ static void test_is_wanted(void) {
 
 int main(void) {
         test_setup_logging(LOG_DEBUG);
+
+        if (access("/proc/cmdline", R_OK) < 0 && ERRNO_IS_PRIVILEGE(errno))
+                return log_tests_skipped("can't read /proc/cmdline");
 
         test_is_wanted_print(true);
         test_is_wanted_print(false); /* run twice to test caching */

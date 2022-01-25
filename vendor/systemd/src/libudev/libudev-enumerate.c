@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <dirent.h>
 #include <errno.h>
@@ -93,7 +93,7 @@ static struct udev_enumerate *udev_enumerate_free(struct udev_enumerate *udev_en
  * udev_enumerate_ref:
  * @udev_enumerate: context
  *
- * Take a reference of a enumeration context.
+ * Take a reference of an enumeration context.
  *
  * Returns: the passed enumeration context
  **/

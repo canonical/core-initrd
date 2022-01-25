@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "ether-addr-util.h"
@@ -16,9 +16,7 @@ static int property_get_ether_addrs(
                 void *userdata,
                 sd_bus_error *error) {
 
-        char buf[ETHER_ADDR_TO_STRING_MAX];
         const struct ether_addr *p;
-        Iterator i;
         Set *s;
         int r;
 
@@ -32,8 +30,8 @@ static int property_get_ether_addrs(
         if (r < 0)
                 return r;
 
-        SET_FOREACH(p, s, i) {
-                r = sd_bus_message_append(reply, "s", ether_addr_to_string(p, buf));
+        SET_FOREACH(p, s) {
+                r = sd_bus_message_append(reply, "s", ETHER_ADDR_TO_STR(p));
                 if (r < 0)
                         return r;
         }
@@ -46,11 +44,11 @@ const sd_bus_vtable network_vtable[] = {
 
         SD_BUS_PROPERTY("Description", "s", NULL, offsetof(Network, description), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("SourcePath", "s", NULL, offsetof(Network, filename), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("MatchMAC", "as", property_get_ether_addrs, offsetof(Network, match_mac), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("MatchPath", "as", NULL, offsetof(Network, match_path), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("MatchDriver", "as", NULL, offsetof(Network, match_driver), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("MatchType", "as", NULL, offsetof(Network, match_type), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("MatchName", "as", NULL, offsetof(Network, match_name), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("MatchMAC", "as", property_get_ether_addrs, offsetof(Network, match.mac), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("MatchPath", "as", NULL, offsetof(Network, match.path), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("MatchDriver", "as", NULL, offsetof(Network, match.driver), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("MatchType", "as", NULL, offsetof(Network, match.iftype), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("MatchName", "as", NULL, offsetof(Network, match.ifname), SD_BUS_VTABLE_PROPERTY_CONST),
 
         SD_BUS_VTABLE_END
 };
@@ -88,7 +86,6 @@ int network_node_enumerator(sd_bus *bus, const char *path, void *userdata, char 
         _cleanup_strv_free_ char **l = NULL;
         Manager *m = userdata;
         Network *network;
-        Iterator i;
         int r;
 
         assert(bus);
@@ -96,7 +93,7 @@ int network_node_enumerator(sd_bus *bus, const char *path, void *userdata, char 
         assert(m);
         assert(nodes);
 
-        ORDERED_HASHMAP_FOREACH(network, m->networks, i) {
+        ORDERED_HASHMAP_FOREACH(network, m->networks) {
                 char *p;
 
                 p = network_bus_path(network);

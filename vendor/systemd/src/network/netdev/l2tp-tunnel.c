@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <netinet/in.h>
 #include <linux/l2tp.h>
@@ -39,18 +39,16 @@ static const char* const l2tp_local_address_type_table[_NETDEV_L2TP_LOCAL_ADDRES
 
 DEFINE_PRIVATE_STRING_TABLE_LOOKUP_FROM_STRING(l2tp_local_address_type, L2tpLocalAddressType);
 
-static void l2tp_session_free(L2tpSession *s) {
+static L2tpSession* l2tp_session_free(L2tpSession *s) {
         if (!s)
-                return;
+                return NULL;
 
         if (s->tunnel && s->section)
-                ordered_hashmap_remove(s->tunnel->sessions_by_section, s);
+                ordered_hashmap_remove(s->tunnel->sessions_by_section, s->section);
 
         network_config_section_free(s->section);
-
         free(s->name);
-
-        free(s);
+        return mfree(s);
 }
 
 DEFINE_NETWORK_SECTION_FUNCTIONS(L2tpSession, l2tp_session_free);
@@ -85,11 +83,7 @@ static int l2tp_session_new_static(L2tpTunnel *t, const char *filename, unsigned
                 .section = TAKE_PTR(n),
         };
 
-        r = ordered_hashmap_ensure_allocated(&t->sessions_by_section, &network_config_hash_ops);
-        if (r < 0)
-                return r;
-
-        r = ordered_hashmap_put(t->sessions_by_section, s->section, s);
+        r = ordered_hashmap_ensure_put(&t->sessions_by_section, &network_config_hash_ops, s->section, s);
         if (r < 0)
                 return r;
 
@@ -258,7 +252,7 @@ static int l2tp_acquire_local_address_one(L2tpTunnel *t, Address *a, union in_ad
         if (a->family != t->family)
                 return -EINVAL;
 
-        if (in_addr_is_null(a->family, &a->in_addr_peer) <= 0)
+        if (in_addr_is_set(a->family, &a->in_addr_peer))
                 return -EINVAL;
 
         if (t->local_address_type == NETDEV_L2TP_LOCAL_ADDRESS_STATIC &&
@@ -275,24 +269,23 @@ static int l2tp_acquire_local_address_one(L2tpTunnel *t, Address *a, union in_ad
 
 static int l2tp_acquire_local_address(L2tpTunnel *t, Link *link, union in_addr_union *ret) {
         Address *a;
-        Iterator i;
 
         assert(t);
         assert(link);
         assert(ret);
         assert(IN_SET(t->family, AF_INET, AF_INET6));
 
-        if (!in_addr_is_null(t->family, &t->local)) {
+        if (in_addr_is_set(t->family, &t->local)) {
                 /* local address is explicitly specified. */
                 *ret = t->local;
                 return 0;
         }
 
-        SET_FOREACH(a, link->addresses, i)
+        SET_FOREACH(a, link->addresses)
                 if (l2tp_acquire_local_address_one(t, a, ret) >= 0)
                         return 1;
 
-        SET_FOREACH(a, link->addresses_foreign, i)
+        SET_FOREACH(a, link->addresses_foreign)
                 if (l2tp_acquire_local_address_one(t, a, ret) >= 0)
                         return 1;
 
@@ -348,7 +341,6 @@ static int l2tp_create_session(NetDev *netdev, L2tpSession *session) {
 static int l2tp_create_tunnel_handler(sd_netlink *rtnl, sd_netlink_message *m, NetDev *netdev) {
         L2tpSession *session;
         L2tpTunnel *t;
-        Iterator i;
         int r;
 
         assert(netdev);
@@ -370,7 +362,7 @@ static int l2tp_create_tunnel_handler(sd_netlink *rtnl, sd_netlink_message *m, N
 
         log_netdev_debug(netdev, "L2TP tunnel is created");
 
-        ORDERED_HASHMAP_FOREACH(session, t->sessions_by_section, i)
+        ORDERED_HASHMAP_FOREACH(session, t->sessions_by_section)
                 (void) l2tp_create_session(netdev, session);
 
         return 1;
@@ -443,7 +435,7 @@ int config_parse_l2tp_tunnel_address(
                         addr_type = l2tp_local_address_type_from_string(rvalue);
 
                 if (addr_type >= 0) {
-                        if (in_addr_is_null(t->family, &t->remote) != 0)
+                        if (!in_addr_is_set(t->family, &t->remote))
                                 /* If Remote= is not specified yet, then also clear family. */
                                 t->family = AF_UNSPEC;
 
@@ -459,7 +451,7 @@ int config_parse_l2tp_tunnel_address(
         else
                 r = in_addr_from_string(t->family, rvalue, addr);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Invalid L2TP Tunnel address specified in %s='%s', ignoring assignment: %m", lvalue, rvalue);
                 return 0;
         }
@@ -489,13 +481,13 @@ int config_parse_l2tp_tunnel_id(
 
         r = safe_atou32(rvalue, &k);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse L2TP tunnel id. Ignoring assignment: %s", rvalue);
                 return 0;
         }
 
         if (k == 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
                            "Invalid L2TP tunnel id. Ignoring assignment: %s", rvalue);
                 return 0;
         }
@@ -530,17 +522,17 @@ int config_parse_l2tp_session_id(
 
         r = l2tp_session_new_static(t, filename, section_line, &session);
         if (r < 0)
-                return r;
+                return log_oom();
 
         r = safe_atou32(rvalue, &k);
         if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse L2TP session id. Ignoring assignment: %s", rvalue);
                 return 0;
         }
 
         if (k == 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
                            "Invalid L2TP session id. Ignoring assignment: %s", rvalue);
                 return 0;
         }
@@ -579,11 +571,11 @@ int config_parse_l2tp_session_l2spec(
 
         r = l2tp_session_new_static(t, filename, section_line, &session);
         if (r < 0)
-                return r;
+                return log_oom();
 
         spec = l2tp_l2spec_type_from_string(rvalue);
         if (spec < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, 0,
+                log_syntax(unit, LOG_WARNING, filename, line, spec,
                            "Failed to parse layer2 specific header type. Ignoring assignment: %s", rvalue);
                 return 0;
         }
@@ -618,10 +610,10 @@ int config_parse_l2tp_session_name(
 
         r = l2tp_session_new_static(t, filename, section_line, &session);
         if (r < 0)
-                return r;
+                return log_oom();
 
         if (!ifname_valid(rvalue)) {
-                log_syntax(unit, LOG_ERR, filename, line, 0,
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
                            "Failed to parse L2TP tunnel session name. Ignoring assignment: %s", rvalue);
                 return 0;
         }
@@ -677,7 +669,6 @@ static int l2tp_session_verify(L2tpSession *session) {
 static int netdev_l2tp_tunnel_verify(NetDev *netdev, const char *filename) {
         L2tpTunnel *t;
         L2tpSession *session;
-        Iterator i;
 
         assert(netdev);
         assert(filename);
@@ -691,7 +682,7 @@ static int netdev_l2tp_tunnel_verify(NetDev *netdev, const char *filename) {
                                               "%s: L2TP tunnel with invalid address family configured. Ignoring",
                                               filename);
 
-        if (in_addr_is_null(t->family, &t->remote))
+        if (!in_addr_is_set(t->family, &t->remote))
                 return log_netdev_error_errno(netdev, SYNTHETIC_ERRNO(EINVAL),
                                               "%s: L2TP tunnel without a remote address configured. Ignoring",
                                               filename);
@@ -701,7 +692,7 @@ static int netdev_l2tp_tunnel_verify(NetDev *netdev, const char *filename) {
                                               "%s: L2TP tunnel without tunnel IDs configured. Ignoring",
                                               filename);
 
-        ORDERED_HASHMAP_FOREACH(session, t->sessions_by_section, i)
+        ORDERED_HASHMAP_FOREACH(session, t->sessions_by_section)
                 if (l2tp_session_verify(session) < 0)
                         l2tp_session_free(session);
 

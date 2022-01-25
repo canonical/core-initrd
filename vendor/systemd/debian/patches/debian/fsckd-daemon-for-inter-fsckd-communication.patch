@@ -44,32 +44,32 @@ http://lists.freedesktop.org/archives/systemd-devel/2015-April/030175.html
 ---
  man/rules/meson.build              |   1 +
  man/systemd-fsckd.service.xml      | 162 +++++++++
- meson.build                        |   8 +
+ meson.build                        |   9 +
  po/POTFILES.in                     |   1 +
- src/fsckd/fsckd.c                  | 694 +++++++++++++++++++++++++++++++++++++
+ src/fsckd/fsckd.c                  | 699 +++++++++++++++++++++++++++++++++++++
  units/meson.build                  |   2 +
  units/systemd-fsck-root.service.in |   2 +
  units/systemd-fsck@.service.in     |   3 +-
  units/systemd-fsckd.service.in     |  17 +
  units/systemd-fsckd.socket         |  15 +
- 10 files changed, 904 insertions(+), 1 deletion(-)
+ 10 files changed, 910 insertions(+), 1 deletion(-)
  create mode 100644 man/systemd-fsckd.service.xml
  create mode 100644 src/fsckd/fsckd.c
  create mode 100644 units/systemd-fsckd.service.in
  create mode 100644 units/systemd-fsckd.socket
 
 diff --git a/man/rules/meson.build b/man/rules/meson.build
-index 296dd7d..b813a5f 100644
+index 0f65191..b50e5a0 100644
 --- a/man/rules/meson.build
 +++ b/man/rules/meson.build
-@@ -702,6 +702,7 @@ manpages = [
+@@ -853,6 +853,7 @@ manpages = [
    '8',
    ['systemd-fsck', 'systemd-fsck-root.service'],
    ''],
 + ['systemd-fsckd.service', '8', ['systemd-fsckd.socket', 'systemd-fsckd'], ''],
   ['systemd-fstab-generator', '8', [], ''],
   ['systemd-getty-generator', '8', [], ''],
-  ['systemd-gpt-auto-generator', '8', [], ''],
+  ['systemd-gpt-auto-generator', '8', [], 'HAVE_BLKID'],
 diff --git a/man/systemd-fsckd.service.xml b/man/systemd-fsckd.service.xml
 new file mode 100644
 index 0000000..b7ad58d
@@ -239,24 +239,25 @@ index 0000000..b7ad58d
 +
 +</refentry>
 diff --git a/meson.build b/meson.build
-index fc216d2..60f8284 100644
+index b5a51b6..4eb3c06 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -2595,6 +2595,14 @@ executable('systemd-makefs',
-            install : true,
-            install_dir : rootlibexecdir)
+@@ -2889,6 +2889,15 @@ executable(
+         install : true,
+         install_dir : rootlibexecdir)
  
-+executable('systemd-fsckd',
-+           'src/fsckd/fsckd.c',
-+           include_directories : includes,
-+           link_with : [libshared],
-+           install_rpath : rootlibexecdir,
-+           install : true,
-+           install_dir : rootlibexecdir)
++executable(
++        'systemd-fsckd',
++        'src/fsckd/fsckd.c',
++        include_directories : includes,
++        link_with : [libshared],
++        install_rpath : rootlibexecdir,
++        install : true,
++        install_dir : rootlibexecdir)
 +
- executable('systemd-sleep',
-            'src/sleep/sleep.c',
-            include_directories : includes,
+ executable(
+         'systemd-sleep',
+         'src/sleep/sleep.c',
 diff --git a/po/POTFILES.in b/po/POTFILES.in
 index 0346a19..5ea2444 100644
 --- a/po/POTFILES.in
@@ -268,10 +269,10 @@ index 0346a19..5ea2444 100644
 +src/fsckd/fsckd.c
 diff --git a/src/fsckd/fsckd.c b/src/fsckd/fsckd.c
 new file mode 100644
-index 0000000..a4f4ebd
+index 0000000..8876961
 --- /dev/null
 +++ b/src/fsckd/fsckd.c
-@@ -0,0 +1,694 @@
+@@ -0,0 +1,699 @@
 +/*-*- Mode: C; c-basic-offset: 8; indent-tabs-mode: nil -*-*/
 +
 +/***
@@ -377,8 +378,8 @@ index 0000000..a4f4ebd
 +        bool cancel_requested;
 +} Manager;
 +
-+static void client_free(Client *c);
-+static void manager_free(Manager *m);
++static Client* client_free(Client *c);
++static Manager* manager_free(Manager *m);
 +
 +DEFINE_TRIVIAL_CLEANUP_FUNC(Client*, client_free);
 +DEFINE_TRIVIAL_CLEANUP_FUNC(Manager*, manager_free);
@@ -396,6 +397,11 @@ index 0000000..a4f4ebd
 +
 +        if (!m->show_status_console)
 +                return 0;
++
++        /* Nothing to display, and nothing to clear: return now. */
++        if (message == NULL && m->clear == 0) {
++                return 0;
++        }
 +
 +        /* Reduce the SAK window by opening and closing console on every request */
 +        console = fopen("/dev/console", "we");
@@ -452,7 +458,7 @@ index 0000000..a4f4ebd
 +        return 1;
 +}
 +
-+static void client_free(Client *c) {
++static Client* client_free(Client *c) {
 +        assert(c);
 +
 +        if (c->manager) {
@@ -466,7 +472,7 @@ index 0000000..a4f4ebd
 +                free(c->device_name);
 +        if (c->device_id)
 +                free(c->device_id);
-+        free(c);
++        return mfree(c);
 +}
 +
 +static void manager_disconnect_plymouth(Manager *m) {
@@ -782,9 +788,9 @@ index 0000000..a4f4ebd
 +        return 0;
 +}
 +
-+static void manager_free(Manager *m) {
++static Manager* manager_free(Manager *m) {
 +        if (!m)
-+                return;
++                return NULL;
 +
 +        /* clear last line */
 +        manager_write_console(m, NULL);
@@ -799,7 +805,7 @@ index 0000000..a4f4ebd
 +
 +        sd_event_unref(m->event);
 +
-+        free(m);
++        return mfree(m);
 +}
 +
 +static int manager_new(Manager **ret, int fd) {
@@ -967,18 +973,18 @@ index 0000000..a4f4ebd
 +        return r < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 +}
 diff --git a/units/meson.build b/units/meson.build
-index ea91f0c..c4bb32d 100644
+index 17e9ead..a827080 100644
 --- a/units/meson.build
 +++ b/units/meson.build
-@@ -100,6 +100,7 @@ units = [
+@@ -109,6 +109,7 @@ units = [
+         ['systemd-exit.service',                ''],
          ['systemd-firstboot.service',           'ENABLE_FIRSTBOOT',
           'sysinit.target.wants/'],
-         ['systemd-halt.service',                ''],
 +        ['systemd-fsckd.socket',                ''],
-         ['systemd-initctl.socket',              '',
-          'sockets.target.wants/'],
-         ['systemd-journal-catalog-update.service', '',
-@@ -169,6 +170,7 @@ in_units = [
+         ['systemd-halt.service',                ''],
+         ['systemd-homed-activate.service',      'ENABLE_HOMED'],
+         ['systemd-initctl.socket',              'HAVE_SYSV_COMPAT',
+@@ -186,6 +187,7 @@ in_units = [
          ['systemd-pstore.service',               'ENABLE_PSTORE'],
          ['systemd-fsck-root.service',            ''],
          ['systemd-fsck@.service',                ''],
@@ -987,7 +993,7 @@ index ea91f0c..c4bb32d 100644
          ['systemd-hibernate.service',            'ENABLE_HIBERNATE'],
          ['systemd-hybrid-sleep.service',         'ENABLE_HIBERNATE'],
 diff --git a/units/systemd-fsck-root.service.in b/units/systemd-fsck-root.service.in
-index 042081c..bea6c16 100644
+index 6897f13..cfdb086 100644
 --- a/units/systemd-fsck-root.service.in
 +++ b/units/systemd-fsck-root.service.in
 @@ -13,6 +13,8 @@ Documentation=man:systemd-fsck-root.service(8)
@@ -1000,7 +1006,7 @@ index 042081c..bea6c16 100644
  
  [Service]
 diff --git a/units/systemd-fsck@.service.in b/units/systemd-fsck@.service.in
-index 33220835..bfa565b 100644
+index 06b91aea..de0b767 100644
 --- a/units/systemd-fsck@.service.in
 +++ b/units/systemd-fsck@.service.in
 @@ -13,7 +13,8 @@ Documentation=man:systemd-fsck@.service(8)
@@ -1015,7 +1021,7 @@ index 33220835..bfa565b 100644
  [Service]
 diff --git a/units/systemd-fsckd.service.in b/units/systemd-fsckd.service.in
 new file mode 100644
-index 0000000..9c7ed51
+index 0000000..f075b66
 --- /dev/null
 +++ b/units/systemd-fsckd.service.in
 @@ -0,0 +1,17 @@
@@ -1034,7 +1040,7 @@ index 0000000..9c7ed51
 +Before=shutdown.target
 +
 +[Service]
-+ExecStart=@rootlibexecdir@/systemd-fsckd
++ExecStart={{ROOTLIBEXECDIR}}/systemd-fsckd
 +StandardOutput=journal+console
 diff --git a/units/systemd-fsckd.socket b/units/systemd-fsckd.socket
 new file mode 100644

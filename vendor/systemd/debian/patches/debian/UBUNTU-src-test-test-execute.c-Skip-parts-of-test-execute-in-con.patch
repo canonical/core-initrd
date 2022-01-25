@@ -1,0 +1,104 @@
+From: Balint Reczey <balint.reczey@canonical.com>
+Date: Thu, 20 May 2021 23:52:13 +0200
+Subject: src/test/test-execute.c: Skip the parts of test-execute in LXC which
+ are failing there
+
+LP: #1878051
+---
+ src/test/test-execute.c | 36 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+
+diff --git a/src/test/test-execute.c b/src/test/test-execute.c
+index 1119ad4..cf53178 100644
+--- a/src/test/test-execute.c
++++ b/src/test/test-execute.c
+@@ -224,6 +224,10 @@ static void _test_service(const char *file, unsigned line, const char *func,
+         _test_service(PROJECT_FILE, __LINE__, __func__, m, unit_name, result_expected)
+ 
+ static void test_exec_bindpaths(Manager *m) {
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
+         assert_se(mkdir_p("/tmp/test-exec-bindpaths", 0755) >= 0);
+         assert_se(mkdir_p("/tmp/test-exec-bindreadonlypaths", 0755) >= 0);
+ 
+@@ -295,6 +299,11 @@ static void test_exec_ignoresigpipe(Manager *m) {
+ }
+ 
+ static void test_exec_privatetmp(Manager *m) {
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
++
+         assert_se(touch("/tmp/test-exec_privatetmp") >= 0);
+ 
+         test(m, "exec-privatetmp-yes.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
+@@ -341,6 +350,11 @@ static void test_exec_protecthome(Manager *m) {
+                 return;
+         }
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
++
+         test(m, "exec-protecthome-tmpfs-vs-protectsystem-strict.service", 0, CLD_EXITED);
+ }
+ 
+@@ -369,6 +383,11 @@ static void test_exec_protectkernelmodules(Manager *m) {
+ 
+ static void test_exec_readonlypaths(Manager *m) {
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
++
+         test(m, "exec-readonlypaths-simple.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
+ 
+         if (path_is_read_only_fs("/var") > 0) {
+@@ -398,6 +417,11 @@ static void test_exec_inaccessiblepaths(Manager *m) {
+                 return;
+         }
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
++
+         test(m, "exec-inaccessiblepaths-sys.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
+ 
+         if (path_is_read_only_fs("/") > 0) {
+@@ -410,11 +434,19 @@ static void test_exec_inaccessiblepaths(Manager *m) {
+ 
+ static void test_exec_noexecpaths(Manager *m) {
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
+         test(m, "exec-noexecpaths-simple.service", can_unshare ? 0 : EXIT_FAILURE, CLD_EXITED);
+ }
+ 
+ static void test_exec_temporaryfilesystem(Manager *m) {
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
+         test(m, "exec-temporaryfilesystem-options.service", can_unshare ? 0 : EXIT_NAMESPACE, CLD_EXITED);
+         test(m, "exec-temporaryfilesystem-ro.service", can_unshare ? 0 : EXIT_NAMESPACE, CLD_EXITED);
+         test(m, "exec-temporaryfilesystem-rw.service", can_unshare ? 0 : EXIT_NAMESPACE, CLD_EXITED);
+@@ -587,6 +619,10 @@ static void test_exec_dynamicuser(Manager *m) {
+                 return;
+         }
+ 
++        if (detect_container() == VIRTUALIZATION_LXC) {
++                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
++                return;
++        }
+         test(m, "exec-dynamicuser-fixeduser.service", can_unshare ? 0 : EXIT_NAMESPACE, CLD_EXITED);
+         if (check_user_has_group_with_same_name("adm"))
+                 test(m, "exec-dynamicuser-fixeduser-adm.service", can_unshare ? 0 : EXIT_NAMESPACE, CLD_EXITED);

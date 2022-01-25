@@ -1,13 +1,13 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include "sd-bus.h"
 
+#include "bus-object.h"
 #include "logind-session.h"
 
-extern const sd_bus_vtable session_vtable[];
-int session_node_enumerator(sd_bus *bus, const char *path,void *userdata, char ***nodes, sd_bus_error *error);
-int session_object_find(sd_bus *bus, const char *path, const char *interface, void *userdata, void **found, sd_bus_error *error);
+extern const BusObjectImplementation session_object;
+
 char *session_bus_path(Session *s);
 
 int session_send_signal(Session *s, bool new_session);

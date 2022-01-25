@@ -1,6 +1,8 @@
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 units = [
+        'app.slice',
+        'background.slice',
         'basic.target',
         'bluetooth.target',
         'default.target',
@@ -9,6 +11,7 @@ units = [
         'graphical-session.target',
         'paths.target',
         'printer.target',
+        'session.slice',
         'shutdown.target',
         'smartcard.target',
         'sockets.target',
@@ -19,6 +22,10 @@ units = [
         'systemd-tmpfiles-setup.service',
         'timers.target',
 ]
+
+if conf.get('ENABLE_XDG_AUTOSTART') == 1
+        units += 'xdg-desktop-autostart.target'
+endif
 
 foreach file : units
         install_data(file,

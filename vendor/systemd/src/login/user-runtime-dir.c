@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdint.h>
 #include <sys/mount.h>
@@ -7,11 +7,13 @@
 
 #include "bus-error.h"
 #include "dev-setup.h"
-#include "fs-util.h"
 #include "format-util.h"
+#include "fs-util.h"
 #include "label.h"
+#include "limits-util.h"
 #include "main-func.h"
 #include "mkdir.h"
+#include "mount-util.h"
 #include "mountpoint-util.h"
 #include "path-util.h"
 #include "rm-rf.h"
@@ -22,7 +24,7 @@
 #include "strv.h"
 #include "user-util.h"
 
-static int acquire_runtime_dir_size(uint64_t *ret) {
+static int acquire_runtime_dir_properties(uint64_t *size, uint64_t *inodes) {
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         int r;
@@ -31,9 +33,17 @@ static int acquire_runtime_dir_size(uint64_t *ret) {
         if (r < 0)
                 return log_error_errno(r, "Failed to connect to system bus: %m");
 
-        r = sd_bus_get_property_trivial(bus, "org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager", "RuntimeDirectorySize", &error, 't', ret);
-        if (r < 0)
-                return log_error_errno(r, "Failed to acquire runtime directory size: %s", bus_error_message(&error, r));
+        r = sd_bus_get_property_trivial(bus, "org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager", "RuntimeDirectorySize", &error, 't', size);
+        if (r < 0) {
+                log_warning_errno(r, "Failed to acquire runtime directory size, ignoring: %s", bus_error_message(&error, r));
+                *size = physical_memory_scale(10U, 100U); /* 10% */
+        }
+
+        r = sd_bus_get_property_trivial(bus, "org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager", "RuntimeDirectoryInodesMax", &error, 't', inodes);
+        if (r < 0) {
+                log_warning_errno(r, "Failed to acquire number of inodes for runtime directory, ignoring: %s", bus_error_message(&error, r));
+                *inodes = DIV_ROUND_UP(*size, 4096);
+        }
 
         return 0;
 }
@@ -42,7 +52,8 @@ static int user_mkdir_runtime_path(
                 const char *runtime_path,
                 uid_t uid,
                 gid_t gid,
-                uint64_t runtime_dir_size) {
+                uint64_t runtime_dir_size,
+                uint64_t runtime_dir_inodes) {
 
         int r;
 
@@ -58,26 +69,28 @@ static int user_mkdir_runtime_path(
         if (path_is_mount_point(runtime_path, NULL, 0) >= 0)
                 log_debug("%s is already a mount point", runtime_path);
         else {
-                char options[sizeof("mode=0700,uid=,gid=,size=,smackfsroot=*")
+                char options[sizeof("mode=0700,uid=,gid=,size=,nr_inodes=,smackfsroot=*")
                              + DECIMAL_STR_MAX(uid_t)
                              + DECIMAL_STR_MAX(gid_t)
+                             + DECIMAL_STR_MAX(uint64_t)
                              + DECIMAL_STR_MAX(uint64_t)];
 
                 xsprintf(options,
-                         "mode=0700,uid=" UID_FMT ",gid=" GID_FMT ",size=%" PRIu64 "%s",
-                         uid, gid, runtime_dir_size,
+                         "mode=0700,uid=" UID_FMT ",gid=" GID_FMT ",size=%" PRIu64 ",nr_inodes=%" PRIu64 "%s",
+                         uid, gid, runtime_dir_size, runtime_dir_inodes,
                          mac_smack_use() ? ",smackfsroot=*" : "");
 
                 (void) mkdir_label(runtime_path, 0700);
 
-                r = mount("tmpfs", runtime_path, "tmpfs", MS_NODEV|MS_NOSUID, options);
+                r = mount_nofollow_verbose(LOG_DEBUG, "tmpfs", runtime_path, "tmpfs", MS_NODEV|MS_NOSUID, options);
                 if (r < 0) {
-                        if (!IN_SET(errno, EPERM, EACCES)) {
-                                r = log_error_errno(errno, "Failed to mount per-user tmpfs directory %s: %m", runtime_path);
+                        if (!ERRNO_IS_PRIVILEGE(r)) {
+                                log_error_errno(r, "Failed to mount per-user tmpfs directory %s: %m", runtime_path);
                                 goto fail;
                         }
 
-                        log_debug_errno(errno, "Failed to mount per-user tmpfs directory %s.\n"
+                        log_debug_errno(r,
+                                        "Failed to mount per-user tmpfs directory %s.\n"
                                         "Assuming containerized execution, ignoring: %m", runtime_path);
 
                         r = chmod_and_chown(runtime_path, 0700, uid, gid);
@@ -92,8 +105,6 @@ static int user_mkdir_runtime_path(
                         log_warning_errno(r, "Failed to fix label of \"%s\", ignoring: %m", runtime_path);
         }
 
-        /* Set up inaccessible nodes now so they're available if we decide to use them with user namespaces. */
-        (void) make_inaccessible_nodes(runtime_path, uid, gid);
         return 0;
 
 fail:
@@ -127,7 +138,7 @@ static int user_remove_runtime_path(const char *runtime_path) {
 
 static int do_mount(const char *user) {
         char runtime_path[sizeof("/run/user") + DECIMAL_STR_MAX(uid_t)];
-        uint64_t runtime_dir_size;
+        uint64_t runtime_dir_size, runtime_dir_inodes;
         uid_t uid;
         gid_t gid;
         int r;
@@ -140,14 +151,14 @@ static int do_mount(const char *user) {
                                                     : "Failed to look up user \"%s\": %m",
                                        user);
 
-        r = acquire_runtime_dir_size(&runtime_dir_size);
+        r = acquire_runtime_dir_properties(&runtime_dir_size, &runtime_dir_inodes);
         if (r < 0)
                 return r;
 
         xsprintf(runtime_path, "/run/user/" UID_FMT, uid);
 
         log_debug("Will mount %s owned by "UID_FMT":"GID_FMT, runtime_path, uid, gid);
-        return user_mkdir_runtime_path(runtime_path, uid, gid, runtime_dir_size);
+        return user_mkdir_runtime_path(runtime_path, uid, gid, runtime_dir_size, runtime_dir_inodes);
 }
 
 static int do_umount(const char *user) {
@@ -156,7 +167,7 @@ static int do_umount(const char *user) {
         int r;
 
         /* The user may be already removed. So, first try to parse the string by parse_uid(),
-         * and if it fails, fallback to get_user_creds().*/
+         * and if it fails, fall back to get_user_creds(). */
         if (parse_uid(user, &uid) < 0) {
                 r = get_user_creds(&user, &uid, NULL, NULL, NULL, 0);
                 if (r < 0)
@@ -186,11 +197,11 @@ static int run(int argc, char *argv[]) {
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
                                        "First argument must be either \"start\" or \"stop\".");
 
+        umask(0022);
+
         r = mac_selinux_init();
         if (r < 0)
-                return log_error_errno(r, "Could not initialize labelling: %m\n");
-
-        umask(0022);
+                return r;
 
         if (streq(argv[1], "start"))
                 return do_mount(argv[2]);

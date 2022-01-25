@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <sys/types.h>
@@ -61,13 +61,32 @@ int glob_exists(const char *path) {
         return true;
 }
 
-int glob_extend(char ***strv, const char *path) {
+int glob_extend(char ***strv, const char *path, int flags) {
         _cleanup_globfree_ glob_t g = {};
         int k;
 
-        k = safe_glob(path, GLOB_NOSORT|GLOB_BRACE, &g);
+        k = safe_glob(path, GLOB_NOSORT|GLOB_BRACE|flags, &g);
         if (k < 0)
                 return k;
 
         return strv_extend_strv(strv, g.gl_pathv, false);
+}
+
+int glob_non_glob_prefix(const char *path, char **ret) {
+        /* Return the path of the path that has no glob characters. */
+
+        size_t n = strcspn(path, GLOB_CHARS);
+
+        if (path[n] != '\0')
+                while (n > 0 && path[n-1] != '/')
+                        n--;
+
+        if (n == 0)
+                return -ENOENT;
+
+        char *ans = strndup(path, n);
+        if (!ans)
+                return -ENOMEM;
+        *ret = ans;
+        return 0;
 }

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <dirent.h>
@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "alloc-util.h"
 #include "errno-util.h"
 #include "time-util.h"
 
@@ -33,15 +34,21 @@ int readlink_value(const char *p, char **ret);
 int readlink_and_make_absolute(const char *p, char **r);
 
 int chmod_and_chown(const char *path, mode_t mode, uid_t uid, gid_t gid);
-int fchmod_and_chown(int fd, mode_t mode, uid_t uid, gid_t gid);
-int chmod_and_chown_unsafe(const char *path, mode_t mode, uid_t uid, gid_t gid);
+int fchmod_and_chown_with_fallback(int fd, const char *path, mode_t mode, uid_t uid, gid_t gid);
+static inline int fchmod_and_chown(int fd, mode_t mode, uid_t uid, gid_t gid) {
+        return fchmod_and_chown_with_fallback(fd, NULL, mode, uid, gid); /* no fallback */
+}
 
 int fchmod_umask(int fd, mode_t mode);
 int fchmod_opath(int fd, mode_t m);
 
-int fd_warn_permissions(const char *path, int fd);
+int futimens_opath(int fd, const struct timespec ts[2]);
 
-#define laccess(path, mode) faccessat(AT_FDCWD, (path), (mode), AT_SYMLINK_NOFOLLOW)
+int fd_warn_permissions(const char *path, int fd);
+int stat_warn_permissions(const char *path, const struct stat *st);
+
+#define laccess(path, mode)                                             \
+        (faccessat(AT_FDCWD, (path), (mode), AT_SYMLINK_NOFOLLOW) < 0 ? -errno : 0)
 
 int touch_file(const char *path, bool parents, usec_t stamp, uid_t uid, gid_t gid, mode_t mode);
 int touch(const char *path);
@@ -79,13 +86,15 @@ enum {
         CHASE_PREFIX_ROOT = 1 << 0, /* The specified path will be prefixed by the specified root before beginning the iteration */
         CHASE_NONEXISTENT = 1 << 1, /* It's OK if the path doesn't actually exist. */
         CHASE_NO_AUTOFS   = 1 << 2, /* Return -EREMOTE if autofs mount point found */
-        CHASE_SAFE        = 1 << 3, /* Return EPERM if we ever traverse from unprivileged to privileged files or directories */
+        CHASE_SAFE        = 1 << 3, /* Return -EPERM if we ever traverse from unprivileged to privileged files or directories */
         CHASE_TRAIL_SLASH = 1 << 4, /* Any trailing slash will be preserved */
         CHASE_STEP        = 1 << 5, /* Just execute a single step of the normalization */
-        CHASE_NOFOLLOW    = 1 << 6, /* Do not follow the path's right-most compontent. With ret_fd, when the path's
+        CHASE_NOFOLLOW    = 1 << 6, /* Do not follow the path's right-most component. With ret_fd, when the path's
                                      * right-most component refers to symlink, return O_PATH fd of the symlink. */
         CHASE_WARN        = 1 << 7, /* Emit an appropriate warning when an error is encountered */
 };
+
+bool unsafe_transition(const struct stat *a, const struct stat *b);
 
 /* How many iterations to execute before returning -ELOOP */
 #define CHASE_SYMLINKS_MAX 32
@@ -97,23 +106,36 @@ int chase_symlinks_and_opendir(const char *path, const char *root, unsigned chas
 int chase_symlinks_and_stat(const char *path, const char *root, unsigned chase_flags, char **ret_path, struct stat *ret_stat, int *ret_fd);
 
 /* Useful for usage with _cleanup_(), removes a directory and frees the pointer */
-static inline void rmdir_and_free(char *p) {
+static inline char *rmdir_and_free(char *p) {
         PROTECT_ERRNO;
+
+        if (!p)
+                return NULL;
+
         (void) rmdir(p);
-        free(p);
+        return mfree(p);
 }
 DEFINE_TRIVIAL_CLEANUP_FUNC(char*, rmdir_and_free);
 
-static inline void unlink_and_free(char *p) {
+static inline char* unlink_and_free(char *p) {
+        if (!p)
+                return NULL;
+
         (void) unlink_noerrno(p);
-        free(p);
+        return mfree(p);
 }
 DEFINE_TRIVIAL_CLEANUP_FUNC(char*, unlink_and_free);
 
 int access_fd(int fd, int mode);
 
 void unlink_tempfilep(char (*p)[]);
-int unlinkat_deallocate(int fd, const char *name, int flags);
+
+typedef enum UnlinkDeallocateFlags {
+        UNLINK_REMOVEDIR = 1 << 0,
+        UNLINK_ERASE     = 1 << 1,
+} UnlinkDeallocateFlags;
+
+int unlinkat_deallocate(int fd, const char *name, UnlinkDeallocateFlags flags);
 
 int fsync_directory_of_file(int fd);
 int fsync_full(int fd);
@@ -122,3 +144,10 @@ int fsync_path_at(int at_fd, const char *path);
 int syncfs_path(int atfd, const char *path);
 
 int open_parent(const char *path, int flags, mode_t mode);
+
+int conservative_renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath);
+static inline int conservative_rename(const char *oldpath, const char *newpath) {
+        return conservative_renameat(AT_FDCWD, oldpath, AT_FDCWD, newpath);
+}
+
+int posix_fallocate_loop(int fd, uint64_t offset, uint64_t size);
