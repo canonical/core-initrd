@@ -39,6 +39,8 @@ backends:
     container-profiles: coreinitrd
     systems:
       - ubuntu-22.04:
+          username: ubuntu
+          password: ubuntu
           image: ucspread22
 
 path: /home/core-initrd
