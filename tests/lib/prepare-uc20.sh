@@ -259,9 +259,8 @@ sed -r -i -e 's/^systemd-journal:x:([0-9]+):$/systemd-journal:x:\1:test/' /root/
 # is not supported by lxd containers. We thus have to do some manual setup of the image
 # partition mount.
 if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
-    devloop=$(losetup -f)
     partoffset=$(fdisk -lu pc.img | awk '/EFI System$/ {print $2}')
-    losetup $devloop pc.img -o $(($partoffset * 512))
+    devloop=$(losetup --show -f pc.img -o $(($partoffset * 512)))
     mkdir /mnt/p2
     mount $devloop /mnt/p2
 
