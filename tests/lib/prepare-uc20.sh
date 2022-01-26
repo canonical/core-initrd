@@ -259,6 +259,10 @@ sed -r -i -e 's/^systemd-journal:x:([0-9]+):$/systemd-journal:x:\1:test/' /root/
 # is not supported by lxd containers. We thus have to do some manual setup of the image
 # partition mount.
 if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
+    # Manually try to find to EFI system partition and it's size. The assumption made here
+    # is that the EFI system partition is the first one in the disk. So we mount the partition
+    # that comes right after. We do this as we can't partprobe without it failing on creating
+    # new loop devices for partitions.
     partoffset=$(fdisk -lu pc.img | awk '/EFI System$/ {print $2}')
     devloop=$(losetup --show -f pc.img -o $(($partoffset * 512)))
     mkdir /mnt/p2
