@@ -19,7 +19,14 @@ apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
 # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
 # should we instead install beta/edge snapd here and point ubuntu-image to this
 # version of snapd?
-snap install snapd
+# TODO: https://bugs.launchpad.net/snapd/+bug/1712808
+# There is a bug in snapd that prevents udev rules from reloading in privileged containers
+# with the following error message: 'cannot reload udev rules: exit status 1' when installing
+# snaps. However it seems that retrying the installation fixes it
+if ! snap install snapd; then
+    echo "FIXME: snapd install failed, retrying"
+    snap install snapd
+fi
 snap install ubuntu-image --classic
 
 # install build-deps for ubuntu-core-initramfs
@@ -53,7 +60,7 @@ curl -o ubuntu-core-22-amd64-dangerous.model https://raw.githubusercontent.com/s
     cp ../*.deb "$SETUPDIR"
 )
 
-# install ubuntu-core-initramfs here so the repack-kernel.sh uses the version of
+# install ubuntu-core-initramfs here so the repack-kernel uses the version of
 # ubuntu-core-initramfs we built here
 apt install -yqq "$SETUPDIR"/ubuntu-core-initramfs*.deb
 
@@ -181,17 +188,17 @@ rm -r $snapddir
 
 # extract the kernel snap, including extracting the initrd from the kernel.efi
 kerneldir=/tmp/kernel-workdir
-"$TESTSLIB/repack-kernel.sh" extract upstream-pc-kernel.snap $kerneldir
+"$EXTTESTSLIB/repack-kernel" extract upstream-pc-kernel.snap $kerneldir
 
 # copy the skeleton from our installed ubuntu-core-initramfs into the initrd 
 # skeleton for the kernel snap
 cp -ar /usr/lib/ubuntu-core-initramfs/main/* "$kerneldir/skeleton/main"
 
 # repack the initrd into the kernel.efi
-"$TESTSLIB/repack-kernel.sh" prepare $kerneldir
+"$EXTTESTSLIB/repack-kernel" prepare $kerneldir
 
 # repack the kernel snap itself
-"$TESTSLIB/repack-kernel.sh" pack $kerneldir --filename=pc-kernel.snap
+"$EXTTESTSLIB/repack-kernel" pack $kerneldir --filename=pc-kernel.snap
 rm -rf $kerneldir
 
 # penultimately, re-pack the gadget snap with snakeoil signed shim
