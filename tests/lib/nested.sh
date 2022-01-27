@@ -9,24 +9,6 @@ execute_remote(){
     sshpass -p ubuntu ssh -p "$SSH_PORT" -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ubuntu@localhost "$*"
 }
 
-wait_for_service() {
-    local service_name="$1"
-    local state="${2:-active}"
-    for i in $(seq 300); do
-        if systemctl show -p ActiveState "$service_name" | grep -q "ActiveState=$state"; then
-            return
-        fi
-        # show debug output every 1min
-        if [ "$i" -gt 0 ] && [ $(( i % 60 )) = 0 ]; then
-            systemctl status "$service_name" || true;
-        fi
-        sleep 1;
-    done
-
-    echo "service $service_name did not start"
-    exit 1
-}
-
 wait_for_ssh(){
     local service_name="$1"
     retry=800
