@@ -13,7 +13,7 @@ apt update
 
 # these should already be installed in GCE images with the google-nested 
 # backend, but in qemu local images from qemu-nested, we might not have them
-apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
+apt install snapd mtools ovmf qemu-system-x86 sshpass whois -yqq
 
 # use the snapd snap explicitly
 # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
@@ -254,50 +254,10 @@ echo "ubuntu:x:1001:" >> /root/test-var/lib/extrausers/group
 # add the test user to the systemd-journal group if it isn't already
 sed -r -i -e 's/^systemd-journal:x:([0-9]+):$/systemd-journal:x:\1:test/' /root/test-etc/group
 
-# mount fresh image and add all our SPREAD_PROJECT data
-# for the lxd backend this step is a bit different as the device mapper kernel module
-# is not supported by lxd containers. We thus have to do some manual setup of the image
-# partition mount.
-if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
-    # Manually try to find to EFI system partition and it's size. The assumption made here
-    # is that the EFI system partition is the first one in the disk. So we mount the partition
-    # that comes right after. We do this as we can't partprobe without it failing on creating
-    # new loop devices for partitions.
-    partoffset=$(fdisk -lu pc.img | awk '/EFI System$/ {print $2}')
-    devloop=$(losetup --show -f pc.img -o $(($partoffset * 512)))
-    mkdir /mnt/p2
-    mount $devloop /mnt/p2
-
-    # add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
-    # mounted partition
-    tar -c -z \
-        -f /mnt/p2/run-mode-overlay-data.tar.gz \
-        /root/test-etc /root/test-var/lib/extrausers
-
-    umount /mnt/p2
-    losetup -d $devloop
-else
-    kpartx -avs pc.img
-    # losetup --list --noheadings returns:
-    # /dev/loop1   0 0  1  1 /var/lib/snapd/snaps/ohmygiraffe_3.snap                0     512
-    # /dev/loop57  0 0  1  1 /var/lib/snapd/snaps/http_25.snap                      0     512
-    # /dev/loop19  0 0  1  1 /var/lib/snapd/snaps/test-snapd-netplan-apply_75.snap  0     512
-    devloop=$(losetup --list --noheadings | grep pc.img | awk '{print $1}')
-    dev=$(basename "$devloop")
-
-    # mount it so we can use it now
-    mkdir -p /mnt
-    mount "/dev/mapper/${dev}p2" /mnt
-
-    # add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
-    # mounted partition
-    tar -c -z \
-        -f /mnt/run-mode-overlay-data.tar.gz \
-        /root/test-etc /root/test-var/lib/extrausers
-
-    # tear down the mounts
-    umount /mnt
-    kpartx -d pc.img
-fi
+# tar the runmode tweaks and copy them to the image
+tar -c -z -f run-mode-overlay-data.tar.gz \
+    /root/test-etc /root/test-var/lib/extrausers
+partoffset=$(fdisk -lu pc.img | awk '/EFI System$/ {print $2}')
+mcopy -i pc.img@@$(($partoffset * 512)) run-mode-overlay-data.tar.gz ::run-mode-overlay-data.tar.gz
 
 # the image is now ready to be booted

@@ -54,7 +54,7 @@ cleanup_nested_core_vm(){
         # remove the swtpm
         # TODO: we could just remove/reset the swtpm instead of removing the snap 
         # wholesale
-        snap remove swtpm-mvo
+        snap remove --purge swtpm-mvo
     fi
 
     # delete the image file
