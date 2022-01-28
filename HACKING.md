@@ -23,6 +23,86 @@ TODO: Explain how to modify initrd when there is Secure boot / FDE.
   - snapcraft
   - etc
 
+# Testing with spread
+
+## Prerequisites for testing
+
+You need to have the following software installed before you can test with spread
+ - Go (https://golang.org/doc/install or ```sudo snap install go```)
+ - Spread (install from source as per below)
+
+## Installing spread
+
+You can install spread by simply using ```snap install spread```, however this does not allow for the lxd-backend to be used.
+To use the lxd backend you need to install spread from source, as the LXD profile support has not been upstreamed yet.
+This document will be updated with the upstream version when the PR https://github.com/snapcore/spread/pull/136 merges. To install spread from source you need to do the following.
+
+```
+git clone https://github.com/Meulengracht/spread
+cd spread
+cd cmd/spread
+go build .
+go install .
+```
+
+## QEmu backend
+
+1. Install the dependencies required for the qemu emulation
+```
+sudo apt update && sudo apt install -y qemu-kvm autopkgtest
+```
+2. Create a suitable ubuntu test image (focal) in the following directory where spread locates images. Note that the location is different when using spread installed through snap.
+```
+mkdir -p ~/.spread/qemu # This location is different if you installed spread from snap
+cd ~/.spread/qemu
+autopkgtest-buildvm-ubuntu-cloud -r focal
+```
+3. Rename the newly built image as the name will not match what spread is expecting
+```
+mv autopkgtest-focal-amd64.img ubuntu-20.04-64.img
+```
+4. Now you are ready to run spread tests with the qemu backend
+```
+cd ~/core-initrd # or wherever you checked out this repository
+spread qemu-nested
+```
+
+## LXD backend
+The LXD backend is the preffered way of testing locally as it uses virtualization and thus runs a lot quicker than
+the qemu backend. This is because the container can use all the resources of the host, and we can support
+qemu-kvm acceleration in the container for the nested instance.
+
+This backend requires that your host machine supports KVM.
+
+1. Setup any prerequisites and build the LXD image needed for testing. The following commands will install lxd
+and yq (needed for yaml manipulation), download the newest image and import it into LXD.
+```
+sudo snap install lxd
+sudo snap install yq
+curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd-img.tar.gz
+lxc image import lxd-initrd-img.tar.gz --alias ucspread
+lxc image show ucspread > temp.profile
+yq e '.properties.aliases = "ucspread,amd64"' -i ./temp.profile
+yq e '.properties.remote = "images"' -i ./temp.profile
+cat ./temp.profile | lxc image edit ucspread
+rm ./temp.profile ./lxd-initrd-img.tar.gz
+```
+2. Import the LXD coreinitrd test profile. Make sure your working directory is the root of this repository.
+```
+lxc profile create coreinitrd
+cat tests/spread/core-initrd.lxdprofile | lxc profile edit coreinitrd
+```
+3. Set environment variable to enable KVM acceleration for the nested qemu instance
+```
+export SPREAD_ENABLE_KVM=true
+```
+4. Now you can run the spread tests using the LXD backend
+```
+spread lxd-nested
+```
+
+# Debugging
+
 ## Getting a debug shell in initrd
 
 Getting a debug shell in initrd is very simple:

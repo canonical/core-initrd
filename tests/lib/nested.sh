@@ -9,31 +9,14 @@ execute_remote(){
     sshpass -p ubuntu ssh -p "$SSH_PORT" -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ubuntu@localhost "$*"
 }
 
-wait_for_service() {
-    local service_name="$1"
-    local state="${2:-active}"
-    for i in $(seq 300); do
-        if systemctl show -p ActiveState "$service_name" | grep -q "ActiveState=$state"; then
-            return
-        fi
-        # show debug output every 1min
-        if [ "$i" -gt 0 ] && [ $(( i % 60 )) = 0 ]; then
-            systemctl status "$service_name" || true;
-        fi
-        sleep 1;
-    done
-
-    echo "service $service_name did not start"
-    exit 1
-}
-
 wait_for_ssh(){
     local service_name="$1"
     retry=800
     wait=1
     while ! execute_remote true; do
-        if ! systemctl show -p ActiveState "$service_name" | grep -q "ActiveState=active"; then
+        if ! systemctl is-active "$service_name"; then
             echo "Service no longer active"
+            systemctl status "${service_name}" || true
             return 1
         fi
 
@@ -46,14 +29,33 @@ wait_for_ssh(){
     done
 }
 
+nested_wait_for_snap_command(){
+  retry=400
+  wait=1
+  while ! execute_remote command -v snap; do
+      retry=$(( retry - 1 ))
+      if [ $retry -le 0 ]; then
+          echo "Timed out waiting for snap command to be available. Aborting!"
+          exit 1
+      fi
+      sleep "$wait"
+  done
+}
+
 cleanup_nested_core_vm(){
     # stop the VM if it is running
     systemctl stop nested-vm-*
 
-    # remove the swtpm
-    # TODO: we could just remove/reset the swtpm instead of removing the snap 
-    # wholesale
-    snap remove swtpm-mvo
+    if [ "${ENABLE_TPM:-false}" = "true" ]; then
+        if [ -d "/tmp/qtpm" ]; then
+            rm -rf /tmp/qtpm
+        fi
+
+        # remove the swtpm
+        # TODO: we could just remove/reset the swtpm instead of removing the snap 
+        # wholesale
+        snap remove --purge swtpm-mvo
+    fi
 
     # delete the image file
     rm -rf "${IMAGE_FILE}"
@@ -69,10 +71,13 @@ start_nested_core_vm_unit(){
     # copy the image file to create a new one to use
     # TODO: maybe create a snapshot qcow image instead?
     mkdir -p "${WORK_DIR}"
-    cp /home/core-initrd/pc.img "${IMAGE_FILE}"
+    cp "${SETUPDIR}/pc.img" "${IMAGE_FILE}"
 
     # use only 2G of RAM for qemu-nested
     if [ "${SPREAD_BACKEND}" = "google-nested" ]; then
+        PARAM_MEM="-m 4096"
+        PARAM_SMP="-smp 2"
+    elif [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
         PARAM_MEM="-m 4096"
         PARAM_SMP="-smp 2"
     elif [ "${SPREAD_BACKEND}" = "qemu-nested" ]; then
@@ -99,35 +104,32 @@ start_nested_core_vm_unit(){
         ATTR_KVM=",accel=kvm"
         # CPU can be defined just when kvm is enabled
         PARAM_CPU="-cpu host"
-        # Increase the number of cpus used once the issue related to kvm and ovmf is fixed
-        # https://bugs.launchpad.net/ubuntu/+source/kvm/+bug/1872803
-        PARAM_SMP="-smp 1"
-    fi
-
-    # with qemu-nested, we can't use kvm acceleration
-    if [ "${SPREAD_BACKEND}" = "google-nested" ]; then
-        PARAM_MACHINE="-machine ubuntu${ATTR_KVM}"
-    elif [ "${SPREAD_BACKEND}" = "qemu-nested" ]; then
-        PARAM_MACHINE=""
-    else
-        echo "unknown spread backend ${SPREAD_BACKEND}"
-        exit 1
     fi
 
     # TODO: enable ms key booting for i.e. nightly edge jobs ?
-    OVMF_VARS="snakeoil"
     OVMF_CODE=""
-    if [ "${ENABLE_SECURE_BOOT}" = "true" ]; then
+    OVMF_VARS=""
+    if [ "${ENABLE_SECURE_BOOT:-false}" = "true" ]; then
         OVMF_CODE=".secboot"
+    fi
+    if [ "${ENABLE_OVMF_SNAKEOIL:-false}" = "true" ]; then
+        OVMF_VARS=".snakeoil"
     fi
 
     mkdir -p "${WORK_DIR}/image/"
-    cp -f "/usr/share/OVMF/OVMF_VARS.${OVMF_VARS}.fd" "${WORK_DIR}/image/OVMF_VARS.${OVMF_VARS}.fd"
-    PARAM_BIOS="-drive file=/usr/share/OVMF/OVMF_CODE${OVMF_CODE}.fd,if=pflash,format=raw,unit=0,readonly -drive file=${WORK_DIR}/image/OVMF_VARS.${OVMF_VARS}.fd,if=pflash,format=raw"
+    cp -f "/usr/share/OVMF/OVMF_VARS${OVMF_VARS}.fd" "${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd"
+    PARAM_BIOS="-drive file=/usr/share/OVMF/OVMF_CODE${OVMF_CODE}.fd,if=pflash,format=raw,unit=0,readonly -drive file=${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd,if=pflash,format=raw"
     PARAM_MACHINE="-machine q35${ATTR_KVM} -global ICH9-LPC.disable_s3=1"
 
-    if [ "${ENABLE_TPM}" = "true" ]; then
-        if ! snap list swtpm-mvo > /dev/null; then
+    # Unfortunately the swtpm-mvo snap does not work correctly in lxd container. It's not possible
+    # for the socket to come up due to being containerized.
+    if [ "${ENABLE_TPM:-false}" = "true" ]; then
+        TPMSOCK_PATH="/var/snap/swtpm-mvo/current/swtpm-sock"
+        if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
+            mkdir -p /tmp/qtpm
+            swtpm socket --tpmstate dir=/tmp/qtpm --ctrl type=unixio,path=/tmp/qtpm/sock --tpm2 -d -t
+            TPMSOCK_PATH="/tmp/qtpm/sock"
+        elif ! snap list swtpm-mvo > /dev/null; then
             snap install swtpm-mvo --beta
             retry=60
             while ! test -S /var/snap/swtpm-mvo/current/swtpm-sock; do
@@ -139,47 +141,30 @@ start_nested_core_vm_unit(){
                 sleep 1
             done
         fi
-        PARAM_TPM="-chardev socket,id=chrtpm,path=/var/snap/swtpm-mvo/current/swtpm-sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
+        PARAM_TPM="-chardev socket,id=chrtpm,path=${TPMSOCK_PATH} -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
     fi
 
     PARAM_IMAGE="-drive file=${IMAGE_FILE},cache=none,format=raw,id=disk1,if=none -device virtio-blk-pci,drive=disk1,bootindex=1"
 
-    # Create the systemd unit for running the VM, the qemu parameter order is 
-    # important. We run all of the qemu logic through a script that systemd runs
-    # for an easier time escaping everything
     SVC_NAME="nested-vm-$(systemd-escape "${SPREAD_JOB:-unknown}")"
-    SVC_SCRIPT="/tmp/nested-vm-$RANDOM.sh"
-    cat << EOF > "${SVC_SCRIPT}"
-#!/bin/sh -e
-qemu-system-x86_64 \
-    ${PARAM_SMP} \
-    ${PARAM_CPU} \
-    ${PARAM_MEM} \
-    ${PARAM_TRACE} \
-    ${PARAM_LOG} \
-    ${PARAM_MACHINE} \
-    ${PARAM_DISPLAY} \
-    ${PARAM_NETWORK} \
-    ${PARAM_BIOS} \
-    ${PARAM_TPM} \
-    ${PARAM_RANDOM} \
-    ${PARAM_IMAGE} \
-    ${PARAM_SERIAL} \
-    ${PARAM_MONITOR}
-EOF
-    
-    chmod +x "${SVC_SCRIPT}"
-
-    printf '[Unit]\nDescription=QEMU Nested VM for UC20 spread job %s\n[Service]\nType=simple\nExecStart=%s\n' \
-        "${SPREAD_JOB:-unknown}" \
-        "${SVC_SCRIPT}" \
-            > "/run/systemd/system/${SVC_NAME}.service"
-    
-    systemctl daemon-reload
-    systemctl start "${SVC_NAME}"
-
-    # wait for the nested-vm service to appear active
-    if ! wait_for_service "${SVC_NAME}"; then
+    if ! systemd-run --service-type=simple --unit="${SVC_NAME}" -- \
+                qemu-system-x86_64 \
+                ${PARAM_SMP} \
+                ${PARAM_CPU} \
+                ${PARAM_MEM} \
+                ${PARAM_TRACE} \
+                ${PARAM_LOG} \
+                ${PARAM_MACHINE} \
+                ${PARAM_DISPLAY} \
+                ${PARAM_NETWORK} \
+                ${PARAM_BIOS} \
+                ${PARAM_TPM} \
+                ${PARAM_RANDOM} \
+                ${PARAM_IMAGE} \
+                ${PARAM_SERIAL} \
+                ${PARAM_MONITOR}; then
+        echo "Failed to start ${SVC_NAME}" 1>&2
+        systemctl status "${SVC_NAME}" || true
         return 1
     fi
 
