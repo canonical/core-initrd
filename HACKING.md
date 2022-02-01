@@ -35,7 +35,7 @@ You need to have the following software installed before you can test with sprea
 
 You can install spread by simply using ```snap install spread```, however this does not allow for the lxd-backend to be used.
 To use the lxd backend you need to install spread from source, as the LXD profile support has not been upstreamed yet.
-This document will be updated with the upstream version when this happens. To install spread from source you need to do the following.
+This document will be updated with the upstream version when the PR https://github.com/snapcore/spread/pull/136 merges. To install spread from source you need to do the following.
 
 ```
 git clone https://github.com/Meulengracht/spread
@@ -77,8 +77,8 @@ This backend requires that your host machine supports KVM.
 1. Setup any prerequisites and build the LXD image needed for testing. The following commands will install lxd
 and yq (needed for yaml manipulation), download the newest image and import it into LXD.
 ```
-sudo snap install lxd --channel=latest/stable
-sudo snap install yq --channel=latest/stable
+sudo snap install lxd
+sudo snap install yq
 curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd22-img.tar.gz
 lxc image import lxd-initrd-img.tar.gz --alias ucspread22
 lxc image show ucspread22 > temp.profile
@@ -106,7 +106,7 @@ spread lxd-nested
 ## Getting a debug shell in initrd
 
 Getting a debug shell in initrd is very simple:
-1. Boot your UC20 image on your RPi
+1. Boot your UC22 image on your RPi
 2. Access to it via SSH
 3. Edit your kernel commandline:
 
