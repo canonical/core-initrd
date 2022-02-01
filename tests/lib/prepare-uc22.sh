@@ -10,20 +10,25 @@ apt update -yqq
 # from when we build the debian package
 add-apt-repository ppa:snappy-dev/image -y
 apt update
+apt upgrade -yqq
 
-# these should already be installed in GCE images with the google-nested 
-# backend, but in qemu local images from qemu-nested, we might not have them
-apt install snapd ovmf qemu-system-x86 sshpass whois -yqq
+# these are already installed in the lxd image which speeds things up, but they
+# are missing in qemu and google images.
+apt install initramfs-tools-core psmisc fdisk snapd mtools ovmf qemu-system-x86 sshpass whois openssh-server -yqq
 
 # use the snapd snap explicitly
 # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
 # should we instead install beta/edge snapd here and point ubuntu-image to this
 # version of snapd?
-snap install snapd
-
-# install some dependencies
-# TODO:UC20: when should we start using candidate / stable ubuntu-image?
-snap install ubuntu-image --edge --classic
+# TODO: https://bugs.launchpad.net/snapd/+bug/1712808
+# There is a bug in snapd that prevents udev rules from reloading in privileged containers
+# with the following error message: 'cannot reload udev rules: exit status 1' when installing
+# snaps. However it seems that retrying the installation fixes it
+if ! snap install snapd; then
+    echo "FIXME: snapd install failed, retrying"
+    snap install snapd
+fi
+snap install ubuntu-image --classic
 
 # install build-deps for ubuntu-core-initramfs
 (
@@ -45,7 +50,7 @@ echo 'test ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # get the model
 # TODO: should this be a variant to test multiple grades i.e. signed and secured?
-curl -o ubuntu-core-20-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-20-amd64-dangerous.model
+curl -o ubuntu-core-22-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-22-amd64-dangerous.model
 
 # build the debian package here of ubuntu-core-initramfs
 (
@@ -56,20 +61,21 @@ curl -o ubuntu-core-20-amd64-dangerous.model https://raw.githubusercontent.com/s
     cp ../*.deb "$SETUPDIR"
 )
 
-# install ubuntu-core-initramfs here so the repack-kernel.sh uses the version of
+# install ubuntu-core-initramfs here so the repack-kernel uses the version of
 # ubuntu-core-initramfs we built here
 apt install -yqq "$SETUPDIR"/ubuntu-core-initramfs*.deb
 
 # now download snap dependencies 
-# TODO:UC20: when should some of these things start tracking stable ?
-snap download pc-kernel --channel=20/edge --basename=upstream-pc-kernel
-snap download pc --channel=20/edge --basename=upstream-pc-gadget
-snap download core20 --channel=edge --basename=upstream-core20
+# TODO:UC22: when should some of these things start tracking stable ?
+snap download pc-kernel --channel=22/$SNAP_BRANCH --basename=upstream-pc-kernel
+snap download pc --channel=22/$SNAP_BRANCH --basename=upstream-pc-gadget
+snap download core22 --channel=$SNAP_BRANCH --basename=upstream-core22
+
 # note that we currently use snap-bootstrap from the snapd deb package, but we 
 # could instead copy a potentially more up-to-date version out of the snapd snap
 # but we don't currently do that as it doesn't represent what 
 # ubuntu-core-initramfs would actually used if that package was built from LP
-snap download snapd --channel=edge --basename=upstream-snapd
+snap download snapd --channel=$SNAP_BRANCH --basename=upstream-snapd
 
 # next repack / modify the snaps we use in the image, we do this for a few 
 # reasons:
@@ -183,17 +189,17 @@ rm -r $snapddir
 
 # extract the kernel snap, including extracting the initrd from the kernel.efi
 kerneldir=/tmp/kernel-workdir
-"$TESTSLIB/repack-kernel.sh" extract upstream-pc-kernel.snap $kerneldir
+"$EXTTESTSLIB/repack-kernel" extract upstream-pc-kernel.snap $kerneldir
 
 # copy the skeleton from our installed ubuntu-core-initramfs into the initrd 
 # skeleton for the kernel snap
 cp -ar /usr/lib/ubuntu-core-initramfs/main/* "$kerneldir/skeleton/main"
 
 # repack the initrd into the kernel.efi
-"$TESTSLIB/repack-kernel.sh" prepare $kerneldir
+"$EXTTESTSLIB/repack-kernel" prepare $kerneldir
 
 # repack the kernel snap itself
-"$TESTSLIB/repack-kernel.sh" pack $kerneldir --filename=pc-kernel.snap
+"$EXTTESTSLIB/repack-kernel" pack $kerneldir --filename=pc-kernel.snap
 rm -rf $kerneldir
 
 # penultimately, re-pack the gadget snap with snakeoil signed shim
@@ -208,14 +214,14 @@ sbsign --key "$SNAKE_OIL_DIR/PkKek-1-snakeoil.key" --cert "$SNAKE_OIL_DIR/PkKek-
 snap pack --filename=pc-gadget.snap "$gadgetdir"
 rm -rf "$gadgetdir"
 
-# finally build the uc20 image
+# finally build the uc22 image
 ubuntu-image snap \
     -i 8G \
-    --snap upstream-core20.snap \
+    --snap upstream-core22.snap \
     --snap snapd.snap \
     --snap pc-kernel.snap \
     --snap pc-gadget.snap \
-    ubuntu-core-20-amd64-dangerous.model
+    ubuntu-core-22-amd64-dangerous.model
 
 # setup some data we will inject into ubuntu-seed partition of the image above
 # that snapd.spread-tests-run-mode-tweaks.service will ingest
@@ -256,27 +262,10 @@ echo "ubuntu:x:1001:" >> /root/test-var/lib/extrausers/group
 # add the test user to the systemd-journal group if it isn't already
 sed -r -i -e 's/^systemd-journal:x:([0-9]+):$/systemd-journal:x:\1:test/' /root/test-etc/group
 
-# mount fresh image and add all our SPREAD_PROJECT data
-kpartx -avs pc.img
-# losetup --list --noheadings returns:
-# /dev/loop1   0 0  1  1 /var/lib/snapd/snaps/ohmygiraffe_3.snap                0     512
-# /dev/loop57  0 0  1  1 /var/lib/snapd/snaps/http_25.snap                      0     512
-# /dev/loop19  0 0  1  1 /var/lib/snapd/snaps/test-snapd-netplan-apply_75.snap  0     512
-devloop=$(losetup --list --noheadings | grep pc.img | awk '{print $1}')
-dev=$(basename "$devloop")
-
-# mount it so we can use it now
-mkdir -p /mnt
-mount "/dev/mapper/${dev}p2" /mnt
-
-# add the data that snapd.spread-tests-run-mode-tweaks.service reads to the 
-# mounted partition
-tar -c -z \
-    -f /mnt/run-mode-overlay-data.tar.gz \
+# tar the runmode tweaks and copy them to the image
+tar -c -z -f run-mode-overlay-data.tar.gz \
     /root/test-etc /root/test-var/lib/extrausers
-
-# tear down the mounts
-umount /mnt
-kpartx -d pc.img
+partoffset=$(fdisk -lu pc.img | awk '/EFI System$/ {print $2}')
+mcopy -i pc.img@@$(($partoffset * 512)) run-mode-overlay-data.tar.gz ::run-mode-overlay-data.tar.gz
 
 # the image is now ready to be booted

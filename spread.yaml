@@ -5,7 +5,8 @@ environment:
   PROJECT_PATH: $SETUPDIR
   PATH: $PATH:$PROJECT_PATH/tests/bin
   TESTSLIB: $PROJECT_PATH/tests/lib
-  TESTSTOOLS: $PROJECT_PATH/tests/lib/tools
+  EXTTESTSLIB: $TESTSLIB/external/snapd-testing-tools/tools
+  SNAP_BRANCH: "edge" # stable/edge/beta
   # TODO: are these vars needed still?
   LANG: "C.UTF-8"
   LANGUAGE: "en"
@@ -15,23 +16,30 @@ backends:
     type: google
     key: '$(HOST: echo "$SPREAD_GOOGLE_KEY")'
     location: snapd-spread/us-east1-b
-    plan: n1-standard-2
+    plan: n2-standard-2
     halt-timeout: 2h
     systems:
-      - ubuntu-20.04-64:
-          image: ubuntu-2004-64-virt-enabled
+      - ubuntu-22.04-64:
+          image: ubuntu-2204-64-virt-enabled
           storage: 20G
 
   qemu-nested:
     type: qemu
-    # TODO:UC20: uc20 needs 2G or grub will not loopback the kernel snap
+    # TODO:UC22: uc22 needs 2G or grub will not loopback the kernel snap
     #            we use nested VM's, so use 4G for the host until we can boot
-    #            uc20 with less RAM
+    #            uc22 with less RAM
     memory: 4G
     systems:
-      - ubuntu-20.04-64:
+      - ubuntu-22.04-64:
           username: ubuntu
           password: ubuntu
+
+  lxd-nested:
+    type: lxd
+    container-profiles: coreinitrd
+    systems:
+      - ubuntu-22.04:
+          image: ucspread22
 
 path: /home/core-initrd
 
@@ -74,8 +82,8 @@ prepare: |
   type REBOOT | tail -n +2 >> "$TESTSLIB"/spread-funcs.sh
   unset REBOOT
 
-  # prepare common uc20 image setup by repacking snaps, etc
-  "$TESTSLIB"/prepare-uc20.sh
+  # prepare common uc22 image setup by repacking snaps, etc
+  "$TESTSLIB"/prepare-uc22.sh
 
 restore-each: |
   # delete the nested VM image after each task finishes so we don't use too much
@@ -96,9 +104,9 @@ suites:
   tests/spread/:
     summary: Main spread tests
     environment:
-      # since we are only testing uc20 here, disable kvm unless the env
+      # since we are only testing uc22 here, disable kvm unless the env
       # specifically knows kvm works and sets this to true
-      # kvm specifically does not work on GCE with focal L1 VM and focal (UC20)
+      # kvm specifically does not work on GCE with focal L1 VM and focal (UC22)
       # L2 VM's because the L2 VM intermittently and randomly hangs and GCE's
       # hypervisor will restart the VM, there is not currently a known
       # workaround
