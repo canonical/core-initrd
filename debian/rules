@@ -75,7 +75,7 @@ override_dh_auto_configure:
       -Ddefault-dnssec=no \
       -Dselinux=true \
       -Ddefault-kill-user-processes=false \
-      -Ddefault-hierarchy=hybrid \
+      -Ddefault-hierarchy=unified \
       -Ddefault-locale=C.UTF-8 \
       -Dnobody-user=nobody \
       -Dnobody-group=nogroup \
