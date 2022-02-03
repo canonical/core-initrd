@@ -1,5 +1,7 @@
 [Unit]
 Before=initrd-cleanup.target
+DefaultDependencies=no
+After=the-tool.service
 [Mount]
 What=/run/mnt/base
 Type=none
