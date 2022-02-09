@@ -1,0 +1,14 @@
+[Unit]
+Description=Set gadget default configuration
+ConditionPathExists=!/run/mnt/data/system-data/_writable_defaults/.done
+ConditionPathExists=/run/mnt/data/system-data/_writable_defaults
+After=initrd-root-fs.service
+Before=initrd-fs.service
+RequiresMountsFor=/run/mnt/data
+
+[Service]
+Type=oneshot
+ExecStart=-/bin/mkdir -p /run/mnt/data/system-data
+ExecStart=/bin/cp -aT /run/mnt/data/system-data/_writable_defaults /sysroot/writable/system-data
+ExecStart=/bin/touch /run/mnt/data/system-data/_writable_defaults/.done
+RemainAfterExit=true

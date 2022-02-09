@@ -6,7 +6,8 @@ After=detect-uc-sysroot.service
 Wants=detect-uc-sysroot.service
 After=detect-classic-sysroot.service
 Wants=detect-classic-sysroot.service
-After=run-mnt-base.mount
+
+Wants=snap-initramfs-mounts.service
 After=snap-initramfs-mounts.service
 
 AssertPathIsSymbolicLink=/run/mnt/sysroot
