@@ -9,8 +9,8 @@ After=sysroot.mount
 After=sysroot-writable.mount
 Requires=sysroot.mount
 Requires=sysroot-writable.mount
-Wants=the-tool.service
-After=the-tool.service
+Wants=snap-initramfs-mounts.service
+After=snap-initramfs-mounts.service
 
 [Service]
 Type=oneshot

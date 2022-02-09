@@ -1,4 +1,5 @@
 [Unit]
+Description=Mount initial filesystems
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly
 
@@ -9,6 +10,6 @@ Before=initrd-root-device.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/lib/the-tool
+ExecStart=/usr/lib/snapd/snap-bootstrap initramfs-mounts
 StandardOutput=journal+console
 StandardError=journal+console

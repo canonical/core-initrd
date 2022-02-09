@@ -7,7 +7,7 @@ After=sysroot.mount
 
 After=run-mnt-data.mount
 After=run-mnt-base.mount
-After=the-tool.service
+After=snap-initramfs-mounts.service
 
 [Mount]
 What=/run/mnt/data
