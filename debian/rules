@@ -160,6 +160,8 @@ override_dh_auto_install:
 		usr/lib/systemd/user-preset \
 		usr/lib/systemd/network \
 		usr/lib/systemd/system-generators/systemd-gpt-auto-generator \
+		usr/lib/systemd/system/tmp.mount \
+		usr/lib/systemd/system/local-fs.target.wants/tmp.mount \
 		usr/lib/sysusers.d \
 		usr/lib/*/pkgconfig \
 		usr/include \
