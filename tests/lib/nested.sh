@@ -174,6 +174,9 @@ start_nested_core_vm_unit(){
 
     # Wait until ssh is ready
     if ! wait_for_ssh "${SVC_NAME}"; then
+        echo "===== SERIAL PORT OUTPUT ======" 1>&2
+        cat "${WORK_DIR}/serial.log" 1>&2
+        echo "===== END OF SERIAL PORT OUTPUT ======" 1>&2
         return 1
     fi
 }
