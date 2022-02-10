@@ -1,3 +1,22 @@
+ubuntu-core-initramfs (53) jammy; urgency=medium
+
+  [ Philip Meulengracht ]
+  * Add spread and CI testing
+
+  [ Valentin David ]
+  * Rework dependencies of mount units
+  * Match configuration of default-hierarchy for systemd with jammy package
+  * Simplify dependencies of the-tool.service
+  * recovery-chooser-trigger.service: Survive the switch root
+  * Make sure tmp.mount is stopped before switch
+  * Persist device mapper devices in udev database
+  * Remove stateless re-execution work-around
+
+  [ Dimitri John Ledkov ]
+  * features: enabled server feature on x86_64 and any generic kernels
+
+ -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Thu, 10 Feb 2022 16:17:59 +0100
+
 ubuntu-core-initramfs (52) jammy; urgency=medium
 
   * Initial jammy release
