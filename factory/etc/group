@@ -48,9 +48,10 @@ systemd-network:x:109:
 systemd-resolve:x:110:
 systemd-bus-proxy:x:111:
 kvm:x:112:
-docker:x:113:
 syslog:x:114:
 pkcs11:x:115:
 tss:x:116:
 input:x:107:
 render:x:117:
+sgx:x:119:
+_ssh:x:118:
