@@ -5,7 +5,6 @@ environment:
   PROJECT_PATH: $SETUPDIR
   PATH: $PATH:$PROJECT_PATH/tests/bin
   TESTSLIB: $PROJECT_PATH/tests/lib
-  EXTTESTSLIB: $TESTSLIB/external/snapd-testing-tools/tools
   SNAP_BRANCH: "edge" # stable/edge/beta
   # TODO: are these vars needed still?
   LANG: "C.UTF-8"

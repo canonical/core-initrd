@@ -188,19 +188,23 @@ rm -r $snapddir
 # next re-pack the kernel snap with this version of ubuntu-core-initramfs
 
 # extract the kernel snap, including extracting the initrd from the kernel.efi
-kerneldir=/tmp/kernel-workdir
-"$EXTTESTSLIB/repack-kernel" extract upstream-pc-kernel.snap $kerneldir
+kerneldir="$(mktemp --tmpdir -d kernel-workdirXXXXXXXXXX)"
+trap 'rm -rf "${kerneldir}"' EXIT
 
-# copy the skeleton from our installed ubuntu-core-initramfs into the initrd 
-# skeleton for the kernel snap
-cp -ar /usr/lib/ubuntu-core-initramfs/main/* "$kerneldir/skeleton/main"
+unsquashfs -f -d "${kerneldir}" upstream-pc-kernel.snap
+(
+    cd "${kerneldir}"
+    config="$(echo config-*)"
+    kernelver="${config#config-}"
+    objcopy -O binary -j .linux kernel.efi kernel.img-"${kernelver}"
+    ubuntu-core-initramfs create-initrd --kerneldir modules/"${kernelver}" --kernelver "${kernelver}" --firmwaredir firmware --output ubuntu-core-initramfs.img
+    ubuntu-core-initramfs create-efi --initrd ubuntu-core-initramfs.img --kernel kernel.img --output kernel.efi --kernelver "${kernelver}"
+    mv "kernel.efi-${kernelver}" kernel.efi
+    rm kernel.img-"${kernelver}"
+    rm ubuntu-core-initramfs.img-"${kernelver}"
+)
 
-# repack the initrd into the kernel.efi
-"$EXTTESTSLIB/repack-kernel" prepare $kerneldir
-
-# repack the kernel snap itself
-"$EXTTESTSLIB/repack-kernel" pack $kerneldir --filename=pc-kernel.snap
-rm -rf $kerneldir
+snap pack --filename=pc-kernel.snap "${kerneldir}"
 
 # penultimately, re-pack the gadget snap with snakeoil signed shim
 
