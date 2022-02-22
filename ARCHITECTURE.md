@@ -1,10 +1,11 @@
 # Core-initrd architecture
 
-In UC20, initrd is migrated from script based implementation (UC16/18)
-to **systemd based**. Here we do a high-level description of UC20's
-core-initrd architecture. The repository contains a native debian
-source package which contains different files and helper scripts that
-are used to build an initramfs that is used in Ubuntu Core systems.
+In UC20 and further, initrd is migrated from script based
+implementation (UC16/18) to **systemd based**. Here we do a high-level
+description of UC's core-initrd architecture. The repository contains
+a native debian source package which contains different files and
+helper scripts that are used to build an initramfs that is used in
+Ubuntu Core systems.
 
 This package is meant to be installed in a classic Ubuntu system
 jointly with a kernel so an initrd and a `kernel.efi` binary are
@@ -54,12 +55,31 @@ In more detail,
   used by the spread tests.
 - `tests/` contains spread tests that are run by CI/CD
 - `vendor/` contains a vendordized version of systemd with some
-  modifications compared to the one in Ubuntu 20.04. The additional
+  modifications compared to the one in Ubuntu classic. The additional
   patches are
     - `ubuntu-core-initramfs-clock-util-read-timestamp-from-usr-lib-clock-epoch.patch`,
        which was taken from upstream
     - `ubuntu-core-initramfs-fix-default.target`, that changes the default
       target for the initrd
+
+### Updating the systemd fork
+
+The systemd sources are the same as in the Ubuntu debian package,
+although further modified with additional patches and compiled with
+slightly different configuration options. The sources can be updated
+by using git subtree to import new versions from the Ubuntu debian
+package auto-import repo. To do that:
+
+    $ git subtree pull --prefix vendor/systemd/ https://git.launchpad.net/ubuntu/+source/systemd ubuntu/<release> --squash
+
+Where release could be focal, jammy, etc. Note that when a development
+version is released we will probably wnat `ubuntu/<release>-updates`
+branch instead.
+
+When moving to a newer Ubuntu release, the way to update is to remove
+the old sources in a commit and then import with something like:
+
+    $ git subtree add --prefix vendor/systemd https://git.launchpad.net/ubuntu/+source/systemd ubuntu/<new_release> --squash
 
 ## Typical boot sequence 
 
