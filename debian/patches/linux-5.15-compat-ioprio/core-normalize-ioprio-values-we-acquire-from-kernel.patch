@@ -1,0 +1,28 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 24 Nov 2021 15:39:43 +0100
+Subject: core: normalize ioprio values we acquire from kernel
+
+Linux 5.15 broke API in ioprio_get(): instead of returning
+IOPRIO_CLASS_NONE when that's set it now returns IOPRIO_CLASS_BE, which
+is what this actually is (the former is just an alias for the latter
+with a priority value of 4).
+
+Let's hide the differences between old and new kernels here, and always
+normalize to what the new kernels do.
+---
+ src/core/execute.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/core/execute.c b/src/core/execute.c
+index e045d2e..9ac61fb 100644
+--- a/src/core/execute.c
++++ b/src/core/execute.c
+@@ -5772,7 +5772,7 @@ int exec_context_get_effective_ioprio(const ExecContext *c) {
+         if (p < 0)
+                 return IOPRIO_DEFAULT_CLASS_AND_PRIO;
+ 
+-        return p;
++        return ioprio_normalize(p);
+ }
+ 
+ bool exec_context_get_effective_mount_apivfs(const ExecContext *c) {

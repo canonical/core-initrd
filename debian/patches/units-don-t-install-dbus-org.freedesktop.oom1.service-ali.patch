@@ -1,0 +1,32 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Wed, 12 Jan 2022 08:16:45 +0100
+Subject: units: don't install dbus-org.freedesktop.oom1.service alias
+
+The systemd-oomd.service unit contains
+
+[Install]
+WantedBy=multi-user.target
+Alias=dbus-org.freedesktop.oom1.service
+
+which means the symlink is supposed to be created dynamically when the
+service is enabled.
+
+(cherry picked from commit 794aa5f57f616d1fd3d0ad803f5e7594c33391a0)
+---
+ units/meson.build | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/units/meson.build b/units/meson.build
+index a9bf28f..3184433 100644
+--- a/units/meson.build
++++ b/units/meson.build
+@@ -221,8 +221,7 @@ in_units = [
+         ['systemd-networkd.service',             'ENABLE_NETWORKD'],
+         ['systemd-networkd-wait-online.service', 'ENABLE_NETWORKD'],
+         ['systemd-nspawn@.service',              ''],
+-        ['systemd-oomd.service',                 'ENABLE_OOMD',
+-         'dbus-org.freedesktop.oom1.service'],
++        ['systemd-oomd.service',                 'ENABLE_OOMD'],
+         ['systemd-portabled.service',            'ENABLE_PORTABLED',
+          'dbus-org.freedesktop.portable1.service'],
+         ['systemd-userdbd.service',              'ENABLE_USERDB'],

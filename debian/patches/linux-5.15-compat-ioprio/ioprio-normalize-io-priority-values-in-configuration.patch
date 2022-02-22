@@ -1,0 +1,68 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 24 Nov 2021 15:38:10 +0100
+Subject: ioprio: normalize io priority values in configuration
+
+Let's always say IOPRIO_CLASS_BE when IOPRIO_CALSS_NONE is set.
+---
+ src/basic/ioprio-util.h  | 5 +++++
+ src/core/dbus-execute.c  | 4 ++--
+ src/core/load-fragment.c | 4 ++--
+ 3 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/src/basic/ioprio-util.h b/src/basic/ioprio-util.h
+index 0d3f70a..b8c9b7d 100644
+--- a/src/basic/ioprio-util.h
++++ b/src/basic/ioprio-util.h
+@@ -20,3 +20,8 @@ int ioprio_parse_priority(const char *s, int *ret);
+ /* IOPRIO_CLASS_NONE with any prio value is another way to say IOPRIO_CLASS_BE with level 4. Encode that in a
+  * proper macro. */
+ #define IOPRIO_DEFAULT_CLASS_AND_PRIO ioprio_prio_value(IOPRIO_CLASS_BE, 4)
++
++static inline int ioprio_normalize(int v) {
++        /* Converts IOPRIO_CLASS_NONE to what it actually means */
++        return ioprio_prio_class(v) == IOPRIO_CLASS_NONE ? IOPRIO_DEFAULT_CLASS_AND_PRIO : v;
++}
+diff --git a/src/core/dbus-execute.c b/src/core/dbus-execute.c
+index 4ba7fae..c1b425e 100644
+--- a/src/core/dbus-execute.c
++++ b/src/core/dbus-execute.c
+@@ -2599,7 +2599,7 @@ int bus_exec_context_set_transient_property(
+                         if (r < 0)
+                                 return r;
+ 
+-                        c->ioprio = ioprio_prio_value(q, ioprio_prio_data(c->ioprio));
++                        c->ioprio = ioprio_normalize(ioprio_prio_value(q, ioprio_prio_data(c->ioprio)));
+                         c->ioprio_set = true;
+ 
+                         unit_write_settingf(u, flags, name, "IOSchedulingClass=%s", s);
+@@ -2618,7 +2618,7 @@ int bus_exec_context_set_transient_property(
+                         return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid IO scheduling priority: %i", p);
+ 
+                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
+-                        c->ioprio = ioprio_prio_value(ioprio_prio_class(c->ioprio), p);
++                        c->ioprio = ioprio_normalize(ioprio_prio_value(ioprio_prio_class(c->ioprio), p));
+                         c->ioprio_set = true;
+ 
+                         unit_write_settingf(u, flags, name, "IOSchedulingPriority=%i", p);
+diff --git a/src/core/load-fragment.c b/src/core/load-fragment.c
+index b249d03..a09a707 100644
+--- a/src/core/load-fragment.c
++++ b/src/core/load-fragment.c
+@@ -1281,7 +1281,7 @@ int config_parse_exec_io_class(const char *unit,
+                 return 0;
+         }
+ 
+-        c->ioprio = ioprio_prio_value(x, ioprio_prio_data(c->ioprio));
++        c->ioprio = ioprio_normalize(ioprio_prio_value(x, ioprio_prio_data(c->ioprio)));
+         c->ioprio_set = true;
+ 
+         return 0;
+@@ -1318,7 +1318,7 @@ int config_parse_exec_io_priority(const char *unit,
+                 return 0;
+         }
+ 
+-        c->ioprio = ioprio_prio_value(ioprio_prio_class(c->ioprio), i);
++        c->ioprio = ioprio_normalize(ioprio_prio_value(ioprio_prio_class(c->ioprio), i));
+         c->ioprio_set = true;
+ 
+         return 0;

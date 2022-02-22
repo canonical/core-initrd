@@ -51,6 +51,7 @@
 #include "env-file.h"
 #include "env-util.h"
 #include "errno-list.h"
+#include "escape.h"
 #include "execute.h"
 #include "exit-status.h"
 #include "fd-util.h"
@@ -1152,7 +1153,7 @@ static int setup_pam(
                 uid_t uid,
                 gid_t gid,
                 const char *tty,
-                char ***env,
+                char ***env, /* updated on success */
                 const int fds[], size_t n_fds) {
 
 #if HAVE_PAM
@@ -1163,10 +1164,11 @@ static int setup_pam(
         };
 
         _cleanup_(barrier_destroy) Barrier barrier = BARRIER_NULL;
+        _cleanup_strv_free_ char **e = NULL;
         pam_handle_t *handle = NULL;
         sigset_t old_ss;
         int pam_code = PAM_SUCCESS, r;
-        char **nv, **e = NULL;
+        char **nv;
         bool close_session = false;
         pid_t pam_pid = 0, parent_pid;
         int flags = 0;
@@ -1237,8 +1239,7 @@ static int setup_pam(
                 goto fail;
         }
 
-        /* Block SIGTERM, so that we know that it won't get lost in
-         * the child */
+        /* Block SIGTERM, so that we know that it won't get lost in the child */
 
         assert_se(sigprocmask_many(SIG_BLOCK, &old_ss, SIGTERM, -1) >= 0);
 
@@ -1250,18 +1251,16 @@ static int setup_pam(
         if (r == 0) {
                 int sig, ret = EXIT_PAM;
 
-                /* The child's job is to reset the PAM session on
-                 * termination */
+                /* The child's job is to reset the PAM session on termination */
                 barrier_set_role(&barrier, BARRIER_CHILD);
 
                 /* Make sure we don't keep open the passed fds in this child. We assume that otherwise only
                  * those fds are open here that have been opened by PAM. */
                 (void) close_many(fds, n_fds);
 
-                /* Drop privileges - we don't need any to pam_close_session
-                 * and this will make PR_SET_PDEATHSIG work in most cases.
-                 * If this fails, ignore the error - but expect sd-pam threads
-                 * to fail to exit normally */
+                /* Drop privileges - we don't need any to pam_close_session and this will make
+                 * PR_SET_PDEATHSIG work in most cases.  If this fails, ignore the error - but expect sd-pam
+                 * threads to fail to exit normally */
 
                 r = maybe_setgroups(0, NULL);
                 if (r < 0)
@@ -1273,20 +1272,16 @@ static int setup_pam(
 
                 (void) ignore_signals(SIGPIPE);
 
-                /* Wait until our parent died. This will only work if
-                 * the above setresuid() succeeds, otherwise the kernel
-                 * will not allow unprivileged parents kill their privileged
-                 * children this way. We rely on the control groups kill logic
-                 * to do the rest for us. */
+                /* Wait until our parent died. This will only work if the above setresuid() succeeds,
+                 * otherwise the kernel will not allow unprivileged parents kill their privileged children
+                 * this way. We rely on the control groups kill logic to do the rest for us. */
                 if (prctl(PR_SET_PDEATHSIG, SIGTERM) < 0)
                         goto child_finish;
 
-                /* Tell the parent that our setup is done. This is especially
-                 * important regarding dropping privileges. Otherwise, unit
-                 * setup might race against our setresuid(2) call.
+                /* Tell the parent that our setup is done. This is especially important regarding dropping
+                 * privileges. Otherwise, unit setup might race against our setresuid(2) call.
                  *
-                 * If the parent aborted, we'll detect this below, hence ignore
-                 * return failure here. */
+                 * If the parent aborted, we'll detect this below, hence ignore return failure here. */
                 (void) barrier_place(&barrier);
 
                 /* Check if our parent process might already have died? */
@@ -1323,25 +1318,27 @@ static int setup_pam(
                 ret = 0;
 
         child_finish:
-                pam_end(handle, pam_code | flags);
+                /* NB: pam_end() when called in child processes should set PAM_DATA_SILENT to let the module
+                 * know about this. See pam_end(3) */
+                (void) pam_end(handle, pam_code | flags | PAM_DATA_SILENT);
                 _exit(ret);
         }
 
         barrier_set_role(&barrier, BARRIER_PARENT);
 
-        /* If the child was forked off successfully it will do all the
-         * cleanups, so forget about the handle here. */
+        /* If the child was forked off successfully it will do all the cleanups, so forget about the handle
+         * here. */
         handle = NULL;
 
         /* Unblock SIGTERM again in the parent */
         assert_se(sigprocmask(SIG_SETMASK, &old_ss, NULL) >= 0);
 
-        /* We close the log explicitly here, since the PAM modules
-         * might have opened it, but we don't want this fd around. */
+        /* We close the log explicitly here, since the PAM modules might have opened it, but we don't want
+         * this fd around. */
         closelog();
 
-        /* Synchronously wait for the child to initialize. We don't care for
-         * errors as we cannot recover. However, warn loudly if it happens. */
+        /* Synchronously wait for the child to initialize. We don't care for errors as we cannot
+         * recover. However, warn loudly if it happens. */
         if (!barrier_place_and_sync(&barrier))
                 log_error("PAM initialization failed");
 
@@ -1358,12 +1355,10 @@ fail:
                 if (close_session)
                         pam_code = pam_close_session(handle, flags);
 
-                pam_end(handle, pam_code | flags);
+                (void) pam_end(handle, pam_code | flags);
         }
 
-        strv_free(e);
         closelog();
-
         return r;
 #else
         return 0;
@@ -3602,8 +3597,6 @@ static int compile_suggested_paths(const ExecContext *c, const ExecParameters *p
         return 0;
 }
 
-static char *exec_command_line(char **argv);
-
 static int exec_parameters_get_cgroup_path(const ExecParameters *params, char **ret) {
         bool using_subcgroup;
         char *p;
@@ -3806,7 +3799,7 @@ static int exec_child(
                 const char *vc = params->confirm_spawn;
                 _cleanup_free_ char *cmdline = NULL;
 
-                cmdline = exec_command_line(command->argv);
+                cmdline = quote_command_line(command->argv);
                 if (!cmdline) {
                         *exit_status = EXIT_MEMORY;
                         return log_oom();
@@ -4059,13 +4052,17 @@ static int exec_child(
                 }
         }
 
-        if (context->utmp_id)
+        if (context->utmp_id) {
+                const char *line = context->tty_path ?
+                        (path_startswith(context->tty_path, "/dev/") ?: context->tty_path) :
+                        NULL;
                 utmp_put_init_process(context->utmp_id, getpid_cached(), getsid(0),
-                                      context->tty_path,
+                                      line,
                                       context->utmp_mode == EXEC_UTMP_INIT  ? INIT_PROCESS :
                                       context->utmp_mode == EXEC_UTMP_LOGIN ? LOGIN_PROCESS :
                                       USER_PROCESS,
                                       username);
+        }
 
         if (uid_is_valid(uid)) {
                 r = chown_terminal(STDIN_FILENO, uid);
@@ -4357,7 +4354,7 @@ static int exec_child(
 
                 if (fd >= 0) {
                         r = mac_selinux_get_child_mls_label(fd, executable, context->selinux_context, &mac_selinux_context_net);
-                        if (r < 0) {
+                        if (r < 0 && !context->selinux_context_ignore) {
                                 *exit_status = EXIT_SELINUX_CONTEXT;
                                 return log_unit_error_errno(unit, r, "Failed to determine SELinux context: %m");
                         }
@@ -4404,7 +4401,7 @@ static int exec_child(
                  * process. This is the latest place before dropping capabilities. Other MAC context are set later. */
                 if (use_smack) {
                         r = setup_smack(context, executable_fd);
-                        if (r < 0) {
+                        if (r < 0 && !context->smack_process_label_ignore) {
                                 *exit_status = EXIT_SMACK_PROCESS_LABEL;
                                 return log_unit_error_errno(unit, r, "Failed to set SMACK process label: %m");
                         }
@@ -4491,7 +4488,7 @@ static int exec_child(
 
                         if (exec_context) {
                                 r = setexeccon(exec_context);
-                                if (r < 0) {
+                                if (r < 0 && !context->selinux_context_ignore) {
                                         *exit_status = EXIT_SELINUX_CONTEXT;
                                         return log_unit_error_errno(unit, r, "Failed to change SELinux context to %s: %m", exec_context);
                                 }
@@ -4652,12 +4649,15 @@ static int exec_child(
         if (DEBUG_LOGGING) {
                 _cleanup_free_ char *line = NULL;
 
-                line = exec_command_line(final_argv);
-                if (line)
-                        log_unit_struct(unit, LOG_DEBUG,
-                                        "EXECUTABLE=%s", executable,
-                                        LOG_UNIT_MESSAGE(unit, "Executing: %s", line),
-                                        LOG_UNIT_INVOCATION_ID(unit));
+                line = quote_command_line(final_argv);
+                if (!line) {
+                        *exit_status = EXIT_MEMORY;
+                        return log_oom();
+                }
+
+                log_unit_struct(unit, LOG_DEBUG,
+                                "EXECUTABLE=%s", executable,
+                                LOG_UNIT_MESSAGE(unit, "Executing: %s", line));
         }
 
         if (exec_fd >= 0) {
@@ -4741,7 +4741,7 @@ int exec_spawn(Unit *unit,
         if (r < 0)
                 return log_unit_error_errno(unit, r, "Failed to load environment files: %m");
 
-        line = exec_command_line(command->argv);
+        line = quote_command_line(command->argv);
         if (!line)
                 return log_oom();
 
@@ -5956,46 +5956,6 @@ void exec_status_dump(const ExecStatus *s, FILE *f, const char *prefix) {
                         prefix, s->status);
 }
 
-static char *exec_command_line(char **argv) {
-        size_t k;
-        char *n, *p, **a;
-        bool first = true;
-
-        assert(argv);
-
-        k = 1;
-        STRV_FOREACH(a, argv)
-                k += strlen(*a)+3;
-
-        n = new(char, k);
-        if (!n)
-                return NULL;
-
-        p = n;
-        STRV_FOREACH(a, argv) {
-
-                if (!first)
-                        *(p++) = ' ';
-                else
-                        first = false;
-
-                if (strpbrk(*a, WHITESPACE)) {
-                        *(p++) = '\'';
-                        p = stpcpy(p, *a);
-                        *(p++) = '\'';
-                } else
-                        p = stpcpy(p, *a);
-
-        }
-
-        *p = 0;
-
-        /* FIXME: this doesn't really handle arguments that have
-         * spaces and ticks in them */
-
-        return n;
-}
-
 static void exec_command_dump(ExecCommand *c, FILE *f, const char *prefix) {
         _cleanup_free_ char *cmd = NULL;
         const char *prefix2;
@@ -6006,7 +5966,7 @@ static void exec_command_dump(ExecCommand *c, FILE *f, const char *prefix) {
         prefix = strempty(prefix);
         prefix2 = strjoina(prefix, "\t");
 
-        cmd = exec_command_line(c->argv);
+        cmd = quote_command_line(c->argv);
         fprintf(f,
                 "%sCommand Line: %s\n",
                 prefix, cmd ? cmd : strerror_safe(ENOMEM));

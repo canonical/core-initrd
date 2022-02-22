@@ -283,6 +283,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 .name = "@default",
                 .help = "System calls that are always permitted",
                 .value =
+                "arch_prctl\0"      /* Used during platform-specific initialization by ld-linux.so. */
                 "brk\0"
                 "cacheflush\0"
                 "clock_getres\0"
@@ -324,6 +325,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "membarrier\0"
                 "mmap\0"
                 "mmap2\0"
+                "mprotect\0"
                 "munmap\0"
                 "nanosleep\0"
                 "pause\0"
@@ -711,7 +713,6 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 .name = "@process",
                 .help = "Process control, execution, namespacing operations",
                 .value =
-                "arch_prctl\0"
                 "capget\0"      /* Able to query arbitrary processes */
                 "clone\0"
                 "clone3\0"
@@ -864,7 +865,6 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "ioprio_get\0"
                 "kcmp\0"
                 "madvise\0"
-                "mprotect\0"
                 "mremap\0"
                 "name_to_handle_at\0"
                 "oldolduname\0"

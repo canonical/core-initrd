@@ -1,0 +1,25 @@
+From: Lukas Märdian <slyon@ubuntu.com>
+Date: Wed, 16 Feb 2022 16:57:32 +0200
+Subject: Deny-list TEST-29-PORTABLE and TEST-50-DISSECT
+
+---
+ test/TEST-29-PORTABLE/deny-list-upstream-ci | 1 +
+ test/TEST-50-DISSECT/deny-list-upstream-ci | 1 +
+ 2 files changed, 2 insertion(+)
+ create mode 100644 test/TEST-29-PORTABLE/deny-list-upstream-ci
+ create mode 100644 test/TEST-50-DISSECT/deny-list-upstream-ci
+
+diff --git a/test/TEST-29-PORTABLE/deny-list-upstream-ci b/test/TEST-29-PORTABLE/deny-list-upstream-ci
+new file mode 100644
+index 0000000..7281c38
+--- /dev/null
++++ b/test/TEST-29-PORTABLE/deny-list-upstream-ci
+@@ -0,0 +1 @@
++# Fixed in v250+ and Linux 5.15+, should be re-enabled after upgrading: https://github.com/systemd/systemd/pull/20257
+diff --git a/test/TEST-50-DISSECT/deny-list-upstream-ci b/test/TEST-50-DISSECT/deny-list-upstream-ci
+new file mode 100644
+index 0000000..7281c38
+--- /dev/null
++++ b/test/TEST-50-DISSECT/deny-list-upstream-ci
+@@ -0,0 +1 @@
++# Fixed in v250+ and Linux 5.15+, should be re-enabled after upgrading: https://github.com/systemd/systemd/pull/20257

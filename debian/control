@@ -8,7 +8,7 @@ Uploaders: Michael Biebl <biebl@debian.org>,
            Sjoerd Simons <sjoerd@debian.org>,
            Martin Pitt <mpitt@debian.org>,
            Felipe Sateler <fsateler@debian.org>
-Standards-Version: 4.5.1
+Standards-Version: 4.6.0
 Rules-Requires-Root: no
 Vcs-Git: https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd
 Vcs-Browser:  https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd
@@ -67,7 +67,7 @@ Architecture: linux-any
 Multi-Arch: foreign
 Section: admin
 Priority: important
-Recommends: dbus,
+Recommends: default-dbus-system-bus | dbus-system-bus,
             networkd-dispatcher,
             systemd-timesyncd | time-daemon,
 Suggests: systemd-container,
@@ -106,11 +106,9 @@ Multi-Arch: foreign
 Section: admin
 Priority: important
 Conflicts: sysvinit-core,
-           upstart (<< 1.13.2-0ubuntu10~),
            file-rc,
            systemd-shim,
 Replaces: sysvinit-core,
-          upstart (<< 1.13.2-0ubuntu10~),
 Pre-Depends: systemd
 Depends: ${shlibs:Depends},
          systemd (= ${binary:Version}),
@@ -140,7 +138,7 @@ Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd,
-         dbus
+         default-dbus-system-bus | dbus-system-bus
 Recommends: libnss-mymachines,
 Description: systemd container/nspawn tools
  This package provides systemd's tools for nspawn and container/VM management:
@@ -224,7 +222,7 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd (= ${binary:Version}),
          libpam-runtime (>= 1.0.1-6),
-         dbus,
+         default-dbus-system-bus | dbus-system-bus,
          systemd-sysv
 Provides: logind (= ${binary:Version}), default-logind (= ${binary:Version})
 Description: system and service manager - PAM module
@@ -340,7 +338,6 @@ Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
-         dpkg (>= 1.19.3) | systemd-sysv,
          libudev1 (= ${binary:Version}),
          util-linux (>= 2.27.1),
          s390-tools (>> 1.6.2) [s390],
@@ -407,9 +404,9 @@ Section: admin
 Architecture: linux-any
 Priority: optional
 Conflicts: systemd-sysusers,
-           systemd
+           systemd (<< 249.3-3)
 Replaces: systemd-sysusers,
-          systemd
+          systemd (<< 249.3-3)
 Provides: systemd-sysusers (= ${binary:Version})
 Depends: ${shlibs:Depends},
          ${misc:Depends},
@@ -423,9 +420,9 @@ Section: admin
 Architecture: linux-any
 Priority: optional
 Conflicts: systemd-tmpfiles,
-           systemd
+           systemd (<< 249.3-3)
 Replaces: systemd-tmpfiles,
-          systemd
+          systemd (<< 249.3-3)
 Provides: systemd-tmpfiles (= ${binary:Version})
 Depends: ${shlibs:Depends},
          ${misc:Depends},
@@ -433,3 +430,15 @@ Description: Standalone tmpfiles binary for use in non-systemd systems
  Standalone tmpfiles binary with minimal dependencies.
  This package conflicts with the main systemd package and is meant for use in
  non-systemd systems.
+
+Package: systemd-oomd
+Section: admin
+Architecture: linux-any
+Priority: optional
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         adduser,
+Description: Userspace out-of-memory (OOM) killer
+ systemd-oomd is a system service that uses cgroups-v2 and
+ pressure stall information (PSI) to monitor and take action on
+ processes before an OOM occurs in kernel space.

@@ -1,0 +1,43 @@
+From: Anita Zhang <the.anitazha@gmail.com>
+Date: Wed, 24 Nov 2021 01:02:22 -0800
+Subject: test: make test-55-oomd less flaky
+
+Make oomctl a bit less likely to race with systemd-oomd receiving the
+managed oom cgroup info by checking oomctl output in a loop with
+timeout.
+
+Fixes #21146
+
+Refreshed to ignore portions of 064a5c1438690f9454ad9bff05ec4ec2acfa67d2
+---
+ test/units/testsuite-55.sh | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/test/units/testsuite-55.sh b/test/units/testsuite-55.sh
+index e988dc5..5acc96a 100755
+--- a/test/units/testsuite-55.sh
++++ b/test/units/testsuite-55.sh
+@@ -37,9 +37,20 @@ systemctl start testsuite-55-testchill.service
+ systemctl start testsuite-55-testbloat.service
+ 
+ # Verify systemd-oomd is monitoring the expected units
+-oomctl | grep "/testsuite-55-workload.slice"
+-oomctl | grep "20.00%"
+-oomctl | grep "Default Memory Pressure Duration: 2s"
++# Try to avoid racing the oomctl output check by checking in a loop with a timeout
++oomctl_output=$(oomctl)
++timeout="$(date -ud "1 minutes" +%s)"
++while [[ $(date -u +%s) -le $timeout ]]; do
++    if grep "/testsuite-55-workload.slice" <<< "$oomctl_output"; then
++        break
++    fi
++    oomctl_output=$(oomctl)
++    sleep 1
++done
++
++grep "/testsuite-55-workload.slice" <<< "$oomctl_output"
++grep "20.00%" <<< "$oomctl_output"
++grep "Default Memory Pressure Duration: 2s" <<< "$oomctl_output"
+ 
+ systemctl status testsuite-55-testchill.service
+ 

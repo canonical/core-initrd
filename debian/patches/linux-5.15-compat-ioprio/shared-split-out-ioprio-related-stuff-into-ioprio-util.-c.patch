@@ -1,0 +1,240 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 24 Nov 2021 15:24:55 +0100
+Subject: shared: split out ioprio related stuff into ioprio-util.[ch]
+
+No actual code changes, just some splitting out.
+---
+ src/basic/ioprio-util.c      | 31 +++++++++++++++++++++++++++++++
+ src/basic/ioprio-util.h      | 18 ++++++++++++++++++
+ src/basic/meson.build        |  2 ++
+ src/basic/process-util.c     | 25 -------------------------
+ src/basic/process-util.h     | 14 --------------
+ src/core/dbus-execute.c      |  1 +
+ src/core/execute.c           |  1 +
+ src/core/load-fragment.c     |  1 +
+ src/shared/bus-unit-util.c   |  1 +
+ src/test/test-process-util.c |  1 +
+ 10 files changed, 56 insertions(+), 39 deletions(-)
+ create mode 100644 src/basic/ioprio-util.c
+ create mode 100644 src/basic/ioprio-util.h
+
+diff --git a/src/basic/ioprio-util.c b/src/basic/ioprio-util.c
+new file mode 100644
+index 0000000..b63650b
+--- /dev/null
++++ b/src/basic/ioprio-util.c
+@@ -0,0 +1,31 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++
++#include "ioprio-util.h"
++#include "parse-util.h"
++#include "string-table.h"
++
++int ioprio_parse_priority(const char *s, int *ret) {
++        int i, r;
++
++        assert(s);
++        assert(ret);
++
++        r = safe_atoi(s, &i);
++        if (r < 0)
++                return r;
++
++        if (!ioprio_priority_is_valid(i))
++                return -EINVAL;
++
++        *ret = i;
++        return 0;
++}
++
++static const char *const ioprio_class_table[] = {
++        [IOPRIO_CLASS_NONE] = "none",
++        [IOPRIO_CLASS_RT] = "realtime",
++        [IOPRIO_CLASS_BE] = "best-effort",
++        [IOPRIO_CLASS_IDLE] = "idle",
++};
++
++DEFINE_STRING_TABLE_LOOKUP_WITH_FALLBACK(ioprio_class, int, IOPRIO_N_CLASSES);
+diff --git a/src/basic/ioprio-util.h b/src/basic/ioprio-util.h
+new file mode 100644
+index 0000000..ffb3e9c
+--- /dev/null
++++ b/src/basic/ioprio-util.h
+@@ -0,0 +1,18 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++#pragma once
++
++#include "macro.h"
++#include "missing_ioprio.h"
++
++int ioprio_class_to_string_alloc(int i, char **s);
++int ioprio_class_from_string(const char *s);
++
++static inline bool ioprio_class_is_valid(int i) {
++        return IN_SET(i, IOPRIO_CLASS_NONE, IOPRIO_CLASS_RT, IOPRIO_CLASS_BE, IOPRIO_CLASS_IDLE);
++}
++
++static inline bool ioprio_priority_is_valid(int i) {
++        return i >= 0 && i < IOPRIO_BE_NR;
++}
++
++int ioprio_parse_priority(const char *s, int *ret);
+diff --git a/src/basic/meson.build b/src/basic/meson.build
+index 49113b5..de94eb4 100644
+--- a/src/basic/meson.build
++++ b/src/basic/meson.build
+@@ -76,6 +76,8 @@ basic_sources = files('''
+         io-util.h
+         khash.c
+         khash.h
++        ioprio-util.c
++        ioprio-util.h
+         limits-util.c
+         limits-util.h
+         linux/btrfs.h
+diff --git a/src/basic/process-util.c b/src/basic/process-util.c
+index f775a36..d210bf7 100644
+--- a/src/basic/process-util.c
++++ b/src/basic/process-util.c
+@@ -1167,23 +1167,6 @@ int pid_compare_func(const pid_t *a, const pid_t *b) {
+         return CMP(*a, *b);
+ }
+ 
+-int ioprio_parse_priority(const char *s, int *ret) {
+-        int i, r;
+-
+-        assert(s);
+-        assert(ret);
+-
+-        r = safe_atoi(s, &i);
+-        if (r < 0)
+-                return r;
+-
+-        if (!ioprio_priority_is_valid(i))
+-                return -EINVAL;
+-
+-        *ret = i;
+-        return 0;
+-}
+-
+ /* The cached PID, possible values:
+  *
+  *     == UNSET [0]  → cache not initialized yet
+@@ -1699,14 +1682,6 @@ bool invoked_as(char *argv[], const char *token) {
+         return strstr(last_path_component(argv[0]), token);
+ }
+ 
+-static const char *const ioprio_class_table[] = {
+-        [IOPRIO_CLASS_NONE] = "none",
+-        [IOPRIO_CLASS_RT] = "realtime",
+-        [IOPRIO_CLASS_BE] = "best-effort",
+-        [IOPRIO_CLASS_IDLE] = "idle",
+-};
+-
+-DEFINE_STRING_TABLE_LOOKUP_WITH_FALLBACK(ioprio_class, int, IOPRIO_N_CLASSES);
+ 
+ static const char *const sigchld_code_table[] = {
+         [CLD_EXITED] = "exited",
+diff --git a/src/basic/process-util.h b/src/basic/process-util.h
+index d39b62f..8892c27 100644
+--- a/src/basic/process-util.h
++++ b/src/basic/process-util.h
+@@ -14,7 +14,6 @@
+ #include "alloc-util.h"
+ #include "format-util.h"
+ #include "macro.h"
+-#include "missing_ioprio.h"
+ #include "time-util.h"
+ 
+ #define procfs_file_alloca(pid, field)                                  \
+@@ -99,9 +98,6 @@ const char *personality_to_string(unsigned long);
+ int safe_personality(unsigned long p);
+ int opinionated_personality(unsigned long *ret);
+ 
+-int ioprio_class_to_string_alloc(int i, char **s);
+-int ioprio_class_from_string(const char *s);
+-
+ const char *sigchld_code_to_string(int i) _const_;
+ int sigchld_code_from_string(const char *s) _pure_;
+ 
+@@ -132,20 +128,10 @@ static inline bool sched_priority_is_valid(int i) {
+         return i >= 0 && i <= sched_get_priority_max(SCHED_RR);
+ }
+ 
+-static inline bool ioprio_class_is_valid(int i) {
+-        return IN_SET(i, IOPRIO_CLASS_NONE, IOPRIO_CLASS_RT, IOPRIO_CLASS_BE, IOPRIO_CLASS_IDLE);
+-}
+-
+-static inline bool ioprio_priority_is_valid(int i) {
+-        return i >= 0 && i < IOPRIO_BE_NR;
+-}
+-
+ static inline bool pid_is_valid(pid_t p) {
+         return p > 0;
+ }
+ 
+-int ioprio_parse_priority(const char *s, int *ret);
+-
+ pid_t getpid_cached(void);
+ void reset_cached_pid(void);
+ 
+diff --git a/src/core/dbus-execute.c b/src/core/dbus-execute.c
+index ad0b2ad..4ba7fae 100644
+--- a/src/core/dbus-execute.c
++++ b/src/core/dbus-execute.c
+@@ -24,6 +24,7 @@
+ #include "fileio.h"
+ #include "hexdecoct.h"
+ #include "io-util.h"
++#include "ioprio-util.h"
+ #include "journal-file.h"
+ #include "missing_ioprio.h"
+ #include "mountpoint-util.h"
+diff --git a/src/core/execute.c b/src/core/execute.c
+index b1d0218..32c0aac 100644
+--- a/src/core/execute.c
++++ b/src/core/execute.c
+@@ -60,6 +60,7 @@
+ #include "glob-util.h"
+ #include "hexdecoct.h"
+ #include "io-util.h"
++#include "ioprio-util.h"
+ #include "label.h"
+ #include "log.h"
+ #include "macro.h"
+diff --git a/src/core/load-fragment.c b/src/core/load-fragment.c
+index 26565d0..b88af73 100644
+--- a/src/core/load-fragment.c
++++ b/src/core/load-fragment.c
+@@ -39,6 +39,7 @@
+ #include "fs-util.h"
+ #include "hexdecoct.h"
+ #include "io-util.h"
++#include "ioprio-util.h"
+ #include "ip-protocol-list.h"
+ #include "journal-file.h"
+ #include "limits-util.h"
+diff --git a/src/shared/bus-unit-util.c b/src/shared/bus-unit-util.c
+index d3a5b25..679d114 100644
+--- a/src/shared/bus-unit-util.c
++++ b/src/shared/bus-unit-util.c
+@@ -19,6 +19,7 @@
+ #include "hexdecoct.h"
+ #include "hostname-util.h"
+ #include "in-addr-util.h"
++#include "ioprio-util.h"
+ #include "ip-protocol-list.h"
+ #include "libmount-util.h"
+ #include "locale-util.h"
+diff --git a/src/test/test-process-util.c b/src/test/test-process-util.c
+index 8c76392..ca7b709 100644
+--- a/src/test/test-process-util.c
++++ b/src/test/test-process-util.c
+@@ -18,6 +18,7 @@
+ #include "errno-list.h"
+ #include "errno-util.h"
+ #include "fd-util.h"
++#include "ioprio-util.h"
+ #include "log.h"
+ #include "macro.h"
+ #include "missing_sched.h"

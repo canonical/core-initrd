@@ -7,6 +7,17 @@ lib/udev/rules.d/73-seat-late.rules
 lib/udev/rules.d/71-seat.rules
 lib/udev/rules.d/99-systemd.rules
 usr/bin/
+usr/lib/binfmt.d/
+usr/lib/environment.d/
+usr/lib/modules-load.d/
+usr/lib/sysctl.d/
+usr/lib/sysusers.d/basic.conf
+usr/lib/sysusers.d/systemd-journal.conf
+usr/lib/sysusers.d/systemd-network.conf
+usr/lib/sysusers.d/systemd-resolve.conf
+usr/lib/systemd/
+usr/lib/tmpfiles.d/
+usr/lib/kernel
 usr/share/man/man1/
 usr/share/man/man5/
 usr/share/man/man7/
@@ -19,15 +30,6 @@ usr/share/pkgconfig/systemd.pc
 usr/share/polkit-1/
 usr/share/systemd/kbd-model-map
 usr/share/systemd/language-fallback-map
-usr/lib/binfmt.d/
-usr/lib/environment.d/
-usr/lib/modules-load.d/
-usr/lib/sysctl.d/
-usr/lib/sysusers.d/basic.conf
-usr/lib/sysusers.d/systemd.conf
-usr/lib/systemd/
-usr/lib/tmpfiles.d/
-usr/lib/kernel
 usr/share/locale/
 var/lib
 ../../extra/init-functions.d lib/lsb/

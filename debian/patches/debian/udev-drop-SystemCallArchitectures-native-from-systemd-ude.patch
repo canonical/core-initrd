@@ -11,13 +11,11 @@ Closes: #869719
  units/systemd-udevd.service.in | 1 -
  1 file changed, 1 deletion(-)
 
-diff --git a/units/systemd-udevd.service.in b/units/systemd-udevd.service.in
-index c146b0f..db63368 100644
 --- a/units/systemd-udevd.service.in
 +++ b/units/systemd-udevd.service.in
 @@ -37,7 +37,6 @@ RestrictRealtime=yes
  RestrictSUIDSGID=yes
- SystemCallFilter=@system-service @module @raw-io
+ SystemCallFilter=@system-service @module @raw-io bpf
  SystemCallErrorNumber=EPERM
 -SystemCallArchitectures=native
  LockPersonality=yes

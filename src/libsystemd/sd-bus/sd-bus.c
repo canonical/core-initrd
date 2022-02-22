@@ -39,6 +39,7 @@
 #include "parse-util.h"
 #include "path-util.h"
 #include "process-util.h"
+#include "stdio-util.h"
 #include "string-util.h"
 #include "strv.h"
 #include "user-util.h"
@@ -62,7 +63,6 @@
 
 static int bus_poll(sd_bus *bus, bool need_more, uint64_t timeout_usec);
 static void bus_detach_io_events(sd_bus *b);
-static void bus_detach_inotify_event(sd_bus *b);
 
 static thread_local sd_bus *default_system_bus = NULL;
 static thread_local sd_bus *default_user_bus = NULL;
@@ -139,7 +139,7 @@ void bus_close_io_fds(sd_bus *b) {
 void bus_close_inotify_fd(sd_bus *b) {
         assert(b);
 
-        bus_detach_inotify_event(b);
+        b->inotify_event_source = sd_event_source_disable_unref(b->inotify_event_source);
 
         b->inotify_fd = safe_close(b->inotify_fd);
         b->inotify_watches = mfree(b->inotify_watches);
@@ -1617,7 +1617,7 @@ static int user_and_machine_valid(const char *user_and_machine) {
                 if (!user)
                         return -ENOMEM;
 
-                if (!isempty(user) && !valid_user_group_name(user, VALID_USER_RELAX))
+                if (!isempty(user) && !valid_user_group_name(user, VALID_USER_RELAX | VALID_USER_ALLOW_NUMERIC))
                         return false;
 
                 h++;
@@ -1648,17 +1648,25 @@ static int user_and_machine_equivalent(const char *user_and_machine) {
 
         /* Otherwise, if we are root, then we can also allow the ".host" syntax, as that's the user this
          * would connect to. */
-        if (geteuid() == 0 && STR_IN_SET(user_and_machine, ".host", "root@.host"))
+        uid_t uid = geteuid();
+
+        if (uid == 0 && STR_IN_SET(user_and_machine, ".host", "root@.host", "0@.host"))
                 return true;
 
-        /* Otherwise, we have to figure our user name, and compare things with that. */
-        un = getusername_malloc();
-        if (!un)
-                return -ENOMEM;
+        /* Otherwise, we have to figure out our user id and name, and compare things with that. */
+        char buf[DECIMAL_STR_MAX(uid_t)];
+        xsprintf(buf, UID_FMT, uid);
 
-        f = startswith(user_and_machine, un);
-        if (!f)
-                return false;
+        f = startswith(user_and_machine, buf);
+        if (!f) {
+                un = getusername_malloc();
+                if (!un)
+                        return -ENOMEM;
+
+                f = startswith(user_and_machine, un);
+                if (!f)
+                        return false;
+        }
 
         return STR_IN_SET(f, "@", "@.host");
 }
@@ -3275,7 +3283,7 @@ static int bus_poll(sd_bus *bus, bool need_more, uint64_t timeout_usec) {
                         return e;
 
                 if (need_more)
-                        /* The caller really needs some more data, he doesn't
+                        /* The caller really needs some more data, they don't
                          * care about what's already read, or any timeouts
                          * except its own. */
                         e |= POLLIN;
@@ -3738,15 +3746,8 @@ int bus_attach_io_events(sd_bus *bus) {
 static void bus_detach_io_events(sd_bus *bus) {
         assert(bus);
 
-        if (bus->input_io_event_source) {
-                sd_event_source_set_enabled(bus->input_io_event_source, SD_EVENT_OFF);
-                bus->input_io_event_source = sd_event_source_unref(bus->input_io_event_source);
-        }
-
-        if (bus->output_io_event_source) {
-                sd_event_source_set_enabled(bus->output_io_event_source, SD_EVENT_OFF);
-                bus->output_io_event_source = sd_event_source_unref(bus->output_io_event_source);
-        }
+        bus->input_io_event_source = sd_event_source_disable_unref(bus->input_io_event_source);
+        bus->output_io_event_source = sd_event_source_disable_unref(bus->output_io_event_source);
 }
 
 int bus_attach_inotify_event(sd_bus *bus) {
@@ -3776,15 +3777,6 @@ int bus_attach_inotify_event(sd_bus *bus) {
                 return r;
 
         return 0;
-}
-
-static void bus_detach_inotify_event(sd_bus *bus) {
-        assert(bus);
-
-        if (bus->inotify_event_source) {
-                sd_event_source_set_enabled(bus->inotify_event_source, SD_EVENT_OFF);
-                bus->inotify_event_source = sd_event_source_unref(bus->inotify_event_source);
-        }
 }
 
 _public_ int sd_bus_attach_event(sd_bus *bus, sd_event *event, int priority) {
@@ -3851,17 +3843,9 @@ _public_ int sd_bus_detach_event(sd_bus *bus) {
                 return 0;
 
         bus_detach_io_events(bus);
-        bus_detach_inotify_event(bus);
-
-        if (bus->time_event_source) {
-                sd_event_source_set_enabled(bus->time_event_source, SD_EVENT_OFF);
-                bus->time_event_source = sd_event_source_unref(bus->time_event_source);
-        }
-
-        if (bus->quit_event_source) {
-                sd_event_source_set_enabled(bus->quit_event_source, SD_EVENT_OFF);
-                bus->quit_event_source = sd_event_source_unref(bus->quit_event_source);
-        }
+        bus->inotify_event_source = sd_event_source_disable_unref(bus->inotify_event_source);
+        bus->time_event_source = sd_event_source_disable_unref(bus->time_event_source);
+        bus->quit_event_source = sd_event_source_disable_unref(bus->quit_event_source);
 
         bus->event = sd_event_unref(bus->event);
         return 1;

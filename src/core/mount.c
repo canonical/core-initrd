@@ -1035,8 +1035,10 @@ static void mount_enter_mounting(Mount *m) {
                 r = mkdir_p_label(p->what, m->directory_mode);
                 /* mkdir_p_label() can return -EEXIST if the target path exists and is not a directory - which is
                  * totally OK, in case the user wants us to overmount a non-directory inode. */
-                if (r < 0 && r != -EEXIST)
+                if (r < 0 && r != -EEXIST) {
                         log_unit_error_errno(UNIT(m), r, "Failed to make bind mount source '%s': %m", p->what);
+                        goto fail;
+                }
         }
 
         if (p) {
@@ -1167,6 +1169,12 @@ static int mount_start(Unit *u) {
                 return 0;
 
         assert(IN_SET(m->state, MOUNT_DEAD, MOUNT_FAILED));
+
+        r = unit_test_start_limit(u);
+        if (r < 0) {
+                mount_enter_dead(m, MOUNT_FAILURE_START_LIMIT_HIT);
+                return r;
+        }
 
         r = unit_acquire_invocation_id(u);
         if (r < 0)
@@ -2137,21 +2145,6 @@ static int mount_can_clean(Unit *u, ExecCleanMask *ret) {
         return exec_context_get_clean_mask(&m->exec_context, ret);
 }
 
-static int mount_test_start_limit(Unit *u) {
-        Mount *m = MOUNT(u);
-        int r;
-
-        assert(m);
-
-        r = unit_test_start_limit(u);
-        if (r < 0) {
-                mount_enter_dead(m, MOUNT_FAILURE_START_LIMIT_HIT);
-                return r;
-        }
-
-        return 0;
-}
-
 static const char* const mount_exec_command_table[_MOUNT_EXEC_COMMAND_MAX] = {
         [MOUNT_EXEC_MOUNT] = "ExecMount",
         [MOUNT_EXEC_UNMOUNT] = "ExecUnmount",
@@ -2249,6 +2242,4 @@ const UnitVTable mount_vtable = {
                         [JOB_TIMEOUT]    = "Timed out unmounting %s.",
                 },
         },
-
-        .test_start_limit = mount_test_start_limit,
 };

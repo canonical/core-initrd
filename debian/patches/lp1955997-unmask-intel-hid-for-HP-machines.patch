@@ -1,0 +1,56 @@
+From: Jeremy Szu <jeremy.szu@canonical.com>
+Date: Wed, 12 Jan 2022 15:00:48 +0000
+Subject: lp1955997-unmask intel-hid for HP machines
+
+For LP: #1955997, HP retired hp-wireless since 2022 and also confirmed the
+correct source should be intel-hid instead of atkbd.
+For pre-2022 HP machines, each DE should implement the solution to
+handle multiple events in short period time.
+
+(cherry picked from commit 0889107a0a7e35d6f6f5946e4c2d2a923a01adfc)
+(cherry picked from commit 3c88ade5a0d13021537853ce2a2f2f62b8be2a80)
+---
+ NEWS                    | 5 +++++
+ hwdb.d/60-keyboard.hwdb | 6 ------
+ 2 files changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/NEWS b/NEWS
+index 3c1d900..7dbf2bd 100644
+--- a/NEWS
++++ b/NEWS
+@@ -518,6 +518,11 @@ CHANGES WITH 249:
+           distribution does not install it yet, it might make sense to change
+           that.
+ 
++        * Intel HID rfkill event is no longer masked, since it's the only
++          source of rfkill event on newer HP laptops. To have both backward and
++          forward compatibility, userspace daemon needs to debounce duplicated
++          events in a short time window.
++
+         Contributions from: Aakash Singh, adrian5, Albert Brox,
+         Alexander Sverdlin, Alexander Tsoy, Alexey Rubtsov, alexlzhu,
+         Allen Webb, Alvin Šipraga, Alyssa Ross, Anders Wenhaug,
+diff --git a/hwdb.d/60-keyboard.hwdb b/hwdb.d/60-keyboard.hwdb
+index 124e063..d369f0a 100644
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -498,9 +498,6 @@ evdev:input:b0003v0458p0708*
+ # Hewlett Packard
+ ###########################################################
+ 
+-evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pn*:*
+- KEYBOARD_KEY_8=unknown                                 # Use hp-wireless instead
+-
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*:*
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pn*:*
+  KEYBOARD_KEY_81=fn_esc
+@@ -564,9 +561,6 @@ evdev:atkbd:dmi:bvn*:bvr*:svnHP*:pnHPElitex21013G3:*
+  KEYBOARD_KEY_92=brightnessdown
+  KEYBOARD_KEY_97=brightnessup
+ 
+-evdev:name:Intel HID events:dmi:bvn*:bvr*:svnHP*:pnHPElitex21013G3:*
+- KEYBOARD_KEY_08=unknown                               # rfkill is also reported by HP Wireless hotkeys
+-
+ # Elitebook
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*Compaq*:*
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*EliteBook*:*
