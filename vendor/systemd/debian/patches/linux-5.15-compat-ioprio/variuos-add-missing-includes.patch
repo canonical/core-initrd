@@ -1,0 +1,124 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Tue, 14 Sep 2021 20:17:52 +0200
+Subject: variuos: add missing includes
+
+---
+ src/basic/limits-util.c                 | 2 ++
+ src/basic/procfs-util.c                 | 1 +
+ src/journal-remote/journal-upload.c     | 1 +
+ src/machine/operation.c                 | 1 +
+ src/portable/portabled-operation.c      | 2 ++
+ src/shared/calendarspec.c               | 1 +
+ src/shared/mkfs-util.c                  | 2 ++
+ src/systemctl/systemctl-start-special.c | 2 ++
+ src/test/test-data-fd-util.c            | 1 +
+ 9 files changed, 13 insertions(+)
+
+diff --git a/src/basic/limits-util.c b/src/basic/limits-util.c
+index 9f8e26d..78e7cb3 100644
+--- a/src/basic/limits-util.c
++++ b/src/basic/limits-util.c
+@@ -1,5 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ 
++#include <unistd.h>
++
+ #include "alloc-util.h"
+ #include "cgroup-util.h"
+ #include "limits-util.h"
+diff --git a/src/basic/procfs-util.c b/src/basic/procfs-util.c
+index 9234cca..f076ad0 100644
+--- a/src/basic/procfs-util.c
++++ b/src/basic/procfs-util.c
+@@ -1,6 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ 
+ #include <errno.h>
++#include <unistd.h>
+ 
+ #include "alloc-util.h"
+ #include "def.h"
+diff --git a/src/journal-remote/journal-upload.c b/src/journal-remote/journal-upload.c
+index 2a38d20..1553143 100644
+--- a/src/journal-remote/journal-upload.c
++++ b/src/journal-remote/journal-upload.c
+@@ -5,6 +5,7 @@
+ #include <getopt.h>
+ #include <stdio.h>
+ #include <sys/stat.h>
++#include <unistd.h>
+ 
+ #include "sd-daemon.h"
+ 
+diff --git a/src/machine/operation.c b/src/machine/operation.c
+index 42432f1..4110fcf 100644
+--- a/src/machine/operation.c
++++ b/src/machine/operation.c
+@@ -1,6 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ 
+ #include <sys/wait.h>
++#include <unistd.h>
+ 
+ #include "alloc-util.h"
+ #include "fd-util.h"
+diff --git a/src/portable/portabled-operation.c b/src/portable/portabled-operation.c
+index 6f06367..e4b737a 100644
+--- a/src/portable/portabled-operation.c
++++ b/src/portable/portabled-operation.c
+@@ -1,5 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ 
++#include <unistd.h>
++
+ #include "alloc-util.h"
+ #include "fd-util.h"
+ #include "portabled-operation.h"
+diff --git a/src/shared/calendarspec.c b/src/shared/calendarspec.c
+index bf24d8d..71256de 100644
+--- a/src/shared/calendarspec.c
++++ b/src/shared/calendarspec.c
+@@ -7,6 +7,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <sys/mman.h>
++#include <unistd.h>
+ 
+ #include "alloc-util.h"
+ #include "calendarspec.h"
+diff --git a/src/shared/mkfs-util.c b/src/shared/mkfs-util.c
+index ce10e60..493d1d4 100644
+--- a/src/shared/mkfs-util.c
++++ b/src/shared/mkfs-util.c
+@@ -1,5 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ 
++#include <unistd.h>
++
+ #include "id128-util.h"
+ #include "mkfs-util.h"
+ #include "path-util.h"
+diff --git a/src/systemctl/systemctl-start-special.c b/src/systemctl/systemctl-start-special.c
+index 56068d2..6ece700a 100644
+--- a/src/systemctl/systemctl-start-special.c
++++ b/src/systemctl/systemctl-start-special.c
+@@ -1,5 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-2.1-or-later */
+ 
++#include <unistd.h>
++
+ #include "bootspec.h"
+ #include "bus-error.h"
+ #include "bus-locator.h"
+diff --git a/src/test/test-data-fd-util.c b/src/test/test-data-fd-util.c
+index 22a57b5..8a506ae 100644
+--- a/src/test/test-data-fd-util.c
++++ b/src/test/test-data-fd-util.c
+@@ -3,6 +3,7 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
++#include <unistd.h>
+ 
+ #include "data-fd-util.h"
+ #include "fd-util.h"

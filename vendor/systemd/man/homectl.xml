@@ -128,7 +128,7 @@
 
       <varlistentry>
         <term><option>--json=</option><replaceable>FORMAT</replaceable></term>
-        <term><option>-J</option></term>
+        <term><option>-j</option></term>
 
         <listitem><para>Controls whether to output the user record in JSON format, if the
         <command>inspect</command> command (see below) is used. Takes one of <literal>pretty</literal>,
@@ -136,7 +136,7 @@
         whitespace and newlines are inserted in the output to make the JSON data more readable. If
         <literal>short</literal> all superfluous whitespace is suppressed. If <literal>off</literal> (the
         default) the user information is not shown in JSON format but in a friendly human readable formatting
-        instead. The <option>-J</option> option picks <literal>pretty</literal> when run interactively and
+        instead. The <option>-j</option> option picks <literal>pretty</literal> when run interactively and
         <literal>short</literal> otherwise.</para></listitem>
       </varlistentry>
 
@@ -372,6 +372,9 @@
         <para>Note that FIDO2 devices suitable for this option must implement the
         <literal>hmac-secret</literal> extension. Most current devices (such as the YubiKey 5 series) do. If
         the extension is not implemented the device cannot be used for unlocking home directories.</para>
+          
+        <para>The FIDO2 device may be subsequently removed by setting the device path to an empty string 
+        (e.g. <command>homectl update $USER --fido2-device=""</command>).</para>
 
         <para>Note that many hardware security tokens implement both FIDO2 and PKCS#11/PIV (and thus may be
         used with either <option>--fido2-device=</option> or <option>--pkcs11-token-uri=</option>), for a

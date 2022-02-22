@@ -5,20 +5,24 @@ Subject: Only start logind if dbus is installed
 logind fails to start in environments without dbus, such as LXC containers or
 servers. Add a startup condition to avoid the very noisy startup failure.
 
+Consider both dbus-daemon (the reference implementation) and
+dbus-broker.
+
 Part of #772700
 ---
- units/systemd-logind.service.in | 1 +
- 1 file changed, 1 insertion(+)
+ units/systemd-logind.service.in | 2 ++
+ 1 file changed, 2 insertions(+)
 
 diff --git a/units/systemd-logind.service.in b/units/systemd-logind.service.in
-index ab87425..307a028 100644
+index ab87425..a5754ca 100644
 --- a/units/systemd-logind.service.in
 +++ b/units/systemd-logind.service.in
-@@ -16,6 +16,7 @@ Documentation=man:org.freedesktop.login1(5)
+@@ -16,6 +16,8 @@ Documentation=man:org.freedesktop.login1(5)
  
  Wants=user.slice modprobe@drm.service
  After=nss-user-lookup.target user.slice modprobe@drm.service
-+ConditionPathExists=/lib/systemd/system/dbus.service
++ConditionPathExists=|/lib/systemd/system/dbus.service
++ConditionPathExists=|/lib/systemd/system/dbus-broker.service
  
  # Ask for the dbus socket.
  Wants=dbus.socket

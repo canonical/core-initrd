@@ -116,14 +116,9 @@ static GetentData getsgent_data = {
         .mutex = PTHREAD_MUTEX_INITIALIZER,
 };
 
-static void setup_logging(void) {
-        /* We need a dummy function because log_parse_environment is a macro. */
-        log_parse_environment();
-}
-
 static void setup_logging_once(void) {
         static pthread_once_t once = PTHREAD_ONCE_INIT;
-        assert_se(pthread_once(&once, setup_logging) == 0);
+        assert_se(pthread_once(&once, log_parse_environment_variables) == 0);
 }
 
 #define NSS_ENTRYPOINT_BEGIN                    \
@@ -236,9 +231,9 @@ static enum nss_status copy_synthesized_group(
 
         required = strlen(src->gr_name) + 1;
         required += strlen(src->gr_passwd) + 1;
-        required += 1; /* ...but that NULL still needs to be stored into the buffer! */
+        required += sizeof(char*); /* ...but that NULL still needs to be stored into the buffer! */
 
-        if (buflen < required) {
+        if (buflen < ALIGN(required)) {
                 *errnop = ERANGE;
                 return NSS_STATUS_TRYAGAIN;
         }
@@ -250,7 +245,7 @@ static enum nss_status copy_synthesized_group(
         /* String fields point into the user-provided buffer */
         dest->gr_name = buffer;
         dest->gr_passwd = stpcpy(dest->gr_name, src->gr_name) + 1;
-        dest->gr_mem = (char **) strcpy(dest->gr_passwd, src->gr_passwd) + 1;
+        dest->gr_mem = ALIGN_PTR(stpcpy(dest->gr_passwd, src->gr_passwd) + 1);
         *dest->gr_mem = NULL;
 
         return NSS_STATUS_SUCCESS;

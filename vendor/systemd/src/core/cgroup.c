@@ -37,6 +37,12 @@
 
 #define CGROUP_CPU_QUOTA_DEFAULT_PERIOD_USEC ((usec_t) 100 * USEC_PER_MSEC)
 
+/* Special values for the bfq.weight attribute */
+#define CGROUP_BFQ_WEIGHT_INVALID UINT64_MAX
+#define CGROUP_BFQ_WEIGHT_MIN UINT64_C(1)
+#define CGROUP_BFQ_WEIGHT_MAX UINT64_C(1000)
+#define CGROUP_BFQ_WEIGHT_DEFAULT UINT64_C(100)
+
 /* Returns the log level to use when cgroup attribute writes fail. When an attribute is missing or we have access
  * problems we downgrade to LOG_DEBUG. This is supposed to be nice to container managers and kernels which want to mask
  * out specific attributes from us. */
@@ -1194,21 +1200,46 @@ static int cgroup_apply_devices(Unit *u) {
         return r;
 }
 
-static void set_io_weight(Unit *u, const char *controller, uint64_t weight) {
-        char buf[8+DECIMAL_STR_MAX(uint64_t)+1];
-        const char *p;
+/* Convert the normal io.weight value to io.bfq.weight */
+#define BFQ_WEIGHT(weight) \
+        (weight <= CGROUP_WEIGHT_DEFAULT ? \
+         CGROUP_BFQ_WEIGHT_DEFAULT - (CGROUP_WEIGHT_DEFAULT - weight) * (CGROUP_BFQ_WEIGHT_DEFAULT - CGROUP_BFQ_WEIGHT_MIN) / (CGROUP_WEIGHT_DEFAULT - CGROUP_WEIGHT_MIN) : \
+         CGROUP_BFQ_WEIGHT_DEFAULT + (weight - CGROUP_WEIGHT_DEFAULT) * (CGROUP_BFQ_WEIGHT_MAX - CGROUP_BFQ_WEIGHT_DEFAULT) / (CGROUP_WEIGHT_MAX - CGROUP_WEIGHT_DEFAULT))
 
-        p = strjoina(controller, ".weight");
-        xsprintf(buf, "default %" PRIu64 "\n", weight);
-        (void) set_attribute_and_warn(u, controller, p, buf);
+assert_cc(BFQ_WEIGHT(1) == 1);
+assert_cc(BFQ_WEIGHT(50) == 50);
+assert_cc(BFQ_WEIGHT(100) == 100);
+assert_cc(BFQ_WEIGHT(500) == 136);
+assert_cc(BFQ_WEIGHT(5000) == 545);
+assert_cc(BFQ_WEIGHT(10000) == 1000);
+
+static void set_io_weight(Unit *u, uint64_t weight) {
+        char buf[STRLEN("default \n")+DECIMAL_STR_MAX(uint64_t)];
+
+        assert(u);
 
         /* FIXME: drop this when distro kernels properly support BFQ through "io.weight"
          * See also: https://github.com/systemd/systemd/pull/13335 and
          * https://github.com/torvalds/linux/commit/65752aef0a407e1ef17ec78a7fc31ba4e0b360f9.
-         * The range is 1..1000 apparently. */
-        p = strjoina(controller, ".bfq.weight");
-        xsprintf(buf, "%" PRIu64 "\n", (weight + 9) / 10);
-        (void) set_attribute_and_warn(u, controller, p, buf);
+         * The range is 1..1000 apparently, and the default is 100. */
+        xsprintf(buf, "%" PRIu64 "\n", BFQ_WEIGHT(weight));
+        (void) set_attribute_and_warn(u, "io", "io.bfq.weight", buf);
+
+        xsprintf(buf, "default %" PRIu64 "\n", weight);
+        (void) set_attribute_and_warn(u, "io", "io.weight", buf);
+}
+
+static void set_blkio_weight(Unit *u, uint64_t weight) {
+        char buf[STRLEN("\n")+DECIMAL_STR_MAX(uint64_t)];
+
+        assert(u);
+
+        /* FIXME: see comment in set_io_weight(). */
+        xsprintf(buf, "%" PRIu64 "\n", BFQ_WEIGHT(weight));
+        (void) set_attribute_and_warn(u, "blkio", "blkio.bfq.weight", buf);
+
+        xsprintf(buf, "%" PRIu64 "\n", weight);
+        (void) set_attribute_and_warn(u, "blkio", "blkio.weight", buf);
 }
 
 static void cgroup_apply_bpf_foreign_program(Unit *u) {
@@ -1322,7 +1353,7 @@ static void cgroup_context_apply(
                 } else
                         weight = CGROUP_WEIGHT_DEFAULT;
 
-                set_io_weight(u, "io", weight);
+                set_io_weight(u, weight);
 
                 if (has_io) {
                         CGroupIODeviceLatency *latency;
@@ -1392,7 +1423,7 @@ static void cgroup_context_apply(
                         else
                                 weight = CGROUP_BLKIO_WEIGHT_DEFAULT;
 
-                        set_io_weight(u, "blkio", weight);
+                        set_blkio_weight(u, weight);
 
                         if (has_io) {
                                 CGroupIODeviceWeight *w;
@@ -2137,7 +2168,7 @@ int unit_attach_pids_to_cgroup(Unit *u, Set *pids, const char *suffix_path) {
         CGroupMask delegated_mask;
         const char *p;
         void *pidp;
-        int r, q;
+        int ret, r;
 
         assert(u);
 
@@ -2164,16 +2195,16 @@ int unit_attach_pids_to_cgroup(Unit *u, Set *pids, const char *suffix_path) {
 
         delegated_mask = unit_get_delegate_mask(u);
 
-        r = 0;
+        ret = 0;
         SET_FOREACH(pidp, pids) {
                 pid_t pid = PTR_TO_PID(pidp);
 
                 /* First, attach the PID to the main cgroup hierarchy */
-                q = cg_attach(SYSTEMD_CGROUP_CONTROLLER, p, pid);
-                if (q < 0) {
-                        bool again = MANAGER_IS_USER(u->manager) && ERRNO_IS_PRIVILEGE(q);
+                r = cg_attach(SYSTEMD_CGROUP_CONTROLLER, p, pid);
+                if (r < 0) {
+                        bool again = MANAGER_IS_USER(u->manager) && ERRNO_IS_PRIVILEGE(r);
 
-                        log_unit_full_errno(u, again ? LOG_DEBUG : LOG_INFO,  q,
+                        log_unit_full_errno(u, again ? LOG_DEBUG : LOG_INFO,  r,
                                             "Couldn't move process "PID_FMT" to%s requested cgroup '%s': %m",
                                             pid, again ? " directly" : "", empty_to_root(p));
 
@@ -2188,20 +2219,24 @@ int unit_attach_pids_to_cgroup(Unit *u, Set *pids, const char *suffix_path) {
                                 z = unit_attach_pid_to_cgroup_via_bus(u, pid, suffix_path);
                                 if (z < 0)
                                         log_unit_info_errno(u, z, "Couldn't move process "PID_FMT" to requested cgroup '%s' (directly or via the system bus): %m", pid, empty_to_root(p));
-                                else
+                                else {
+                                        if (ret >= 0)
+                                                ret++; /* Count successful additions */
                                         continue; /* When the bus thing worked via the bus we are fully done for this PID. */
+                                }
                         }
 
-                        if (r >= 0)
-                                r = q; /* Remember first error */
+                        if (ret >= 0)
+                                ret = r; /* Remember first error */
 
                         continue;
-                }
+                } else if (ret >= 0)
+                        ret++; /* Count successful additions */
 
-                q = cg_all_unified();
-                if (q < 0)
-                        return q;
-                if (q > 0)
+                r = cg_all_unified();
+                if (r < 0)
+                        return r;
+                if (r > 0)
                         continue;
 
                 /* In the legacy hierarchy, attach the process to the request cgroup if possible, and if not to the
@@ -2216,11 +2251,11 @@ int unit_attach_pids_to_cgroup(Unit *u, Set *pids, const char *suffix_path) {
 
                         /* If this controller is delegated and realized, honour the caller's request for the cgroup suffix. */
                         if (delegated_mask & u->cgroup_realized_mask & bit) {
-                                q = cg_attach(cgroup_controller_to_string(c), p, pid);
-                                if (q >= 0)
+                                r = cg_attach(cgroup_controller_to_string(c), p, pid);
+                                if (r >= 0)
                                         continue; /* Success! */
 
-                                log_unit_debug_errno(u, q, "Failed to attach PID " PID_FMT " to requested cgroup %s in controller %s, falling back to unit's cgroup: %m",
+                                log_unit_debug_errno(u, r, "Failed to attach PID " PID_FMT " to requested cgroup %s in controller %s, falling back to unit's cgroup: %m",
                                                      pid, empty_to_root(p), cgroup_controller_to_string(c));
                         }
 
@@ -2231,14 +2266,14 @@ int unit_attach_pids_to_cgroup(Unit *u, Set *pids, const char *suffix_path) {
                         if (!realized)
                                 continue; /* Not even realized in the root slice? Then let's not bother */
 
-                        q = cg_attach(cgroup_controller_to_string(c), realized, pid);
-                        if (q < 0)
-                                log_unit_debug_errno(u, q, "Failed to attach PID " PID_FMT " to realized cgroup %s in controller %s, ignoring: %m",
+                        r = cg_attach(cgroup_controller_to_string(c), realized, pid);
+                        if (r < 0)
+                                log_unit_debug_errno(u, r, "Failed to attach PID " PID_FMT " to realized cgroup %s in controller %s, ignoring: %m",
                                                      pid, realized, cgroup_controller_to_string(c));
                 }
         }
 
-        return r;
+        return ret;
 }
 
 static bool unit_has_mask_realized(

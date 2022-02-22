@@ -1,0 +1,29 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Wed, 12 Jan 2022 12:29:34 +0100
+Subject: test: enable systemd-oomd.service
+
+Enable the service to ensure dbus-org.freedesktop.oom1.service exists
+and D-Bus activation works.
+
+See #18469
+
+(cherry picked from commit d338b1713aabcdc2f90d907c72f8fada085bb15e)
+---
+ test/units/testsuite-55.sh | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/test/units/testsuite-55.sh b/test/units/testsuite-55.sh
+index f0837d2..009933e 100755
+--- a/test/units/testsuite-55.sh
++++ b/test/units/testsuite-55.sh
+@@ -35,6 +35,10 @@ echo -e "[Service]\nEnvironment=SYSTEMD_LOG_LEVEL=debug" >/etc/systemd/system/sy
+ 
+ systemctl daemon-reload
+ 
++# enable the service to ensure dbus-org.freedesktop.oom1.service exists
++# and D-Bus activation works
++systemctl enable systemd-oomd.service
++
+ # if oomd is already running for some reasons, then restart it to make sure the above settings to be applied
+ if systemctl is-active systemd-oomd.service; then
+     systemctl restart systemd-oomd.service

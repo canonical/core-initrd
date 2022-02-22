@@ -1,0 +1,23 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Sat, 3 Jul 2021 02:24:30 +0900
+Subject: test: also show the memory pressure of testchill.service
+
+The memory pressure should be small, but let's log the value in
+the journal of the test environment.
+---
+ test/units/testsuite-55.sh | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/test/units/testsuite-55.sh b/test/units/testsuite-55.sh
+index b7a84c7..1493900 100755
+--- a/test/units/testsuite-55.sh
++++ b/test/units/testsuite-55.sh
+@@ -31,6 +31,8 @@ oomctl | grep "/testsuite-55-workload.slice"
+ oomctl | grep "1.00%"
+ oomctl | grep "Default Memory Pressure Duration: 2s"
+ 
++systemctl status testsuite-55-testchill.service
++
+ # systemd-oomd watches for elevated pressure for 2 seconds before acting.
+ # It can take time to build up pressure so either wait 2 minutes or for the service to fail.
+ timeout="$(date -ud "2 minutes" +%s)"

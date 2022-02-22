@@ -85,7 +85,7 @@ CONFFLAGS = \
 	-Dpwquality=false \
 	-Dp11kit=false \
 	-Dtpm2=false \
-	-Doomd=false \
+	-Doomd=true \
 	-Dsysext=true \
 	-Dnscd=true \
 	-Dntp-servers="$(DEFAULT_NTP_SERVERS)" \
@@ -178,6 +178,7 @@ CONFFLAGS_udeb = \
 	-Dnss-resolve=false \
 	-Dnss-systemd=false \
 	-Dresolve=false \
+	-Doomd=false \
 	-Dportabled=false \
 	-Dpolkit=false \
 	-Dacl=false \
@@ -314,6 +315,7 @@ override_dh_installinit:
 
 override_dh_installsystemd:
 	dh_installsystemd -psystemd-timesyncd
+	dh_installsystemd -psystemd-oomd
 
 override_dh_installsystemduser:
 

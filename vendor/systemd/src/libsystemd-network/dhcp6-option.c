@@ -370,47 +370,39 @@ int dhcp6_option_append_vendor_class(uint8_t **buf, size_t *buflen, char * const
         return dhcp6_option_append(buf, buflen, SD_DHCP6_OPTION_VENDOR_CLASS, total, p);
 }
 
-static int option_parse_hdr(uint8_t **buf, size_t *buflen, uint16_t *optcode, size_t *optlen) {
-        DHCP6Option *option = (DHCP6Option*) *buf;
-        uint16_t len;
+int dhcp6_option_parse(
+                const uint8_t *buf,
+                size_t buflen,
+                size_t *offset,
+                uint16_t *ret_option_code,
+                size_t *ret_option_data_len,
+                const uint8_t **ret_option_data) {
 
-        assert_return(buf, -EINVAL);
-        assert_return(optcode, -EINVAL);
-        assert_return(optlen, -EINVAL);
+        const DHCP6Option *option;
+        size_t len;
 
-        if (*buflen < offsetof(DHCP6Option, data))
-                return -ENOMSG;
+        assert(buf);
+        assert(offset);
+        assert(ret_option_code);
+        assert(ret_option_data_len);
+        assert(ret_option_data);
 
+        if (buflen < offsetof(DHCP6Option, data))
+                return -EBADMSG;
+
+        if (*offset >= buflen - offsetof(DHCP6Option, data))
+                return -EBADMSG;
+
+        option = (const DHCP6Option*) (buf + *offset);
         len = be16toh(option->len);
 
-        if (len > *buflen)
-                return -ENOMSG;
+        if (len > buflen - offsetof(DHCP6Option, data) - *offset)
+                return -EBADMSG;
 
-        *optcode = be16toh(option->code);
-        *optlen = len;
-
-        *buf += 4;
-        *buflen -= 4;
-
-        return 0;
-}
-
-int dhcp6_option_parse(uint8_t **buf, size_t *buflen, uint16_t *optcode,
-                       size_t *optlen, uint8_t **optvalue) {
-        int r;
-
-        assert_return(buf && buflen && optcode && optlen && optvalue, -EINVAL);
-
-        r = option_parse_hdr(buf, buflen, optcode, optlen);
-        if (r < 0)
-                return r;
-
-        if (*optlen > *buflen)
-                return -ENOBUFS;
-
-        *optvalue = *buf;
-        *buflen -= *optlen;
-        *buf += *optlen;
+        *offset += offsetof(DHCP6Option, data) + len;
+        *ret_option_code = be16toh(option->code);
+        *ret_option_data_len = len;
+        *ret_option_data = option->data;
 
         return 0;
 }
@@ -509,7 +501,13 @@ static int dhcp6_option_parse_pdprefix(sd_dhcp6_client *client, DHCP6Option *opt
         return 0;
 }
 
-int dhcp6_option_parse_ia(sd_dhcp6_client *client, DHCP6Option *iaoption, DHCP6IA *ia, uint16_t *ret_status_code) {
+int dhcp6_option_parse_ia(
+                sd_dhcp6_client *client,
+                DHCP6Option *iaoption,
+                be32_t iaid,
+                DHCP6IA *ia,
+                uint16_t *ret_status_code) {
+
         uint32_t lt_t1, lt_t2, lt_valid = 0, lt_min = UINT32_MAX;
         uint16_t iatype, optlen;
         size_t iaaddr_offset;
@@ -529,6 +527,14 @@ int dhcp6_option_parse_ia(sd_dhcp6_client *client, DHCP6Option *iaoption, DHCP6I
                 if (len < DHCP6_OPTION_IA_NA_LEN)
                         return -ENOBUFS;
 
+                /* According to RFC8415, IAs which do not match the client's IAID should be ignored,
+                 * but not necessary to ignore or refuse the whole message. */
+                if (((const struct ia_na*) iaoption->data)->id != iaid)
+                        /* ENOANO indicates the option should be ignored. */
+                        return log_dhcp6_client_errno(client, SYNTHETIC_ERRNO(ENOANO),
+                                                      "Received an IA_NA option with a different IAID "
+                                                      "from the one chosen by the client, ignoring.");
+
                 iaaddr_offset = DHCP6_OPTION_IA_NA_LEN;
                 memcpy(&ia->ia_na, iaoption->data, sizeof(ia->ia_na));
 
@@ -547,6 +553,14 @@ int dhcp6_option_parse_ia(sd_dhcp6_client *client, DHCP6Option *iaoption, DHCP6I
                 if (len < sizeof(ia->ia_pd))
                         return -ENOBUFS;
 
+                /* According to RFC8415, IAs which do not match the client's IAID should be ignored,
+                 * but not necessary to ignore or refuse the whole message. */
+                if (((const struct ia_pd*) iaoption->data)->id != iaid)
+                        /* ENOANO indicates the option should be ignored. */
+                        return log_dhcp6_client_errno(client, SYNTHETIC_ERRNO(ENOANO),
+                                                      "Received an IA_PD option with a different IAID "
+                                                      "from the one chosen by the client, ignoring.");
+
                 iaaddr_offset = sizeof(ia->ia_pd);
                 memcpy(&ia->ia_pd, iaoption->data, sizeof(ia->ia_pd));
 
@@ -564,13 +578,21 @@ int dhcp6_option_parse_ia(sd_dhcp6_client *client, DHCP6Option *iaoption, DHCP6I
                 if (len < DHCP6_OPTION_IA_TA_LEN)
                         return -ENOBUFS;
 
+                /* According to RFC8415, IAs which do not match the client's IAID should be ignored,
+                 * but not necessary to ignore or refuse the whole message. */
+                if (((const struct ia_ta*) iaoption->data)->id != iaid)
+                        /* ENOANO indicates the option should be ignored. */
+                        return log_dhcp6_client_errno(client, SYNTHETIC_ERRNO(ENOANO),
+                                                      "Received an IA_TA option with a different IAID "
+                                                      "from the one chosen by the client, ignoring.");
+
                 iaaddr_offset = DHCP6_OPTION_IA_TA_LEN;
-                memcpy(&ia->ia_ta.id, iaoption->data, sizeof(ia->ia_ta));
+                memcpy(&ia->ia_ta, iaoption->data, sizeof(ia->ia_ta));
 
                 break;
 
         default:
-                return -ENOMSG;
+                return -EINVAL;
         }
 
         ia->type = iatype;
@@ -677,20 +699,26 @@ int dhcp6_option_parse_ia(sd_dhcp6_client *client, DHCP6Option *iaoption, DHCP6I
         return 1;
 }
 
-int dhcp6_option_parse_ip6addrs(uint8_t *optval, uint16_t optlen,
-                                struct in6_addr **addrs, size_t count) {
+int dhcp6_option_parse_addresses(
+                const uint8_t *optval,
+                size_t optlen,
+                struct in6_addr **addrs,
+                size_t *count) {
+
+        assert(optval);
+        assert(addrs);
+        assert(count);
 
         if (optlen == 0 || optlen % sizeof(struct in6_addr) != 0)
-                return -EINVAL;
+                return -EBADMSG;
 
-        if (!GREEDY_REALLOC(*addrs, count * sizeof(struct in6_addr) + optlen))
+        if (!GREEDY_REALLOC(*addrs, *count + optlen / sizeof(struct in6_addr)))
                 return -ENOMEM;
 
-        memcpy(*addrs + count, optval, optlen);
+        memcpy(*addrs + *count, optval, optlen);
+        *count += optlen / sizeof(struct in6_addr);
 
-        count += optlen / sizeof(struct in6_addr);
-
-        return count;
+        return 0;
 }
 
 static int parse_domain(const uint8_t **data, uint16_t *len, char **out_domain) {

@@ -1,0 +1,76 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 24 Nov 2021 15:30:22 +0100
+Subject: ioprio-util: add macro for default ioprio settings
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+IOPRIO_CLASS_NONE with any priority value actually is an alias for
+IOPRIO_CLASS_BE with priority value 4 – which is the default ioprio for
+all processes.
+
+We got this right at one place, but wrong at three others (where we
+assumed the default value was 0, not 4). Let's add a
+macro that encodes this properly, and use it everywhere.
+---
+ src/basic/ioprio-util.h  | 4 ++++
+ src/core/execute.c       | 4 ++--
+ src/core/load-fragment.c | 4 ++--
+ 3 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/src/basic/ioprio-util.h b/src/basic/ioprio-util.h
+index ffb3e9c..0d3f70a 100644
+--- a/src/basic/ioprio-util.h
++++ b/src/basic/ioprio-util.h
+@@ -16,3 +16,7 @@ static inline bool ioprio_priority_is_valid(int i) {
+ }
+ 
+ int ioprio_parse_priority(const char *s, int *ret);
++
++/* IOPRIO_CLASS_NONE with any prio value is another way to say IOPRIO_CLASS_BE with level 4. Encode that in a
++ * proper macro. */
++#define IOPRIO_DEFAULT_CLASS_AND_PRIO ioprio_prio_value(IOPRIO_CLASS_BE, 4)
+diff --git a/src/core/execute.c b/src/core/execute.c
+index 32c0aac..e045d2e 100644
+--- a/src/core/execute.c
++++ b/src/core/execute.c
+@@ -4840,7 +4840,7 @@ void exec_context_init(ExecContext *c) {
+         assert(c);
+ 
+         c->umask = 0022;
+-        c->ioprio = ioprio_prio_value(IOPRIO_CLASS_BE, 0);
++        c->ioprio = IOPRIO_DEFAULT_CLASS_AND_PRIO;
+         c->cpu_sched_policy = SCHED_OTHER;
+         c->syslog_priority = LOG_DAEMON|LOG_INFO;
+         c->syslog_level_prefix = true;
+@@ -5770,7 +5770,7 @@ int exec_context_get_effective_ioprio(const ExecContext *c) {
+ 
+         p = ioprio_get(IOPRIO_WHO_PROCESS, 0);
+         if (p < 0)
+-                return ioprio_prio_value(IOPRIO_CLASS_BE, 4);
++                return IOPRIO_DEFAULT_CLASS_AND_PRIO;
+ 
+         return p;
+ }
+diff --git a/src/core/load-fragment.c b/src/core/load-fragment.c
+index b88af73..b249d03 100644
+--- a/src/core/load-fragment.c
++++ b/src/core/load-fragment.c
+@@ -1271,7 +1271,7 @@ int config_parse_exec_io_class(const char *unit,
+ 
+         if (isempty(rvalue)) {
+                 c->ioprio_set = false;
+-                c->ioprio = ioprio_prio_value(IOPRIO_CLASS_BE, 0);
++                c->ioprio = IOPRIO_DEFAULT_CLASS_AND_PRIO;
+                 return 0;
+         }
+ 
+@@ -1308,7 +1308,7 @@ int config_parse_exec_io_priority(const char *unit,
+ 
+         if (isempty(rvalue)) {
+                 c->ioprio_set = false;
+-                c->ioprio = ioprio_prio_value(IOPRIO_CLASS_BE, 0);
++                c->ioprio = IOPRIO_DEFAULT_CLASS_AND_PRIO;
+                 return 0;
+         }
+ 

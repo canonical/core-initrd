@@ -16,10 +16,10 @@ directory. So, the double evaluation is not necessary anymore.
  2 files changed, 5 insertions(+), 12 deletions(-)
 
 diff --git a/src/udev/udev-event.c b/src/udev/udev-event.c
-index 8b9f8ae..c77f55c 100644
+index 8320e96..56fe0a4 100644
 --- a/src/udev/udev-event.c
 +++ b/src/udev/udev-event.c
-@@ -1060,10 +1060,7 @@ int udev_event_execute_rules(
+@@ -1071,10 +1071,7 @@ int udev_event_execute_rules(
  
          device_set_is_initialized(dev);
  

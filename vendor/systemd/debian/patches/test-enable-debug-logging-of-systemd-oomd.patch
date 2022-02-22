@@ -1,0 +1,29 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Sat, 3 Jul 2021 02:04:31 +0900
+Subject: test: enable debug logging of systemd-oomd
+
+---
+ test/units/testsuite-55.sh | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/test/units/testsuite-55.sh b/test/units/testsuite-55.sh
+index 1493900..099ecc9 100755
+--- a/test/units/testsuite-55.sh
++++ b/test/units/testsuite-55.sh
+@@ -23,6 +23,16 @@ rm -rf /etc/systemd/system/testsuite-55-testbloat.service.d
+ 
+ echo "DefaultMemoryPressureDurationSec=2s" >>/etc/systemd/oomd.conf
+ 
++mkdir -p /etc/systemd/system/systemd-oomd.service.d/
++echo -e "[Service]\nEnvironment=SYSTEMD_LOG_LEVEL=debug" >/etc/systemd/system/systemd-oomd.service.d/debug.conf
++
++systemctl daemon-reload
++
++# if oomd is already running for some reasons, then restart it to make sure the above settings to be applied
++if systemctl is-active systemd-oomd.service; then
++    systemctl restart systemd-oomd.service
++fi
++
+ systemctl start testsuite-55-testchill.service
+ systemctl start testsuite-55-testbloat.service
+ 

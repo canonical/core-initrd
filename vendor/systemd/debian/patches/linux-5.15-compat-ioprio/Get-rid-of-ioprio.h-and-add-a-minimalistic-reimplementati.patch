@@ -1,0 +1,339 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Tue, 14 Sep 2021 16:45:07 +0200
+Subject: Get rid of ioprio.h and add a minimalistic reimplementation of the
+ api
+
+---
+ src/basic/ioprio.h         | 57 +-------------------------------------------
+ src/basic/meson.build      |  2 +-
+ src/basic/missing_ioprio.h | 59 ++++++++++++++++++++++++++++++++++++++++++++++
+ src/basic/process-util.c   |  1 -
+ src/basic/process-util.h   |  2 +-
+ src/core/dbus-execute.c    | 10 ++++----
+ src/core/execute.c         | 10 ++++----
+ src/core/load-fragment.c   | 10 ++++----
+ 8 files changed, 77 insertions(+), 74 deletions(-)
+ create mode 100644 src/basic/missing_ioprio.h
+
+diff --git a/src/basic/ioprio.h b/src/basic/ioprio.h
+index 3fb168d..2cc2ae8 100644
+--- a/src/basic/ioprio.h
++++ b/src/basic/ioprio.h
+@@ -1,56 +1 @@
+-#ifndef IOPRIO_H
+-#define IOPRIO_H
+-
+-/* This is minimal version of Linux' linux/ioprio.h header file, which
+- * is licensed GPL2 */
+-
+-#include <sys/syscall.h>
+-#include <unistd.h>
+-
+-/*
+- * Gives us 8 prio classes with 13-bits of data for each class
+- */
+-#define IOPRIO_BITS             16
+-#define IOPRIO_N_CLASSES        8
+-#define IOPRIO_CLASS_SHIFT      13
+-#define IOPRIO_PRIO_MASK        ((1UL << IOPRIO_CLASS_SHIFT) - 1)
+-
+-#define IOPRIO_PRIO_CLASS(mask) ((mask) >> IOPRIO_CLASS_SHIFT)
+-#define IOPRIO_PRIO_DATA(mask)  ((mask) & IOPRIO_PRIO_MASK)
+-#define IOPRIO_PRIO_VALUE(class, data)  (((class) << IOPRIO_CLASS_SHIFT) | data)
+-
+-#define ioprio_valid(mask)      (IOPRIO_PRIO_CLASS((mask)) != IOPRIO_CLASS_NONE)
+-
+-/*
+- * These are the io priority groups as implemented by CFQ. RT is the realtime
+- * class, it always gets premium service. BE is the best-effort scheduling
+- * class, the default for any process. IDLE is the idle scheduling class, it
+- * is only served when no one else is using the disk.
+- */
+-enum {
+-        IOPRIO_CLASS_NONE,
+-        IOPRIO_CLASS_RT,
+-        IOPRIO_CLASS_BE,
+-        IOPRIO_CLASS_IDLE,
+-};
+-
+-/*
+- * 8 best effort priority levels are supported
+- */
+-#define IOPRIO_BE_NR    (8)
+-
+-enum {
+-        IOPRIO_WHO_PROCESS = 1,
+-        IOPRIO_WHO_PGRP,
+-        IOPRIO_WHO_USER,
+-};
+-
+-static inline int ioprio_set(int which, int who, int ioprio) {
+-        return syscall(__NR_ioprio_set, which, who, ioprio);
+-}
+-
+-static inline int ioprio_get(int which, int who) {
+-        return syscall(__NR_ioprio_get, which, who);
+-}
+-
+-#endif
++/* Intentionally left blank */
+diff --git a/src/basic/meson.build b/src/basic/meson.build
+index 452b965..49113b5 100644
+--- a/src/basic/meson.build
++++ b/src/basic/meson.build
+@@ -74,7 +74,6 @@ basic_sources = files('''
+         in-addr-util.h
+         io-util.c
+         io-util.h
+-        ioprio.h
+         khash.c
+         khash.h
+         limits-util.c
+@@ -130,6 +129,7 @@ basic_sources = files('''
+         missing_fcntl.h
+         missing_fs.h
+         missing_input.h
++        missing_ioprio.h
+         missing_keyctl.h
+         missing_magic.h
+         missing_mman.h
+diff --git a/src/basic/missing_ioprio.h b/src/basic/missing_ioprio.h
+new file mode 100644
+index 0000000..9cbd172
+--- /dev/null
++++ b/src/basic/missing_ioprio.h
+@@ -0,0 +1,59 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++#pragma once
++
++#include <sched.h>
++
++/* Match values uses by the kernel internally, as no public header seems to exist. */
++
++#ifndef IOPRIO_N_CLASSES
++#  define IOPRIO_N_CLASSES 8
++#endif
++
++#ifndef IOPRIO_BE_NR
++#  define IOPRIO_BE_NR 8
++#endif
++
++#ifndef IOPRIO_CLASS_NONE
++#  define IOPRIO_CLASS_NONE 0
++#endif
++#ifndef IOPRIO_CLASS_RT
++#  define IOPRIO_CLASS_RT   1
++#endif
++#ifndef IOPRIO_CLASS_BE
++#  define IOPRIO_CLASS_BE   2
++#endif
++#ifndef IOPRIO_CLASS_IDLE
++#  define IOPRIO_CLASS_IDLE 3
++#endif
++
++#ifndef IOPRIO_WHO_PROCESS
++#  define IOPRIO_WHO_PROCESS 1
++#endif
++#ifndef IOPRIO_WHO_PGRP
++#  define IOPRIO_WHO_PGRP    2
++#endif
++#ifndef IOPRIO_WHO_USER
++#  define IOPRIO_WHO_USER    3
++#endif
++
++#ifndef IOPRIO_BITS
++#  define IOPRIO_BITS        16
++#endif
++#ifndef IOPRIO_N_CLASSES
++#  define IOPRIO_N_CLASSES    8
++#endif
++#ifndef IOPRIO_CLASS_SHIFT
++#  define IOPRIO_CLASS_SHIFT 13
++#endif
++
++static inline int ioprio_prio_class(int value) {
++        return value >> IOPRIO_CLASS_SHIFT;
++}
++
++static inline int ioprio_prio_data(int value) {
++        return value & ((1 << IOPRIO_CLASS_SHIFT) - 1);
++}
++
++static inline int ioprio_prio_value(int class, int data) {
++        return (class << IOPRIO_CLASS_SHIFT) | data;
++}
+diff --git a/src/basic/process-util.c b/src/basic/process-util.c
+index 461bbfe..faf07b4 100644
+--- a/src/basic/process-util.c
++++ b/src/basic/process-util.c
+@@ -27,7 +27,6 @@
+ #include "fd-util.h"
+ #include "fileio.h"
+ #include "fs-util.h"
+-#include "ioprio.h"
+ #include "locale-util.h"
+ #include "log.h"
+ #include "macro.h"
+diff --git a/src/basic/process-util.h b/src/basic/process-util.h
+index 0e064de..d39b62f 100644
+--- a/src/basic/process-util.h
++++ b/src/basic/process-util.h
+@@ -13,8 +13,8 @@
+ 
+ #include "alloc-util.h"
+ #include "format-util.h"
+-#include "ioprio.h"
+ #include "macro.h"
++#include "missing_ioprio.h"
+ #include "time-util.h"
+ 
+ #define procfs_file_alloca(pid, field)                                  \
+diff --git a/src/core/dbus-execute.c b/src/core/dbus-execute.c
+index 902e074..ad0b2ad 100644
+--- a/src/core/dbus-execute.c
++++ b/src/core/dbus-execute.c
+@@ -24,8 +24,8 @@
+ #include "fileio.h"
+ #include "hexdecoct.h"
+ #include "io-util.h"
+-#include "ioprio.h"
+ #include "journal-file.h"
++#include "missing_ioprio.h"
+ #include "mountpoint-util.h"
+ #include "namespace.h"
+ #include "parse-util.h"
+@@ -55,8 +55,8 @@ static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_protect_system, protect_system,
+ static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_personality, personality, unsigned long);
+ static BUS_DEFINE_PROPERTY_GET(property_get_ioprio, "i", ExecContext, exec_context_get_effective_ioprio);
+ static BUS_DEFINE_PROPERTY_GET(property_get_mount_apivfs, "b", ExecContext, exec_context_get_effective_mount_apivfs);
+-static BUS_DEFINE_PROPERTY_GET2(property_get_ioprio_class, "i", ExecContext, exec_context_get_effective_ioprio, IOPRIO_PRIO_CLASS);
+-static BUS_DEFINE_PROPERTY_GET2(property_get_ioprio_priority, "i", ExecContext, exec_context_get_effective_ioprio, IOPRIO_PRIO_DATA);
++static BUS_DEFINE_PROPERTY_GET2(property_get_ioprio_class, "i", ExecContext, exec_context_get_effective_ioprio, ioprio_prio_class);
++static BUS_DEFINE_PROPERTY_GET2(property_get_ioprio_priority, "i", ExecContext, exec_context_get_effective_ioprio, ioprio_prio_data);
+ static BUS_DEFINE_PROPERTY_GET_GLOBAL(property_get_empty_string, "s", NULL);
+ static BUS_DEFINE_PROPERTY_GET_REF(property_get_syslog_level, "i", int, LOG_PRI);
+ static BUS_DEFINE_PROPERTY_GET_REF(property_get_syslog_facility, "i", int, LOG_FAC);
+@@ -2598,7 +2598,7 @@ int bus_exec_context_set_transient_property(
+                         if (r < 0)
+                                 return r;
+ 
+-                        c->ioprio = IOPRIO_PRIO_VALUE(q, IOPRIO_PRIO_DATA(c->ioprio));
++                        c->ioprio = ioprio_prio_value(q, ioprio_prio_data(c->ioprio));
+                         c->ioprio_set = true;
+ 
+                         unit_write_settingf(u, flags, name, "IOSchedulingClass=%s", s);
+@@ -2617,7 +2617,7 @@ int bus_exec_context_set_transient_property(
+                         return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid IO scheduling priority: %i", p);
+ 
+                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
+-                        c->ioprio = IOPRIO_PRIO_VALUE(IOPRIO_PRIO_CLASS(c->ioprio), p);
++                        c->ioprio = ioprio_prio_value(ioprio_prio_class(c->ioprio), p);
+                         c->ioprio_set = true;
+ 
+                         unit_write_settingf(u, flags, name, "IOSchedulingPriority=%i", p);
+diff --git a/src/core/execute.c b/src/core/execute.c
+index 070ff1f..e0278ff 100644
+--- a/src/core/execute.c
++++ b/src/core/execute.c
+@@ -60,7 +60,6 @@
+ #include "glob-util.h"
+ #include "hexdecoct.h"
+ #include "io-util.h"
+-#include "ioprio.h"
+ #include "label.h"
+ #include "log.h"
+ #include "macro.h"
+@@ -68,6 +67,7 @@
+ #include "manager-dump.h"
+ #include "memory-util.h"
+ #include "missing_fs.h"
++#include "missing_ioprio.h"
+ #include "mkdir.h"
+ #include "mount-util.h"
+ #include "mountpoint-util.h"
+@@ -4843,7 +4843,7 @@ void exec_context_init(ExecContext *c) {
+         assert(c);
+ 
+         c->umask = 0022;
+-        c->ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_BE, 0);
++        c->ioprio = ioprio_prio_value(IOPRIO_CLASS_BE, 0);
+         c->cpu_sched_policy = SCHED_OTHER;
+         c->syslog_priority = LOG_DAEMON|LOG_INFO;
+         c->syslog_level_prefix = true;
+@@ -5413,11 +5413,11 @@ void exec_context_dump(const ExecContext *c, FILE* f, const char *prefix) {
+         if (c->ioprio_set) {
+                 _cleanup_free_ char *class_str = NULL;
+ 
+-                r = ioprio_class_to_string_alloc(IOPRIO_PRIO_CLASS(c->ioprio), &class_str);
++                r = ioprio_class_to_string_alloc(ioprio_prio_class(c->ioprio), &class_str);
+                 if (r >= 0)
+                         fprintf(f, "%sIOSchedulingClass: %s\n", prefix, class_str);
+ 
+-                fprintf(f, "%sIOPriority: %lu\n", prefix, IOPRIO_PRIO_DATA(c->ioprio));
++                fprintf(f, "%sIOPriority: %d\n", prefix, ioprio_prio_data(c->ioprio));
+         }
+ 
+         if (c->cpu_sched_set) {
+@@ -5773,7 +5773,7 @@ int exec_context_get_effective_ioprio(const ExecContext *c) {
+ 
+         p = ioprio_get(IOPRIO_WHO_PROCESS, 0);
+         if (p < 0)
+-                return IOPRIO_PRIO_VALUE(IOPRIO_CLASS_BE, 4);
++                return ioprio_prio_value(IOPRIO_CLASS_BE, 4);
+ 
+         return p;
+ }
+diff --git a/src/core/load-fragment.c b/src/core/load-fragment.c
+index 132ad88..26565d0 100644
+--- a/src/core/load-fragment.c
++++ b/src/core/load-fragment.c
+@@ -39,12 +39,12 @@
+ #include "fs-util.h"
+ #include "hexdecoct.h"
+ #include "io-util.h"
+-#include "ioprio.h"
+ #include "ip-protocol-list.h"
+ #include "journal-file.h"
+ #include "limits-util.h"
+ #include "load-fragment.h"
+ #include "log.h"
++#include "missing_ioprio.h"
+ #include "mountpoint-util.h"
+ #include "nulstr-util.h"
+ #include "parse-socket-bind-item.h"
+@@ -1270,7 +1270,7 @@ int config_parse_exec_io_class(const char *unit,
+ 
+         if (isempty(rvalue)) {
+                 c->ioprio_set = false;
+-                c->ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_BE, 0);
++                c->ioprio = ioprio_prio_value(IOPRIO_CLASS_BE, 0);
+                 return 0;
+         }
+ 
+@@ -1280,7 +1280,7 @@ int config_parse_exec_io_class(const char *unit,
+                 return 0;
+         }
+ 
+-        c->ioprio = IOPRIO_PRIO_VALUE(x, IOPRIO_PRIO_DATA(c->ioprio));
++        c->ioprio = ioprio_prio_value(x, ioprio_prio_data(c->ioprio));
+         c->ioprio_set = true;
+ 
+         return 0;
+@@ -1307,7 +1307,7 @@ int config_parse_exec_io_priority(const char *unit,
+ 
+         if (isempty(rvalue)) {
+                 c->ioprio_set = false;
+-                c->ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_BE, 0);
++                c->ioprio = ioprio_prio_value(IOPRIO_CLASS_BE, 0);
+                 return 0;
+         }
+ 
+@@ -1317,7 +1317,7 @@ int config_parse_exec_io_priority(const char *unit,
+                 return 0;
+         }
+ 
+-        c->ioprio = IOPRIO_PRIO_VALUE(IOPRIO_PRIO_CLASS(c->ioprio), i);
++        c->ioprio = ioprio_prio_value(ioprio_prio_class(c->ioprio), i);
+         c->ioprio_set = true;
+ 
+         return 0;

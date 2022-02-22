@@ -1,0 +1,59 @@
+From b368907b3e978f6909991d17cbe23035a6a8110b Mon Sep 17 00:00:00 2001
+From: Lukas Märdian <slyon@ubuntu.com>
+Date: Tue, 25 Jan 2022 16:13:22 +0100
+Subject: [PATCH] Revert "tests: add test case for UMask=+BindPaths=
+ combination"
+
+This test currently fails inside privileged LXD containers (LP: #1959013)
+
+This reverts commit ae53f4b5e48860b473c4d05958486a77f84ecc6d.
+---
+ src/test/test-execute.c                        |  5 -----
+ test/test-execute/exec-umask-namespace.service | 12 ------------
+ 2 files changed, 17 deletions(-)
+ delete mode 100644 test/test-execute/exec-umask-namespace.service
+
+diff --git a/src/test/test-execute.c b/src/test/test-execute.c
+index 88e1b30095..1119ad4acf 100644
+--- a/src/test/test-execute.c
++++ b/src/test/test-execute.c
+@@ -828,10 +828,6 @@ static void test_exec_condition(Manager *m) {
+         test_service(m, "exec-condition-skip.service", SERVICE_SKIP_CONDITION);
+ }
+ 
+-static void test_exec_umask_namespace(Manager *m) {
+-        test(m, "exec-umask-namespace.service", can_unshare ? 0 : EXIT_NAMESPACE, CLD_EXITED);
+-}
+-
+ typedef struct test_entry {
+         test_function_t f;
+         const char *name;
+@@ -908,7 +904,6 @@ int main(int argc, char *argv[]) {
+                 entry(test_exec_dynamicuser),
+                 entry(test_exec_specifier),
+                 entry(test_exec_systemcallfilter_system),
+-                entry(test_exec_umask_namespace),
+                 {},
+         };
+         int r;
+diff --git a/test/test-execute/exec-umask-namespace.service b/test/test-execute/exec-umask-namespace.service
+deleted file mode 100644
+index 8419c86c9a..0000000000
+--- a/test/test-execute/exec-umask-namespace.service
++++ /dev/null
+@@ -1,12 +0,0 @@
+-# SPDX-License-Identifier: LGPL-2.1-or-later
+-[Unit]
+-Description=Test for UMask= + namespacing
+-
+-[Service]
+-ExecStart=/bin/ls -lahd /tmp/subdir
+-Type=oneshot
+-User=65534
+-Group=65534
+-TemporaryFileSystem=/tmp:ro
+-BindPaths=/etc:/tmp/subdir/subsub
+-UMask=0007
+-- 
+2.32.0
+
