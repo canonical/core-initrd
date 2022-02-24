@@ -1,0 +1,31 @@
+From: Frantisek Sumsal <frantisek@sumsal.cz>
+Date: Thu, 6 Jan 2022 21:37:21 +0100
+Subject: test: explicitly configure oomd stuff via dropins
+
+so we don't get overridden by distro-shipped ones.
+
+Fixes: #22030
+(cherry picked from commit fd5e5a87fb2b5de6a25a00acd35dc23775b6b595)
+---
+ test/units/testsuite-55.sh | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/test/units/testsuite-55.sh b/test/units/testsuite-55.sh
+index 379ea9e..f0837d2 100755
+--- a/test/units/testsuite-55.sh
++++ b/test/units/testsuite-55.sh
+@@ -22,7 +22,13 @@ fi
+ 
+ rm -rf /etc/systemd/system/testsuite-55-testbloat.service.d
+ 
+-echo "DefaultMemoryPressureDurationSec=2s" >>/etc/systemd/oomd.conf
++# Configure oomd explicitly to avoid conflicts with distro dropins
++mkdir -p /etc/systemd/oomd.conf.d/
++echo -e "[OOM]\nDefaultMemoryPressureDurationSec=2s" >/etc/systemd/oomd.conf.d/99-oomd-test.conf
++mkdir -p /etc/systemd/system/-.slice.d/
++echo -e "[Slice]\nManagedOOMSwap=auto" >/etc/systemd/system/-.slice.d/99-oomd-test.conf
++mkdir -p /etc/systemd/system/user@.service.d/
++echo -e "[Service]\nManagedOOMMemoryPressure=auto\nManagedOOMMemoryPressureLimit=0%" >/etc/systemd/system/user@.service.d/99-oomd-test.conf
+ 
+ mkdir -p /etc/systemd/system/systemd-oomd.service.d/
+ echo -e "[Service]\nEnvironment=SYSTEMD_LOG_LEVEL=debug" >/etc/systemd/system/systemd-oomd.service.d/debug.conf

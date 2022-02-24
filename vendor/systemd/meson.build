@@ -442,6 +442,7 @@ conf.set('SIZEOF_DEV_T', cc.sizeof('dev_t', prefix : '#include <sys/types.h>'))
 conf.set('SIZEOF_INO_T', cc.sizeof('ino_t', prefix : '#include <sys/types.h>'))
 conf.set('SIZEOF_TIME_T', cc.sizeof('time_t', prefix : '#include <sys/time.h>'))
 conf.set('SIZEOF_RLIM_T', cc.sizeof('rlim_t', prefix : '#include <sys/resource.h>'))
+conf.set('SIZEOF_TIMEX_MEMBER', cc.sizeof('typeof(((struct timex *)0)->freq)', prefix : '#include <sys/timex.h>'))
 
 decl_headers = '''
 #include <uchar.h>
@@ -2493,18 +2494,17 @@ endif
 
 if conf.get('ENABLE_LOCALED') == 1
         if conf.get('HAVE_XKBCOMMON') == 1
-                # logind will load libxkbcommon.so dynamically on its own
-                deps = [libdl]
-                extra_includes = [libxkbcommon.get_pkgconfig_variable('includedir')]
+                # logind will load libxkbcommon.so dynamically on its own, but we still
+                # need to specify where the headers are
+                deps = [libdl, libxkbcommon.partial_dependency(compile_args: true)]
         else
                 deps = []
-                extra_includes = []
         endif
 
         executable(
                 'systemd-localed',
                 systemd_localed_sources,
-                include_directories : includes + extra_includes,
+                include_directories : includes,
                 link_with : [libshared],
                 dependencies : deps,
                 install_rpath : rootlibexecdir,
@@ -3299,22 +3299,22 @@ if conf.get('ENABLE_NETWORKD') == 1
                 install_rpath : rootlibexecdir,
                 install : true,
                 install_dir : rootbindir)
+endif
 
-        exe = executable(
-                'systemd-network-generator',
-                network_generator_sources,
-                include_directories : includes,
-                link_with : [networkd_link_with],
-                install_rpath : rootlibexecdir,
-                install : true,
-                install_dir : rootlibexecdir)
+exe = executable(
+        'systemd-network-generator',
+        network_generator_sources,
+        include_directories : includes,
+        link_with : [networkd_link_with],
+        install_rpath : rootlibexecdir,
+        install : true,
+        install_dir : rootlibexecdir)
 
-        if want_tests != 'false'
-                test('test-network-generator-conversion',
-                     test_network_generator_conversion_sh,
-                     # https://github.com/mesonbuild/meson/issues/2681
-                     args : exe.full_path())
-        endif
+if want_tests != 'false'
+        test('test-network-generator-conversion',
+             test_network_generator_conversion_sh,
+             # https://github.com/mesonbuild/meson/issues/2681
+             args : exe.full_path())
 endif
 
 executable(

@@ -10,8 +10,9 @@ See: https://en.wikipedia.org/wiki/Initial_ramdisk
 
 In Ubuntu Core, initrd.img file is part of Kernel Snap as a binary. This file is brought to Kernel snap from a PPA. See [integration](#integrating-with-kernel-snap) below.
 
-In UC20, initrd is migrated from script based implementation (UC16/18) to **systemd based**.
-See the [architecture document](ARCHITECTURE.md) for more details.
+In UC20 and further, initrd is migrated from script based
+implementation (UC16/18) to **systemd based**.  See the [architecture
+document](ARCHITECTURE.md) for more details.
 
 # Building initrd for Ubuntu Core
 

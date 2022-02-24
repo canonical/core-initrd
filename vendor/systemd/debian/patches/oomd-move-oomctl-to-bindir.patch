@@ -1,0 +1,26 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Wed, 5 Jan 2022 22:14:14 +0100
+Subject: oomd: move oomctl to bindir
+
+We don't really need oomctl during early boot, so bindir seems like a
+more suitable place for the binary.
+
+(cherry picked from commit cfd4c84addbaa31ea2a24275f9c56a70e464bac0)
+---
+ meson.build | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index c6f7167..5e27fa2 100644
+--- a/meson.build
++++ b/meson.build
+@@ -2954,8 +2954,7 @@ if conf.get('ENABLE_OOMD') == 1
+                 link_with : [libshared],
+                 dependencies : [],
+                 install_rpath : rootlibexecdir,
+-                install : true,
+-                install_dir : rootbindir)
++                install : true)
+ endif
+ 
+ if conf.get('ENABLE_BINFMT') == 1

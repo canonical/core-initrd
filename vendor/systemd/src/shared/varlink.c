@@ -417,9 +417,10 @@ static int varlink_test_disconnect(Varlink *v) {
         if (IN_SET(v->state, VARLINK_IDLE_CLIENT) && (v->write_disconnected || v->got_pollhup))
                 goto disconnect;
 
-        /* The server is still expecting to write more, but its write end is disconnected and it got a POLLHUP
-         * (i.e. from a disconnected client), so disconnect. */
-        if (IN_SET(v->state, VARLINK_PENDING_METHOD, VARLINK_PENDING_METHOD_MORE) && v->write_disconnected && v->got_pollhup)
+        /* We are on the server side and still want to send out more replies, but we saw POLLHUP already, and
+         * either got no buffered bytes to write anymore or already saw a write error. In that case we should
+         * shut down the varlink link. */
+        if (IN_SET(v->state, VARLINK_PENDING_METHOD, VARLINK_PENDING_METHOD_MORE) && (v->write_disconnected || v->output_buffer_size == 0) && v->got_pollhup)
                 goto disconnect;
 
         return 0;
@@ -2363,14 +2364,8 @@ int varlink_server_detach_event(VarlinkServer *s) {
 
         assert_return(s, -EINVAL);
 
-        LIST_FOREACH(sockets, ss, s->sockets) {
-
-                if (!ss->event_source)
-                        continue;
-
-                (void) sd_event_source_set_enabled(ss->event_source, SD_EVENT_OFF);
-                ss->event_source = sd_event_source_unref(ss->event_source);
-        }
+        LIST_FOREACH(sockets, ss, s->sockets)
+                ss->event_source = sd_event_source_disable_unref(ss->event_source);
 
         sd_event_unref(s->event);
         return 0;

@@ -1,0 +1,45 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 24 Nov 2021 15:54:29 +0100
+Subject: man: don't mention IOSchedulingClass=none anymore in the docs
+
+Let's not mention a redundant setting of "none". Let's instead only
+mention "best-effort", which is the same. Also mention the default
+settings properly.
+
+(Also, while we are at it, don#t document the numeric alias, that's
+totally redundant and harder to use, so no need to push people towards
+it.)
+---
+ man/systemd.exec.xml | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/man/systemd.exec.xml b/man/systemd.exec.xml
+index 3333618..00f496b 100644
+--- a/man/systemd.exec.xml
++++ b/man/systemd.exec.xml
+@@ -1118,10 +1118,11 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
+       <varlistentry>
+         <term><varname>IOSchedulingClass=</varname></term>
+ 
+-        <listitem><para>Sets the I/O scheduling class for executed processes. Takes an integer between 0 and 3 or one
+-        of the strings <option>none</option>, <option>realtime</option>, <option>best-effort</option> or
+-        <option>idle</option>. If the empty string is assigned to this option, all prior assignments to both
+-        <varname>IOSchedulingClass=</varname> and <varname>IOSchedulingPriority=</varname> have no effect. See
++        <listitem><para>Sets the I/O scheduling class for executed processes. Takes one of the strings
++        <option>realtime</option>, <option>best-effort</option> or <option>idle</option>. The kernel's
++        default scheduling class is <option>best-effort</option> at a priority of 4. If the empty string is
++        assigned to this option, all prior assignments to both <varname>IOSchedulingClass=</varname> and
++        <varname>IOSchedulingPriority=</varname> have no effect. See
+         <citerefentry><refentrytitle>ioprio_set</refentrytitle><manvolnum>2</manvolnum></citerefentry> for
+         details.</para></listitem>
+       </varlistentry>
+@@ -1134,7 +1135,8 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
+         bandwidth is made available to the unit's processes, larger values mean less bandwidth. The available
+         priorities depend on the selected I/O scheduling class (see above). If the empty string is assigned
+         to this option, all prior assignments to both <varname>IOSchedulingClass=</varname> and
+-        <varname>IOSchedulingPriority=</varname> have no effect.  See
++        <varname>IOSchedulingPriority=</varname> have no effect. For the kernel's default scheduling class
++        (<option>best-effort</option>) this defaults to 4. See
+         <citerefentry><refentrytitle>ioprio_set</refentrytitle><manvolnum>2</manvolnum></citerefentry> for
+         details.</para></listitem>
+       </varlistentry>

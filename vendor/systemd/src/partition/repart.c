@@ -2103,16 +2103,14 @@ static void context_bar_char_process_partition(
         from = p->offset;
         to = from + p->new_size;
 
-        assert(context->end >= context->start);
-        total = context->end - context->start;
+        assert(context->total > 0);
+        total = context->total;
 
-        assert(from >= context->start);
-        assert(from <= context->end);
-        x = (from - context->start) * n / total;
+        assert(from <= total);
+        x = from * n / total;
 
-        assert(to >= context->start);
-        assert(to <= context->end);
-        y = (to - context->start) * n / total;
+        assert(to <= total);
+        y = to * n / total;
 
         assert(x <= y);
         assert(y <= n);
@@ -4862,6 +4860,10 @@ static int run(int argc, char *argv[]) {
         r = parse_efi_variable_factory_reset();
         if (r < 0)
                 return r;
+
+#if HAVE_LIBCRYPTSETUP
+        cryptsetup_enable_logging(NULL);
+#endif
 
         if (arg_image) {
                 assert(!arg_root);

@@ -8,6 +8,10 @@
 #include <sys/mount.h>
 #include <sys/xattr.h>
 
+#if HAVE_VALGRIND_MEMCHECK_H
+#include <valgrind/memcheck.h>
+#endif
+
 #include "blkid-util.h"
 #include "blockdev-util.h"
 #include "btrfs-util.h"
@@ -1136,6 +1140,10 @@ int home_prepare_luks(
                                 offset *= 512U;
                         }
                 } else {
+#if HAVE_VALGRIND_MEMCHECK_H
+                        VALGRIND_MAKE_MEM_DEFINED(&info, sizeof(info));
+#endif
+
                         offset = info.lo_offset;
                         size = info.lo_sizelimit;
                 }
@@ -1146,7 +1154,7 @@ int home_prepare_luks(
 
                 root_fd = open(user_record_home_directory(h), O_RDONLY|O_CLOEXEC|O_DIRECTORY|O_NOFOLLOW);
                 if (root_fd < 0) {
-                        r = log_error_errno(r, "Failed to open home directory: %m");
+                        r = log_error_errno(errno, "Failed to open home directory: %m");
                         goto fail;
                 }
         } else {
@@ -1233,7 +1241,7 @@ int home_prepare_luks(
 
                 root_fd = open(subdir, O_RDONLY|O_CLOEXEC|O_DIRECTORY|O_NOFOLLOW);
                 if (root_fd < 0) {
-                        r = log_error_errno(r, "Failed to open home directory: %m");
+                        r = log_error_errno(errno, "Failed to open home directory: %m");
                         goto fail;
                 }
 
@@ -2813,7 +2821,7 @@ int home_resize_luks(
                 if (r > 0)
                         log_info("Growing of partition completed.");
 
-                if (ioctl(image_fd, BLKRRPART, 0) < 0)
+                if (S_ISBLK(st.st_mode) && ioctl(image_fd, BLKRRPART, 0) < 0)
                         log_debug_errno(errno, "BLKRRPART failed on block device, ignoring: %m");
 
                 /* Tell LUKS about the new bigger size too */
@@ -2887,7 +2895,7 @@ int home_resize_luks(
                 if (r > 0)
                         log_info("Shrinking of partition completed.");
 
-                if (ioctl(image_fd, BLKRRPART, 0) < 0)
+                if (S_ISBLK(st.st_mode) && ioctl(image_fd, BLKRRPART, 0) < 0)
                         log_debug_errno(errno, "BLKRRPART failed on block device, ignoring: %m");
         } else {
                 r = home_store_embedded_identity(new_home, setup->root_fd, h->uid, embedded_home);

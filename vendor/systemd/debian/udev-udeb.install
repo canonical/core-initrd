@@ -1,6 +1,6 @@
+bin/udevadm
 lib/systemd/network/99-default.link
 lib/systemd/systemd-udevd
-bin/udevadm
 lib/udev/ata_id
 lib/udev/scsi_id
 lib/udev/cdrom_id

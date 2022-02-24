@@ -1,3 +1,215 @@
+systemd (249.10-0ubuntu1) jammy; urgency=medium
+
+  [ Lukas Märdian ]
+  * Merge 249.10 from upstream
+  * Denylist 29-PORTABLE & 50-DISSECT
+    Files:
+    - debian/patches/deny-list-TEST-29-PORTABLE-and-TEST-50-DISSECT.patch
+    - debian/patches/deny-list-TEST-29-PORTABLE-on-ppc64el.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=c16d9b8201f2321395f817e77ec07df5aef152a9
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Wed, 16 Feb 2022 19:08:40 +0100
+
+systemd (249.9-0ubuntu2) jammy; urgency=medium
+
+  * Skip flaky 55-OOMD test on ppc64el
+    File: debian/patches/deny-list-TEST-55-OOMD-on-ppc64el.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=211f8962ce89d416c2866444e0e2da794ecd5dd1
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Fri, 28 Jan 2022 10:46:41 +0100
+
+systemd (249.9-0ubuntu1) jammy; urgency=medium
+
+  [ Lukas Märdian ]
+  * Merge 249.7-1 from Debian
+    - d/rules: re-enable LTO
+      File: debian/rules
+      https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=616eb2eb7d2b30e50acc9cccdc39a7264c5582fb
+    - Refresh and drop patches, applied upstream
+      Files:
+      - debian/patches/Merge-pull-request-20705-from-yuwata-test-oomd-util.patch
+      - debian/patches/lp1952599/0001-virt-Support-detection-for-ARM64-Hyper-V-guests.patch
+      https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=877259bfeb7106a923b3066ad2c10fba2405195e
+  * Merge 249.9 from upstream
+    - Refresh and drop patches, applied upstream
+      Files:
+      - debian/patches/CVE-2021-3997-1.patch
+      - debian/patches/CVE-2021-3997-2.patch
+      - debian/patches/CVE-2021-3997-3.patch
+      - debian/patches/linux-5.15-compat-ioprio/test-make-test-execute-pass-on-Linux-5.15.patch
+      - debian/patches/lp1952599/0002-virt-Fix-the-detection-for-Hyper-V-VMs.patch
+      - debian/patches/rm-rf-optionally-fsync-after-removing-directory-tree.patch
+      - debian/patches/rm-rf-refactor-rm-rf-children-split-out-body-of-directory.patch
+      - debian/patches/debian/udev-drop-SystemCallArchitectures-native-from-systemd-ude.patch
+      https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=21b655193a5b91415d75516e458dcc5bce8855c0
+    - Disable new test case for UMask=+BindPaths= combination (LP: #1959013)
+      File: debian/patches/0001-Revert-tests-add-test-case-for-UMask-BindPaths-combi.patch
+      https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=5e9df936d2625c84856b101881e217064571e7e7
+  * Fix build in local git tree
+    meson is checking `git ls-files` if built inside a git tree (dpkg-buildpackage,
+    gbp buildpackage) and complaining about the missing src/basic/ioprio.h file.
+    So we should keep that file around (empty) to avoid this failure.
+    File: debian/patches/linux-5.15-compat-ioprio/Get-rid-of-ioprio.h-and-add-a-minimalistic-reimplementati.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=94f21032cd1d6e9dfae8d8f892bc627dbf9b4414
+  * Add lp1955997-unmask-intel-hid-for-HP-machines.patch (LP: #1955997)
+    File: debian/patches/lp1955997-unmask-intel-hid-for-HP-machines.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b90d59c81a1fd8a00e10147b1f5fd9bcf135d40e
+  * d/rules: Enable build of systemd-oomd
+    File: debian/rules
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=f4e16926c4e146f0b106a277b5b499c78db82bcb
+  * d/control: Ship oomd in a systemd-oomd package.
+    Deploying the default configuration as used in Fedora.
+    Files:
+    - debian/control
+    - debian/extra/systemd-oomd-defaults/-.slice.d/10-oomd-root-slice-defaults.conf
+    - debian/extra/systemd-oomd-defaults/oomd.conf.d/10-oomd-defaults.conf
+    - debian/extra/systemd-oomd-defaults/user@.service.d/10-oomd-user-service-defaults.conf
+    - debian/systemd-oomd.install
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=771fee9e73316c92e065e93946ec64c578b43706
+  * Start systemd-oomd.service after package installation
+    File: debian/systemd-oomd.postinst
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=d330cee174bd0e62a344d2aec4ec7435c9484fa2
+  * Cherry-pick upstream fixes to make 55-OOMD test less flaky
+    Files:
+    - debian/patches/test-also-show-the-memory-pressure-of-testchill.service.patch
+    - debian/patches/test-check-memory-pressure-more-frequently.patch
+    - debian/patches/test-enable-debug-logging-of-systemd-oomd.patch
+    - debian/patches/test-make-test-55-oomd-less-flaky.patch
+    - debian/patches/test-tweak-parameters-for-TEST-55-OOMD.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=7054dcaf04b028a092c58cf638847b2266377218
+
+  [ Michael Biebl ]
+  * oomd: move oomctl to bindir
+    Author: Michael Biebl
+    Files:
+    - debian/patches/oomd-move-oomctl-to-bindir.patch
+    - debian/systemd-oomd.install
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=6ce915c31c8daf3aec8b6d0e7b9712e21a87fa10
+  * test: explicitly configure oomd stuff via dropins
+    Author: Michael Biebl
+    File: debian/patches/test-explicitly-configure-oomd-stuff-via-dropins.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=11d415ee259f5642165e64ddd5d65d344515da66
+  * Don't install dbus-org.freedesktop.oom1.service symlink (Closes: #1003580)
+    Author: Michael Biebl
+    Files:
+    - debian/patches/debian/fsckd-daemon-for-inter-fsckd-communication.patch
+    - debian/patches/test-enable-systemd-oomd.service.patch
+    - debian/patches/units-don-t-install-dbus-org.freedesktop.oom1.service-ali.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b6df52f078fe61acf171300648f87116cf7dac74
+  * autopkgtest: add systemd-oomd dependency to upstream test.
+    We want systemd-oomd to be tested via the upstream provided
+    TEST-55-OOMD.
+    Author: Michael Biebl
+    File: debian/tests/control
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=fd80b766c4194c88486ebc62ca7d02b9f41a6454
+
+  [ Luca Boccassi ]
+  * systemd-oomd: add dependency on adduser.
+    Needed by postinst script
+    Author: Luca Boccassi
+    File: debian/control
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=146a97963a3a8551e9bda9fe7e726c6d2bd17cec
+  * systemd-oomd: fix description-synopsis-starts-with-article Lintian warning
+    Author: Luca Boccassi
+    File: debian/control
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=5dfe4f9c92e924fdda9e127b339cdccb7f1b2f58
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Wed, 26 Jan 2022 08:42:00 +0100
+
+systemd (249.7-1) unstable; urgency=medium
+
+  * New upstream version 249.7
+  * Rebase patches
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 19 Nov 2021 21:11:45 +0100
+
+systemd (249.6-3) unstable; urgency=medium
+
+  * scope: count successful cgroup additions when delegating via D-Bus
+    (Closes: #999745)
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 18 Nov 2021 21:13:02 +0100
+
+systemd (249.6-2) unstable; urgency=medium
+
+  * Consider dbus-broker in systemd-logind.service Condition check
+    (Closes: #999569)
+  * Temporarily disable LTO.
+    This is a test to see if it fixes the failure to build reproducibly on
+    arm*.
+  * sysusers: split up systemd.conf (Closes: #990349)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 13 Nov 2021 18:29:11 +0100
+
+systemd (249.6-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * New upstream version 249.6
+  * Rebase patches
+  * test: use kbd-mode-map we ship in one more test case
+  * Bump Standards-Version to 4.6.0
+  * Drop obsolete C/R upstart from systemd-sysv
+  * Drop obsolete dpkg (>= 1.19.3) | systemd-sysv dependency from udev.
+    It was added to ensure we have a dpkg with --notify-await which is now
+    satisfied by a dpkg from oldstable.
+  * Make the C/R against systemd versioned in
+    systemd-standalone-{sysusers,tmpfiles}
+    Those were added to facilitate an upgrade from bullseye. The version
+    makes it more explicit.
+  * Drop obsolete migration code for RAMTMP, TPMTIME and UTC
+
+  [ Luca Boccassi ]
+  * Depend on default-dbus-system-bus | dbus-system-bus.
+    Allows users to install only a single system bus implementation.
+    Prefer the default (dbus-daemon).
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 11 Nov 2021 22:04:31 +0100
+
+systemd (249.5-2ubuntu4) jammy; urgency=medium
+
+  * SECURITY UPDATE: systemd-tmpfiles could be made to crash.
+    - d/p/rm-rf-refactor-rm-rf-children-split-out-body-of-directory.patch:
+      Backport upstream patch from PR#20173
+    - d/p/rm-rf-optionally-fsync-after-removing-directory-tree.patch:
+      Backport upstream patch required for CVE-2021-3997 patches
+    - d/p/CVE-2021-3997-1.patch: Backport upstream patch to refactor
+      rm_rf_children_inner()
+    - d/p/CVE-2021-3997-2.patch: Backport upstream patch to refactor
+      rm_rf()
+    - d/p/CVE-2021-3997-3.patch: Backport upstream patch to loop over
+      nested directories instead of using recursion
+    - CVE-2021-3997
+
+ -- Alex Murray <alex.murray@canonical.com>  Mon, 10 Jan 2022 10:56:19 +1030
+
+systemd (249.5-2ubuntu3) jammy; urgency=medium
+
+  * Fix Linux >= 5.15 compat (ioprio API/test-execute)
+    Files:
+    - debian/patches/linux-5.15-compat-ioprio/Define-ioprio_-get-set-the-same-as-other-compat-syscalls.patch
+    - debian/patches/linux-5.15-compat-ioprio/Get-rid-of-ioprio.h-and-add-a-minimalistic-reimplementati.patch
+    - debian/patches/linux-5.15-compat-ioprio/core-normalize-ioprio-values-we-acquire-from-kernel.patch
+    - debian/patches/linux-5.15-compat-ioprio/ioprio-normalize-io-priority-values-in-configuration.patch
+    - debian/patches/linux-5.15-compat-ioprio/ioprio-util-add-macro-for-default-ioprio-settings.patch
+    - debian/patches/linux-5.15-compat-ioprio/man-don-t-mention-IOSchedulingClass-none-anymore-in-the-d.patch
+    - debian/patches/linux-5.15-compat-ioprio/shared-split-out-ioprio-related-stuff-into-ioprio-util.-c.patch
+    - debian/patches/linux-5.15-compat-ioprio/test-add-test-for-ioprio-normalization.patch
+    - debian/patches/linux-5.15-compat-ioprio/test-make-test-execute-pass-on-Linux-5.15.patch
+    - debian/patches/linux-5.15-compat-ioprio/variuos-add-missing-includes.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=a88474c8d9a8ea006434512905d84e42a774e1c6
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Fri, 07 Jan 2022 12:28:29 +0100
+
+systemd (249.5-2ubuntu2) jammy; urgency=medium
+
+  * d/p/debian/timedatectl-lp1650688.patch,
+    d/p/debian/UBUNTU-Fix-timezone-setting-on-read-only-etc.patch:
+    Fix timedated unable to retrieve & properly set timezone on
+    read-only /etc (e.g. Ubuntu Core and system-image-based systems)
+    (LP: #1650688, LP: #1733881)
+
+ -- Ratchanan Srirattanamet <ratchanan@ubports.com>  Wed, 08 Dec 2021 09:25:28 +0100
+
 systemd (249.5-2ubuntu1) jammy; urgency=medium
 
   * Merge to Ubuntu from Debian unstable
@@ -110,14 +322,14 @@ systemd (249.5-2ubuntu1) jammy; urgency=medium
     - debian/patches/lp1952599/0002-virt-Fix-the-detection-for-Hyper-V-VMs.patch
     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=57f51781646327832f15294368842da015f3c433
 
-  [Yao Wei]
+  [ Yao Wei ]
   * Add ACCEL_LOCATION=base property for Dell clamshell models (LP: #1943561)
     Files:
     - debian/patches/lp1943561/Add-additional-Dell-models-that-require-ACCEL_LOCATION-ba.patch
     - debian/patches/lp1943561/Use-SKU-to-identify-Dell-clamshell-models-for-acceleromet.patch
     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=9f99081482b76a7b717e39ef4380f08093e4359a
 
-  [Andy Chi]
+  [ Andy Chi ]
   * Add privacy micmute hotkey for Dell machine. (LP: #1952733)
     File: debian/patches/lp1952733-hwdb-60-keyboard-Update-Dell-Privacy-Micmute-Hotkey-Map.patch
     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=e590db02f015a0e999909b67e0cefbb4295c53a5
@@ -125,7 +337,7 @@ systemd (249.5-2ubuntu1) jammy; urgency=medium
     File: debian/patches/lp1952735-keymap-Add-microphone-mute-keymap-for-Dell-Machine.patch
     https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=03799d7649fd5e0dae226c81441932d19cb6cc36
 
-  [Dan Streetman]
+  [ Dan Streetman ]
   * d/p/lp1950508-cgroup-check-if-any-controller-is-in-use-as-v1.patch:
     Use cgroupv1 in container if host using cgroupv1
     (LP: #1950508)

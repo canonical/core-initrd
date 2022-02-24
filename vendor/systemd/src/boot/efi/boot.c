@@ -134,7 +134,7 @@ static BOOLEAN line_edit(
                 uefi_call_wrapper(ST->ConOut->OutputString, 2, ST->ConOut, print);
                 uefi_call_wrapper(ST->ConOut->SetCursorPosition, 3, ST->ConOut, cursor, y_pos);
 
-                err = console_key_read(&key, TRUE);
+                err = console_key_read(&key, 0);
                 if (EFI_ERROR(err))
                         continue;
 
@@ -387,7 +387,7 @@ static VOID print_status(Config *config, CHAR16 *loaded_image_path) {
                 Print(L"OsIndicationsSupported: %d\n", indvar);
 
         Print(L"\n--- press key ---\n\n");
-        console_key_read(&key, TRUE);
+        console_key_read(&key, 0);
 
         Print(L"timeout:                %u\n", config->timeout_sec);
         if (config->timeout_sec_efivar >= 0)
@@ -432,7 +432,7 @@ static VOID print_status(Config *config, CHAR16 *loaded_image_path) {
                 Print(L"LoaderEntryDefault:     %s\n", defaultstr);
 
         Print(L"\n--- press key ---\n\n");
-        console_key_read(&key, TRUE);
+        console_key_read(&key, 0);
 
         for (UINTN i = 0; i < config->entry_count; i++) {
                 ConfigEntry *entry;
@@ -482,7 +482,7 @@ static VOID print_status(Config *config, CHAR16 *loaded_image_path) {
                               entry->path, entry->next_name);
 
                 Print(L"\n--- press key ---\n\n");
-                console_key_read(&key, TRUE);
+                console_key_read(&key, 0);
         }
 
         uefi_call_wrapper(ST->ConOut->ClearScreen, 1, ST->ConOut);
@@ -509,11 +509,10 @@ static BOOLEAN menu_run(
         UINTN y_max;
         CHAR16 *status;
         CHAR16 *clearline;
-        INTN timeout_remain;
+        UINTN timeout_remain = config->timeout_sec;
         INT16 idx;
         BOOLEAN exit = FALSE;
         BOOLEAN run = TRUE;
-        BOOLEAN wait = FALSE;
 
         graphics_mode(FALSE);
         uefi_call_wrapper(ST->ConIn->Reset, 2, ST->ConIn, FALSE);
@@ -527,7 +526,7 @@ static BOOLEAN menu_run(
                 err = console_set_mode(&config->console_mode, config->console_mode_change);
                 if (EFI_ERROR(err)) {
                         uefi_call_wrapper(ST->ConOut->ClearScreen, 1, ST->ConOut);
-                        Print(L"Error switching console mode to %ld: %r.\r", (UINT64)config->console_mode, err);
+                        log_error_stall(L"Error switching console mode to %lu: %r", (UINT64)config->console_mode, err);
                 }
         } else
                 uefi_call_wrapper(ST->ConOut->ClearScreen, 1, ST->ConOut);
@@ -537,12 +536,6 @@ static BOOLEAN menu_run(
                 x_max = 80;
                 y_max = 25;
         }
-
-        /* we check 10 times per second for a keystroke */
-        if (config->timeout_sec > 0)
-                timeout_remain = config->timeout_sec * 10;
-        else
-                timeout_remain = -1;
 
         idx_highlight = config->idx_default;
         idx_highlight_prev = 0;
@@ -643,7 +636,7 @@ static BOOLEAN menu_run(
 
                 if (timeout_remain > 0) {
                         FreePool(status);
-                        status = PoolPrint(L"Boot in %d sec.", (timeout_remain + 5) / 10);
+                        status = PoolPrint(L"Boot in %d s.", timeout_remain);
                 }
 
                 /* print status at last line of screen */
@@ -664,27 +657,18 @@ static BOOLEAN menu_run(
                         uefi_call_wrapper(ST->ConOut->OutputString, 2, ST->ConOut, clearline+1 + x + len);
                 }
 
-                err = console_key_read(&key, wait);
-                if (EFI_ERROR(err)) {
-                        /* timeout reached */
+                err = console_key_read(&key, timeout_remain > 0 ? 1000 * 1000 : 0);
+                if (err == EFI_TIMEOUT) {
+                        timeout_remain--;
                         if (timeout_remain == 0) {
                                 exit = TRUE;
                                 break;
                         }
 
-                        /* sleep and update status */
-                        if (timeout_remain > 0) {
-                                uefi_call_wrapper(BS->Stall, 1, 100 * 1000);
-                                timeout_remain--;
-                                continue;
-                        }
-
-                        /* timeout disabled, wait for next key */
-                        wait = TRUE;
+                        /* update status */
                         continue;
-                }
-
-                timeout_remain = -1;
+                } else
+                        timeout_remain = 0;
 
                 /* clear status after keystroke */
                 if (status) {
@@ -787,7 +771,7 @@ static BOOLEAN menu_run(
                                         config->timeout_sec_efivar,
                                         EFI_VARIABLE_NON_VOLATILE);
                                 if (config->timeout_sec_efivar > 0)
-                                        status = PoolPrint(L"Menu timeout set to %d sec.", config->timeout_sec_efivar);
+                                        status = PoolPrint(L"Menu timeout set to %d s.", config->timeout_sec_efivar);
                                 else
                                         status = StrDuplicate(L"Menu disabled. Hold down key at bootup to show menu.");
                         } else if (config->timeout_sec_efivar <= 0){
@@ -795,7 +779,7 @@ static BOOLEAN menu_run(
                                 efivar_set(
                                         LOADER_GUID, L"LoaderConfigTimeout", NULL, EFI_VARIABLE_NON_VOLATILE);
                                 if (config->timeout_sec_config > 0)
-                                        status = PoolPrint(L"Menu timeout of %d sec is defined by configuration file.",
+                                        status = PoolPrint(L"Menu timeout of %d s is defined by configuration file.",
                                                            config->timeout_sec_config);
                                 else
                                         status = StrDuplicate(L"Menu disabled. Hold down key at bootup to show menu.");
@@ -813,7 +797,7 @@ static BOOLEAN menu_run(
                                 config->timeout_sec_efivar,
                                 EFI_VARIABLE_NON_VOLATILE);
                         if (config->timeout_sec_efivar > 0)
-                                status = PoolPrint(L"Menu timeout set to %d sec.",
+                                status = PoolPrint(L"Menu timeout set to %d s.",
                                                    config->timeout_sec_efivar);
                         else
                                 status = StrDuplicate(L"Menu disabled. Hold down key at bootup to show menu.");
@@ -1221,8 +1205,7 @@ static VOID config_entry_bump_counters(
                         break;
 
                 if (r != EFI_BUFFER_TOO_SMALL || file_info_size * 2 < file_info_size) {
-                        Print(L"\nFailed to get file info for '%s': %r\n", old_path, r);
-                        uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
+                        log_error_stall(L"Failed to get file info for '%s': %r", old_path, r);
                         return;
                 }
 
@@ -1234,8 +1217,7 @@ static VOID config_entry_bump_counters(
         StrCpy(file_info->FileName, entry->next_name);
         r = uefi_call_wrapper(handle->SetInfo, 4, handle, &EfiFileInfoGuid, file_info_size, file_info);
         if (EFI_ERROR(r)) {
-                Print(L"\nFailed to rename '%s' to '%s', ignoring: %r\n", old_path, entry->next_name, r);
-                uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
+                log_error_stall(L"Failed to rename '%s' to '%s', ignoring: %r", old_path, entry->next_name, r);
                 return;
         }
 
@@ -2165,18 +2147,12 @@ static EFI_STATUS image_start(
         EFI_STATUS err;
 
         path = FileDevicePath(entry->device, entry->loader);
-        if (!path) {
-                Print(L"Error getting device path.");
-                uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
-                return EFI_INVALID_PARAMETER;
-        }
+        if (!path)
+                return log_error_status_stall(EFI_INVALID_PARAMETER, L"Error getting device path.");
 
         err = uefi_call_wrapper(BS->LoadImage, 6, FALSE, parent_image, path, NULL, 0, &image);
-        if (EFI_ERROR(err)) {
-                Print(L"Error loading %s: %r", entry->loader, err);
-                uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
-                return err;
-        }
+        if (EFI_ERROR(err))
+                return log_error_status_stall(err, L"Error loading %s: %r", entry->loader, err);
 
         if (config->options_edit)
                 options = config->options_edit;
@@ -2190,8 +2166,7 @@ static EFI_STATUS image_start(
                 err = uefi_call_wrapper(BS->OpenProtocol, 6, image, &LoadedImageProtocol, (VOID **)&loaded_image,
                                         parent_image, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
                 if (EFI_ERROR(err)) {
-                        Print(L"Error getting LoadedImageProtocol handle: %r", err);
-                        uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
+                        log_error_stall(L"Error getting LoadedImageProtocol handle: %r", err);
                         goto out_unload;
                 }
                 loaded_image->LoadOptions = options;
@@ -2202,10 +2177,8 @@ static EFI_STATUS image_start(
                 err = tpm_log_event(SD_TPM_PCR,
                                     (EFI_PHYSICAL_ADDRESS) (UINTN) loaded_image->LoadOptions,
                                     loaded_image->LoadOptionsSize, loaded_image->LoadOptions);
-                if (EFI_ERROR(err)) {
-                        Print(L"Unable to add image options measurement: %r", err);
-                        uefi_call_wrapper(BS->Stall, 1, 200 * 1000);
-                }
+                if (EFI_ERROR(err))
+                        log_error_stall(L"Unable to add image options measurement: %r", err);
 #endif
         }
 
@@ -2231,9 +2204,7 @@ static EFI_STATUS reboot_into_firmware(VOID) {
                 return err;
 
         err = uefi_call_wrapper(RT->ResetSystem, 4, EfiResetCold, EFI_SUCCESS, 0, NULL);
-        Print(L"Error calling ResetSystem: %r", err);
-        uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
-        return err;
+        return log_error_status_stall(err, L"Error calling ResetSystem: %r", err);
 }
 
 static VOID config_free(Config *config) {
@@ -2305,30 +2276,21 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
 
         err = uefi_call_wrapper(BS->OpenProtocol, 6, image, &LoadedImageProtocol, (VOID **)&loaded_image,
                                 image, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
-        if (EFI_ERROR(err)) {
-                Print(L"Error getting a LoadedImageProtocol handle: %r", err);
-                uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
-                return err;
-        }
+        if (EFI_ERROR(err))
+                return log_error_status_stall(err, L"Error getting a LoadedImageProtocol handle: %r", err);
 
         /* export the device path this image is started from */
         if (disk_get_part_uuid(loaded_image->DeviceHandle, uuid) == EFI_SUCCESS)
                 efivar_set(LOADER_GUID, L"LoaderDevicePartUUID", uuid, 0);
 
         root_dir = LibOpenRoot(loaded_image->DeviceHandle);
-        if (!root_dir) {
-                Print(L"Unable to open root directory.");
-                uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
-                return EFI_LOAD_ERROR;
-        }
+        if (!root_dir)
+                return log_error_status_stall(EFI_LOAD_ERROR, L"Unable to open root directory.", EFI_LOAD_ERROR);
 
         if (secure_boot_enabled() && shim_loaded()) {
                 err = security_policy_install();
-                if (EFI_ERROR(err)) {
-                        Print(L"Error installing security policy: %r ", err);
-                        uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
-                        return err;
-                }
+                if (EFI_ERROR(err))
+                        return log_error_status_stall(err, L"Error installing security policy: %r", err);
         }
 
         /* the filesystem path to this image, to prevent adding ourselves to the menu */
@@ -2367,8 +2329,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
         }
 
         if (config.entry_count == 0) {
-                Print(L"No loader found. Configuration files in \\loader\\entries\\*.conf are needed.");
-                uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
+                log_error_stall(L"No loader found. Configuration files in \\loader\\entries\\*.conf are needed.");
                 goto out;
         }
 
@@ -2392,13 +2353,8 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
         else {
                 UINT64 key;
 
-                err = console_key_read(&key, FALSE);
-
-                if (err == EFI_NOT_READY) {
-                        uefi_call_wrapper(BS->Stall, 1, 100 * 1000);
-                        err = console_key_read(&key, FALSE);
-                }
-
+                /* Block up to 100ms to give firmware time to get input working. */
+                err = console_key_read(&key, 100 * 1000);
                 if (!EFI_ERROR(err)) {
                         INT16 idx;
 
@@ -2440,8 +2396,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *sys_table) {
                 err = image_start(image, &config, entry);
                 if (EFI_ERROR(err)) {
                         graphics_mode(FALSE);
-                        Print(L"\nFailed to execute %s (%s): %r\n", entry->title, entry->loader, err);
-                        uefi_call_wrapper(BS->Stall, 1, 3 * 1000 * 1000);
+                        log_error_stall(L"Failed to execute %s (%s): %r", entry->title, entry->loader, err);
                         goto out;
                 }
 

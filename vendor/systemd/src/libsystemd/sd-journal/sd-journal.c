@@ -211,7 +211,7 @@ static Match *match_new(Match *p, MatchType t) {
         return m;
 }
 
-static void match_free(Match *m) {
+static Match *match_free(Match *m) {
         assert(m);
 
         while (m->matches)
@@ -221,18 +221,18 @@ static void match_free(Match *m) {
                 LIST_REMOVE(matches, m->parent->matches, m);
 
         free(m->data);
-        free(m);
+        return mfree(m);
 }
 
-static void match_free_if_empty(Match *m) {
+static Match *match_free_if_empty(Match *m) {
         if (!m || m->matches)
-                return;
+                return m;
 
-        match_free(m);
+        return match_free(m);
 }
 
 _public_ int sd_journal_add_match(sd_journal *j, const void *data, size_t size) {
-        Match *l3, *l4, *add_here = NULL, *m;
+        Match *l3, *l4, *add_here = NULL, *m = NULL;
         uint64_t hash;
 
         assert_return(j, -EINVAL);
@@ -321,10 +321,11 @@ _public_ int sd_journal_add_match(sd_journal *j, const void *data, size_t size) 
         return 0;
 
 fail:
+        match_free(m);
         match_free_if_empty(add_here);
-        match_free_if_empty(j->level2);
-        match_free_if_empty(j->level1);
-        match_free_if_empty(j->level0);
+        j->level2 = match_free_if_empty(j->level2);
+        j->level1 = match_free_if_empty(j->level1);
+        j->level0 = match_free_if_empty(j->level0);
 
         return -ENOMEM;
 }
@@ -2300,6 +2301,7 @@ _public_ int sd_journal_get_data(sd_journal *j, const char *field, const void **
 
         n = journal_file_entry_n_items(o);
         for (i = 0; i < n; i++) {
+                Object *d;
                 uint64_t p, l;
                 le64_t le_hash;
                 size_t t;
@@ -2307,20 +2309,26 @@ _public_ int sd_journal_get_data(sd_journal *j, const char *field, const void **
 
                 p = le64toh(o->entry.items[i].object_offset);
                 le_hash = o->entry.items[i].hash;
-                r = journal_file_move_to_object(f, OBJECT_DATA, p, &o);
+                r = journal_file_move_to_object(f, OBJECT_DATA, p, &d);
+                if (IN_SET(r, -EADDRNOTAVAIL, -EBADMSG)) {
+                        log_debug_errno(r, "Entry item %"PRIu64" data object is bad, skipping over it: %m", i);
+                        continue;
+                }
                 if (r < 0)
                         return r;
 
-                if (le_hash != o->data.hash)
-                        return -EBADMSG;
+                if (le_hash != d->data.hash) {
+                        log_debug("Entry item %"PRIu64" hash is bad, skipping over it.", i);
+                        continue;
+                }
 
-                l = le64toh(o->object.size) - offsetof(Object, data.payload);
+                l = le64toh(d->object.size) - offsetof(Object, data.payload);
 
-                compression = o->object.flags & OBJECT_COMPRESSION_MASK;
+                compression = d->object.flags & OBJECT_COMPRESSION_MASK;
                 if (compression) {
 #if HAVE_COMPRESSION
                         r = decompress_startswith(compression,
-                                                  o->data.payload, l,
+                                                  d->data.payload, l,
                                                   &f->compress_buffer,
                                                   field, field_length, '=');
                         if (r < 0)
@@ -2331,7 +2339,7 @@ _public_ int sd_journal_get_data(sd_journal *j, const char *field, const void **
                                 size_t rsize;
 
                                 r = decompress_blob(compression,
-                                                    o->data.payload, l,
+                                                    d->data.payload, l,
                                                     &f->compress_buffer, &rsize,
                                                     j->data_threshold);
                                 if (r < 0)
@@ -2346,23 +2354,19 @@ _public_ int sd_journal_get_data(sd_journal *j, const char *field, const void **
                         return -EPROTONOSUPPORT;
 #endif
                 } else if (l >= field_length+1 &&
-                           memcmp(o->data.payload, field, field_length) == 0 &&
-                           o->data.payload[field_length] == '=') {
+                           memcmp(d->data.payload, field, field_length) == 0 &&
+                           d->data.payload[field_length] == '=') {
 
                         t = (size_t) l;
 
                         if ((uint64_t) t != l)
                                 return -E2BIG;
 
-                        *data = o->data.payload;
+                        *data = d->data.payload;
                         *size = t;
 
                         return 0;
                 }
-
-                r = journal_file_move_to_object(f, OBJECT_ENTRY, f->current_offset, &o);
-                if (r < 0)
-                        return r;
         }
 
         return -ENOENT;
@@ -2425,10 +2429,8 @@ static int return_data(
 
 _public_ int sd_journal_enumerate_data(sd_journal *j, const void **data, size_t *size) {
         JournalFile *f;
-        uint64_t p, n;
-        le64_t le_hash;
-        int r;
         Object *o;
+        int r;
 
         assert_return(j, -EINVAL);
         assert_return(!journal_pid_changed(j), -ECHILD);
@@ -2446,26 +2448,39 @@ _public_ int sd_journal_enumerate_data(sd_journal *j, const void **data, size_t 
         if (r < 0)
                 return r;
 
-        n = journal_file_entry_n_items(o);
-        if (j->current_field >= n)
-                return 0;
+        for (uint64_t n = journal_file_entry_n_items(o); j->current_field < n; j->current_field++) {
+                uint64_t p;
+                le64_t le_hash;
 
-        p = le64toh(o->entry.items[j->current_field].object_offset);
-        le_hash = o->entry.items[j->current_field].hash;
-        r = journal_file_move_to_object(f, OBJECT_DATA, p, &o);
-        if (r < 0)
-                return r;
+                p = le64toh(o->entry.items[j->current_field].object_offset);
+                le_hash = o->entry.items[j->current_field].hash;
+                r = journal_file_move_to_object(f, OBJECT_DATA, p, &o);
+                if (IN_SET(r, -EADDRNOTAVAIL, -EBADMSG)) {
+                        log_debug_errno(r, "Entry item %"PRIu64" data object is bad, skipping over it: %m", j->current_field);
+                        continue;
+                }
+                if (r < 0)
+                        return r;
 
-        if (le_hash != o->data.hash)
-                return -EBADMSG;
+                if (le_hash != o->data.hash) {
+                        log_debug("Entry item %"PRIu64" hash is bad, skipping over it.", j->current_field);
+                        continue;
+                }
 
-        r = return_data(j, f, o, data, size);
-        if (r < 0)
-                return r;
+                r = return_data(j, f, o, data, size);
+                if (r == -EBADMSG) {
+                        log_debug("Entry item %"PRIu64" data payload is bad, skipping over it.", j->current_field);
+                        continue;
+                }
+                if (r < 0)
+                        return r;
 
-        j->current_field++;
+                j->current_field++;
 
-        return 1;
+                return 1;
+        }
+
+        return 0;
 }
 
 _public_ int sd_journal_enumerate_available_data(sd_journal *j, const void **data, size_t *size) {
