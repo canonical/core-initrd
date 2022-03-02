@@ -1,0 +1,132 @@
+name: Spread tests
+on:
+  schedule:
+    # Weekly sunday testing for bitrot
+    - cron: '0 12 * * 0'
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - name: Cleanup job workspace
+        id: cleanup-job-workspace
+        run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+      - uses: actions/checkout@v2
+
+      - name: Build snap
+        run: |
+          spread -artifacts=./artifacts google-nested:tests/spread/build/
+          find ./artifacts -type f -name "*.deb" | head -n 1 | while read line ; do cp "$line" "${{ github.workspace }}/uc-initramfs.deb" ; done
+      
+      - uses: actions/upload-artifact@v2
+        with:
+          name: initramfsdeb
+          path: "${{ github.workspace }}/uc-initramfs.deb"
+
+      - name: Discard spread workers
+        if: always()
+        run: |
+          shopt -s nullglob
+          for r in .spread-reuse.*.yaml; do
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')"
+          done
+
+  tests-main:
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Cleanup job workspace
+        id: cleanup-job-workspace
+        run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+      - uses: actions/checkout@v2
+      - uses: actions/download-artifact@v2
+        with:
+          name: initramfsdeb
+          path: "${{ github.workspace }}/uc-initramfs.deb"
+      
+      - name: Run tests
+        run: |
+          spread google-nested:tests/spread/main/
+
+      - name: Discard spread workers
+        if: always()
+        run: |
+          shopt -s nullglob
+          for r in .spread-reuse.*.yaml; do
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')"
+          done
+  tests-snapd:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Cleanup job workspace
+        id: cleanup-job-workspace
+        run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+      
+      - uses: actions/checkout@v2
+        with:
+          path: core-initrd
+      - uses: actions/checkout@v2
+        with:
+          repository: 'snapcore/snapd'
+          path: snapd
+      - uses: actions/download-artifact@v2
+        with:
+          name: initramfsdeb
+      
+      - name: Install spread
+        run: curl -s https://storage.googleapis.com/snapd-spread-tests/spread/spread-amd64.tar.gz | sudo tar xzv -C /usr/bin
+
+      - name: Build image
+        working-directory: '${{ github.workspace }}'
+        run: |
+          . "core-initrd/tests/lib/prepare-utils.sh"
+
+          echo "************* INSTALLING DEPS *************"
+          install_core_initrd_deps '${{ github.workspace }}/core-initrd'
+
+          echo "************* DOWNLOADING SNAPS *************"
+          download_core_initrd_snaps 'edge'
+
+          # install ubuntu-core-initramfs here so the repack-kernel uses the version of
+          # ubuntu-core-initramfs we built here
+          apt install -yqq ./uc-initramfs.deb
+
+          echo "************* WRITING SSH CONFIG *************"
+          add_core_initrd_ssh_users
+
+          echo "************* PREPAREING CORE22 IMAGE *************"
+          inject_initramfs
+          repack_and_sign_gadget
+
+          echo "************* BUILDING CORE22 IMAGE *************"
+          build_core22_image
+
+          echo "************* STARTING CORE22 VM *************"
+          start_snapd_core_vm '${{ github.workspace }}'
+
+          cd snapd
+          
+          # add any test suites that should be tested here
+          SPREAD_EXTERNAL_ADDRESS=localhost:8022 spread external:ubuntu-core-22-64:tests/smoke/
+
+      - name: Discard spread workers
+        if: always()
+        run: |
+          shopt -s nullglob
+          for r in .spread-reuse.*.yaml; do
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')"
+          done
+

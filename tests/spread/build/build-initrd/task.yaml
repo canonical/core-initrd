@@ -1,0 +1,18 @@
+summary: Builds the core snap
+manual: true
+
+artifacts:
+  - "*.deb"
+
+prepare: |
+  # for various utilities
+  . "$TESTSLIB/prepare-utils.sh"
+
+  # install dependencies
+  install_core_initrd_deps "$PROJECT_PATH"
+
+execute: |
+  # for various utilities
+  . "$TESTSLIB/prepare-utils.sh"
+
+  build_core_initrd "$PROJECT_PATH"
