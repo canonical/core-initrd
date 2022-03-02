@@ -141,12 +141,6 @@ install_core_initrd_deps() {
         sudo snap install snapd
     fi
     sudo snap install ubuntu-image --classic
-
-    # install build-deps for ubuntu-core-initramfs
-    (
-        cd "$project_dir"
-        apt -y build-dep ./
-    )
 }
 
 download_core_initrd_snaps() {
@@ -169,6 +163,8 @@ build_core_initrd() {
     # build the debian package of ubuntu-core-initramfs
     (
         cd "$project_dir"
+        apt -y build-dep ./
+
         DEB_BUILD_OPTIONS='nocheck testkeys' dpkg-buildpackage -tc -b -Zgzip
 
         # save our debs somewhere safe
