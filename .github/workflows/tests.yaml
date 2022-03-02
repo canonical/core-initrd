@@ -102,14 +102,11 @@ jobs:
 
           # install ubuntu-core-initramfs here so the repack-kernel uses the version of
           # ubuntu-core-initramfs we built here
-          apt install -yqq ./uc-initramfs.deb
-
-          echo "************* WRITING SSH CONFIG *************"
-          add_core_initrd_ssh_users
+          sudo apt install -yqq ./uc-initramfs.deb
 
           echo "************* PREPAREING CORE22 IMAGE *************"
           inject_initramfs
-          repack_and_sign_gadget
+          repack_and_sign_gadget 'true'
 
           echo "************* BUILDING CORE22 IMAGE *************"
           build_core22_image

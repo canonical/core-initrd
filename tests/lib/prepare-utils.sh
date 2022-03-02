@@ -172,6 +172,28 @@ build_core_initrd() {
     )
 }
 
+# create two new users that used during testing when executing
+# snapd tests, external for the external backend, and 'test'
+# for the snapd test setup
+create_cloud_init_cdimage_config() {
+    local CONFIG_PATH=$1
+    cat << 'EOF' > "$CONFIG_PATH"
+#cloud-config
+datasource_list: [NoCloud]
+users:
+  - name: external
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: false
+    plain_text_passwd: 'ubuntu'
+  - name: test
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: false
+    plain_text_passwd: 'ubuntu'
+    uid: "12345"
+
+EOF
+}
+
 add_core_initrd_ssh_users() {
     snapddir=/tmp/snapd-workdir
     unsquashfs -d $snapddir upstream-snapd.snap
@@ -262,7 +284,8 @@ touch /root/spread-setup-done
 EOF
     chmod 0755 "$snapddir/usr/lib/snapd/snapd.spread-tests-run-mode-tweaks.sh"
 
-    snap pack --filename=snapd.snap "$snapddir"
+    rm upstream-snapd.snap
+    snap pack --filename=upstream-snapd.snap "$snapddir"
     rm -r $snapddir
 }
 
@@ -290,7 +313,15 @@ inject_initramfs() {
 repack_and_sign_gadget() {
     local snakeoil_dir=/usr/lib/ubuntu-core-initramfs/snakeoil
     local gadget_dir=/tmp/gadget-workdir
+    local use_cloudinit=${1:-}
+
     unsquashfs -d "$gadget_dir" upstream-pc-gadget.snap
+
+    # add the cloud.conf to the gadget, this is only used in non-nested
+    # contexts where we are not as easily able to inject the same users
+    if [ -n "$use_cloudinit" ]; then
+        create_cloud_init_cdimage_config "${gadget_dir}/cloud.conf"
+    fi
 
     sbattach --remove "$gadget_dir/shim.efi.signed"
     sbsign --key "$snakeoil_dir/PkKek-1-snakeoil.key" --cert "$snakeoil_dir/PkKek-1-snakeoil.pem" --output "$gadget_dir/shim.efi.signed" "$gadget_dir/shim.efi.signed"
@@ -303,8 +334,8 @@ build_core22_image() {
     ubuntu-image snap \
         -i 8G \
         --snap upstream-core22.snap \
-        --snap snapd.snap \
+        --snap upstream-snapd.snap \
         --snap pc-kernel.snap \
-        --snap upstream-pc-gadget.snap \
+        --snap pc-gadget.snap \
         ubuntu-core-amd64-dangerous.model
 }
