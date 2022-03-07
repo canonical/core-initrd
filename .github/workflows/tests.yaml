@@ -24,12 +24,12 @@ jobs:
       - name: Build snap
         run: |
           spread -artifacts=./artifacts google-nested:tests/spread/build/
-          find ./artifacts -type f -name "*.deb" | head -n 1 | while read line ; do cp "$line" "${{ github.workspace }}/uc-initramfs.deb" ; done
+          find ./artifacts -type f -name "*.artifact" -exec cp {} "${{ github.workspace }}" \;
       
       - uses: actions/upload-artifact@v2
         with:
-          name: initramfsdeb
-          path: "${{ github.workspace }}/uc-initramfs.deb"
+          name: snaps
+          path: "${{ github.workspace }}/*.artifact"
 
       - name: Discard spread workers
         if: always()
@@ -51,8 +51,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
         with:
-          name: initramfsdeb
-          path: "${{ github.workspace }}/uc-initramfs.deb"
+          name: snaps
       
       - name: Run tests
         run: |
@@ -84,7 +83,7 @@ jobs:
           path: snapd
       - uses: actions/download-artifact@v2
         with:
-          name: initramfsdeb
+          name: snaps
       
       - name: Install spread
         run: curl -s https://storage.googleapis.com/snapd-spread-tests/spread/spread-amd64.tar.gz | sudo tar xzv -C /usr/bin
@@ -100,14 +99,11 @@ jobs:
           echo "************* DOWNLOADING SNAPS *************"
           download_core_initrd_snaps 'edge'
 
-          # install ubuntu-core-initramfs here so the repack-kernel uses the version of
-          # ubuntu-core-initramfs we built here
-          sudo apt install -yqq ./uc-initramfs.deb
-
           echo "************* PREPAREING CORE22 IMAGE *************"
-          inject_initramfs
-          repack_and_sign_gadget 'true'
-
+          rm -f "upstream-pc-kernel.snap" "upstream-pc-gadget.snap"
+          mv "pc-kernel.artifact" "upstream-pc-kernel.snap"
+          mv "pc-gadget.artifact" "upstream-pc-gadget.snap"
+          
           echo "************* BUILDING CORE22 IMAGE *************"
           build_core22_image
 

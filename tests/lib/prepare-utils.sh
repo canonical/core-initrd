@@ -163,13 +163,38 @@ build_core_initrd() {
     # build the debian package of ubuntu-core-initramfs
     (
         cd "$project_dir"
-        apt -y build-dep ./
+        sudo apt -y build-dep ./
 
         DEB_BUILD_OPTIONS='nocheck testkeys' dpkg-buildpackage -tc -b -Zgzip
 
         # save our debs somewhere safe
         cp ../*.deb "$current_dir"
     )
+}
+
+inject_initramfs_into_kernel() {
+    local kernel_snap="$1"
+    local kernel_name=$(basename "$1")
+
+    # extract the kernel snap, including extracting the initrd from the kernel.efi
+    kerneldir="$(mktemp --tmpdir -d kernel-workdirXXXXXXXXXX)"
+    trap 'rm -rf "${kerneldir}"' EXIT
+
+    unsquashfs -f -d "${kerneldir}" "$kernel_snap"
+    (
+        cd "${kerneldir}"
+        config="$(echo config-*)"
+        kernelver="${config#config-}"
+        objcopy -O binary -j .linux kernel.efi kernel.img-"${kernelver}"
+        ubuntu-core-initramfs create-initrd --kerneldir modules/"${kernelver}" --kernelver "${kernelver}" --firmwaredir firmware --output ubuntu-core-initramfs.img
+        ubuntu-core-initramfs create-efi --initrd ubuntu-core-initramfs.img --kernel kernel.img --output kernel.efi --kernelver "${kernelver}"
+        mv "kernel.efi-${kernelver}" kernel.efi
+        rm kernel.img-"${kernelver}"
+        rm ubuntu-core-initramfs.img-"${kernelver}"
+    )
+
+    rm "$kernel_snap"
+    snap pack --filename=$kernel_name "$kerneldir"
 }
 
 # create two new users that used during testing when executing
@@ -192,6 +217,29 @@ users:
     uid: "12345"
 
 EOF
+}
+
+repack_and_sign_gadget() {
+    local snakeoil_dir=/usr/lib/ubuntu-core-initramfs/snakeoil
+    local gadget_dir=/tmp/gadget-workdir
+    local gadget_snap="$1"
+    local gadget_name=$(basename "$1")
+    local use_cloudinit=${2:-}
+
+    unsquashfs -d "$gadget_dir" "$gadget_snap"
+
+    # add the cloud.conf to the gadget, this is only used in non-nested
+    # contexts where we are not as easily able to inject the same users
+    if [ -n "$use_cloudinit" ]; then
+        create_cloud_init_cdimage_config "${gadget_dir}/cloud.conf"
+    fi
+
+    sbattach --remove "$gadget_dir/shim.efi.signed"
+    sbsign --key "$snakeoil_dir/PkKek-1-snakeoil.key" --cert "$snakeoil_dir/PkKek-1-snakeoil.pem" --output "$gadget_dir/shim.efi.signed" "$gadget_dir/shim.efi.signed"
+
+    rm "$gadget_snap"
+    snap pack --filename=$gadget_name "$gadget_dir"
+    rm -rf "$gadget_dir"
 }
 
 add_core_initrd_ssh_users() {
@@ -289,53 +337,12 @@ EOF
     rm -r $snapddir
 }
 
-inject_initramfs() {
-    # extract the kernel snap, including extracting the initrd from the kernel.efi
-    kerneldir="$(mktemp --tmpdir -d kernel-workdirXXXXXXXXXX)"
-    trap 'rm -rf "${kerneldir}"' EXIT
-
-    unsquashfs -f -d "${kerneldir}" upstream-pc-kernel.snap
-    (
-        cd "${kerneldir}"
-        config="$(echo config-*)"
-        kernelver="${config#config-}"
-        objcopy -O binary -j .linux kernel.efi kernel.img-"${kernelver}"
-        ubuntu-core-initramfs create-initrd --kerneldir modules/"${kernelver}" --kernelver "${kernelver}" --firmwaredir firmware --output ubuntu-core-initramfs.img
-        ubuntu-core-initramfs create-efi --initrd ubuntu-core-initramfs.img --kernel kernel.img --output kernel.efi --kernelver "${kernelver}"
-        mv "kernel.efi-${kernelver}" kernel.efi
-        rm kernel.img-"${kernelver}"
-        rm ubuntu-core-initramfs.img-"${kernelver}"
-    )
-
-    snap pack --filename=pc-kernel.snap "${kerneldir}"
-}
-
-repack_and_sign_gadget() {
-    local snakeoil_dir=/usr/lib/ubuntu-core-initramfs/snakeoil
-    local gadget_dir=/tmp/gadget-workdir
-    local use_cloudinit=${1:-}
-
-    unsquashfs -d "$gadget_dir" upstream-pc-gadget.snap
-
-    # add the cloud.conf to the gadget, this is only used in non-nested
-    # contexts where we are not as easily able to inject the same users
-    if [ -n "$use_cloudinit" ]; then
-        create_cloud_init_cdimage_config "${gadget_dir}/cloud.conf"
-    fi
-
-    sbattach --remove "$gadget_dir/shim.efi.signed"
-    sbsign --key "$snakeoil_dir/PkKek-1-snakeoil.key" --cert "$snakeoil_dir/PkKek-1-snakeoil.pem" --output "$gadget_dir/shim.efi.signed" "$gadget_dir/shim.efi.signed"
-
-    snap pack --filename=pc-gadget.snap "$gadget_dir"
-    rm -rf "$gadget_dir"
-}
-
 build_core22_image() {
     ubuntu-image snap \
         -i 8G \
         --snap upstream-core22.snap \
         --snap upstream-snapd.snap \
-        --snap pc-kernel.snap \
-        --snap pc-gadget.snap \
+        --snap upstream-pc-kernel.snap \
+        --snap upstream-pc-gadget.snap \
         ubuntu-core-amd64-dangerous.model
 }

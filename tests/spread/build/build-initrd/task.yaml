@@ -2,7 +2,7 @@ summary: Builds the core snap
 manual: true
 
 artifacts:
-  - "*.deb"
+  - "*.artifact"
 
 prepare: |
   # for various utilities
@@ -11,8 +11,26 @@ prepare: |
   # install dependencies
   install_core_initrd_deps "$PROJECT_PATH"
 
+  # download pc-kernel and pc gadget
+  snap download pc-kernel --channel=22/${SNAP_BRANCH} --basename=upstream-pc-kernel
+  snap download pc --channel=22/${SNAP_BRANCH} --basename=upstream-pc-gadget
+
 execute: |
   # for various utilities
   . "$TESTSLIB/prepare-utils.sh"
 
+  # build the initramfs deb
   build_core_initrd "$PROJECT_PATH"
+
+  # install it
+  apt install -yqq ./ubuntu-core-initramfs*.deb
+
+  # prepare kernel snap
+  inject_initramfs_into_kernel "upstream-pc-kernel.snap"
+
+  # prepare gadget snap
+  repack_and_sign_gadget "upstream-pc-gadget.snap" "true"
+  
+  # rename for artifacts
+  mv "upstream-pc-kernel.snap" "pc-kernel.artifact"
+  mv "upstream-pc-gadget.snap" "pc-gadget.artifact"

@@ -23,38 +23,43 @@ echo 'test ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 download_core_initrd_snaps "$SNAP_BRANCH"
 
-# skip the build process if the uc-initramfs was provided
-if [ ! -f "uc-initramfs.deb" ]; then
+# skip the build process if the gadget/kernel snaps were provided
+if [ ! -f "pc-kernel.artifact" || ! -f "pc-gadget.artifact" ]; then
+    # no pc-kernel gadget was provided by CI, we must construct our own
     build_core_initrd "$PROJECT_PATH"
-    cp ./ubuntu-core-initramfs*.deb uc-initramfs.deb
+
+    # install ubuntu-core-initramfs here so the repack-kernel uses the version of
+    # ubuntu-core-initramfs we built here
+    apt install -yqq ./ubuntu-core-initramfs*.deb
+
+    # next repack / modify the snaps we use in the image, we do this for a few 
+    # reasons:
+    # 1. we need an automated way to get a user on the system to ssh into regardless
+    #    of grade, so we add a systemd service to the snapd snap which will create 
+    #    our user we can ssh into the VM with (if we only wanted to test dangerous,
+    #    we could use cloud-init).
+    # 2. we need to modify the initramfs in the kernel snap to use our initramfs, 
+    #    which requires re-signing of the kernel.efi
+    # 3. since we re-sign the kernel.efi of the kernel snap, for successful secure
+    #    boot, we need to also re-sign the gadget shim too
+
+    # modify the pc-kernel we've downloaded
+    inject_initramfs_into_kernel "upstream-pc-kernel.snap"
+
+    # first re-pack snapd snap with special systemd service which runs during run 
+    # mode to create a user for us to inspect the system state
+    # we also extract the snap-bootstrap binary for insertion into the kernel snap's
+    # initramfs too
+    add_core_initrd_ssh_users
+
+    # penultimately, re-pack the gadget snap with snakeoil signed shim
+    repack_and_sign_gadget "upstream-pc-gadget.snap"
+else
+    # it was provided, delete the one we downloaded and rename the artifact
+    rm -f "upstream-pc-kernel.snap" "upstream-pc-gadget.snap"
+    mv "pc-kernel.artifact" "upstream-pc-kernel.snap"
+    mv "pc-gadget.artifact" "upstream-pc-gadget.snap"
 fi
-
-# install ubuntu-core-initramfs here so the repack-kernel uses the version of
-# ubuntu-core-initramfs we built here
-apt install -yqq ./uc-initramfs.deb
-
-# next repack / modify the snaps we use in the image, we do this for a few 
-# reasons:
-# 1. we need an automated way to get a user on the system to ssh into regardless
-#    of grade, so we add a systemd service to the snapd snap which will create 
-#    our user we can ssh into the VM with (if we only wanted to test dangerous,
-#    we could use cloud-init).
-# 2. we need to modify the initramfs in the kernel snap to use our initramfs, 
-#    which requires re-signing of the kernel.efi
-# 3. since we re-sign the kernel.efi of the kernel snap, for successful secure
-#    boot, we need to also re-sign the gadget shim too
-
-# first re-pack snapd snap with special systemd service which runs during run 
-# mode to create a user for us to inspect the system state
-# we also extract the snap-bootstrap binary for insertion into the kernel snap's
-# initramfs too
-add_core_initrd_ssh_users
-
-# next re-pack the kernel snap with this version of ubuntu-core-initramfs
-inject_initramfs
-
-# penultimately, re-pack the gadget snap with snakeoil signed shim
-repack_and_sign_gadget
 
 # finally build the uc22 image
 build_core22_image
