@@ -81,26 +81,21 @@ prepare: |
   type REBOOT | tail -n +2 >> "$TESTSLIB"/spread-funcs.sh
   unset REBOOT
 
-  # prepare common uc22 image setup by repacking snaps, etc
-  "$TESTSLIB"/prepare-uc22.sh
-
-restore-each: |
-  # delete the nested VM image after each task finishes so we don't use too much
-  # disk space
-  . "$TESTSLIB/nested.sh"
-  cleanup_nested_core_vm
-
-debug-each: |
-  . "$TESTSLIB/nested.sh"
-  print_nested_status
-
 # it takes a while to build everything while preparing the project
 warn-timeout: 40m
 # but it shouldn't take _too_ long...
 kill-timeout: 50m
 
 suites:
-  tests/spread/:
+  tests/spread/build/:
+    summary: Build task for the core snap.
+    manual: true
+  
+  tests/spread/ci/:
+    summary: CI specific tasks for core-base.
+    manual: true
+  
+  tests/spread/main/:
     summary: Main spread tests
     environment:
       # since we are only testing uc22 here, disable kvm unless the env
@@ -130,4 +125,17 @@ suites:
       # no enc does not have secure boot or tpm
       ENABLE_TPM/noenc: false
       ENABLE_SECURE_BOOT/noenc: false
+    
+    prepare: |
+      # prepare common uc image setup by repacking snaps, etc
+      "$TESTSLIB"/prepare-uc.sh
+    restore-each: |
+      # delete the nested VM image after each task finishes so we don't use too much
+      # disk space
+      . "$TESTSLIB/nested.sh"
+      cleanup_nested_core_vm
+    debug-each: |
+      . "$TESTSLIB/nested.sh"
+      print_nested_status
+
 # vim:ts=4:sw=4:et
