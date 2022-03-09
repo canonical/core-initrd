@@ -7,6 +7,8 @@ include /usr/share/dpkg/default.mk
 	dh $@ --buildsystem=meson+ninja --sourcedirectory=vendor/systemd --with python3
 
 override_dh_auto_configure:
+	find vendor/systemd-patches/ -type f -printf "%f\n" | sort >> vendor/systemd/debian/patches/series
+	cp vendor/systemd-patches/*.patch vendor/systemd/debian/patches/
 	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a || true
 	sed -i '/"minix"/s/^/\/\//' vendor/systemd/src/test/test-path-util.c
 	dh_auto_configure --buildsystem=meson+ninja --sourcedirectory=vendor/systemd -- \
