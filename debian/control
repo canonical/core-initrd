@@ -45,6 +45,7 @@ Build-Depends: debhelper-compat (= 13), dh-python, python3:any, dracut-core, qui
                libpolkit-gobject-1-dev <!stage1>,
                libzstd-dev (>= 1.4.0),
                linux-base <!nocheck>,
+               llvm,
                acl <!nocheck>,
                python3:native,
                python3-jinja2:native,

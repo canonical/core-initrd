@@ -104,16 +104,15 @@ def create_efi(parser, args):
         args.initrd = "-".join([args.initrd, args.kernelver])
         args.output = "-".join([args.output, args.kernelver])
 
-    # kernel.efi map
-    # 0x0000000 stub
-    # 0x0020000 .osrel
-    # 0x0030000 .cmdline
-    # 0x0040000 .splash
-    # 0x0050000 .sbat
-    # 0x2000000 .linux
-    # 0x3000000 .initrd
+    # kernel.efi sections will be aligned to the page size by llvm-objcopy
+    # (which is the default value for SectionAlignment in the PE header).
+    # --set-section-flags are such so added COFF sections have flags:
+    # CONTENTS, ALLOC, LOAD, READONLY, DATA
+    # (see llvm-objcopy man page for details)
+    # To see more details, run 'objdump --all-headers kernel.efi'
+    # (objdump gives a bit more of information than llvm-objdump in this case)
     objcopy_cmd = [
-            "objcopy",
+            "llvm-objcopy",
         ]
     # TODO add .osrel
     if args.cmdline:
@@ -121,29 +120,17 @@ def create_efi(parser, args):
         cmdline.write('%s' % args.cmdline)
         cmdline.flush()
         objcopy_cmd += [
-            "--add-section",
-            ".cmdline=%s" % cmdline.name,
-            "--change-section-vma",
-            ".cmdline=0x30000"
+            "--add-section", ".cmdline=%s" % cmdline.name,
+            "--set-section-flags", ".cmdline=readonly,data",
             ]
     # TODO add .splash
     objcopy_cmd += [
-            "--add-section",
-            ".sbat=%s" % args.sbat,
-            "--set-section-flags",
-            ".sbat=contents,alloc,load,readonly,data",
-            "--change-section-vma",
-            ".sbat=0x50000",
-            "--set-section-alignment",
-            ".sbat=4096",
-            "--add-section",
-            ".linux=%s" % args.kernel,
-            "--change-section-vma",
-            ".linux=0x2000000",
-            "--add-section",
-            ".initrd=%s" % args.initrd,
-            "--change-section-vma",
-            ".initrd=0x3000000",
+            "--add-section", ".sbat=%s" % args.sbat,
+            "--set-section-flags", ".sbat=readonly,data",
+            "--add-section", ".linux=%s" % args.kernel,
+            "--set-section-flags", ".linux=readonly,data",
+            "--add-section", ".initrd=%s" % args.initrd,
+            "--set-section-flags", ".initrd=readonly,data",
             args.stub,
             args.output,
         ]
