@@ -1,3 +1,23 @@
+ubuntu-core-initramfs (54) jammy; urgency=medium
+
+  [ Valentin David ]
+  * Remove tmp.mount
+  * tests: Be more verbose when nested VM does not respond
+  * tests: Properly call ubuntu-core-initramfs to generate the initrd
+  * Rename "the-tool" and remove wrapper script
+
+  [ Philip Meulengracht ]
+  * spread: refactor pipelines and add snapd testing
+
+  [ Alfonso Sanchez-Beato ]
+  * factory: sync users/groups with core22
+  * Update to systemd from jammy debian package 249.10-0ubuntu1
+  * Backport patches from sd-stub v250
+  * the-modeenv: mount piboot from seed if present
+  * d/control: binutils is now replaced by llvm as run dependency
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Wed, 23 Mar 2022 12:56:42 +0100
+
 ubuntu-core-initramfs (53) jammy; urgency=medium
 
   [ Philip Meulengracht ]
