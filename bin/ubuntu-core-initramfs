@@ -94,6 +94,7 @@ def create_efi(parser, args):
     if args.root:
         args.stub = os.path.join(args.root, args.stub)
         args.sbat = os.path.join(args.root, args.sbat)
+        args.splash = os.path.join(args.root, args.splash)
         args.kernel = os.path.join(args.root, args.kernel)
         args.initrd = os.path.join(args.root, args.initrd)
         args.key = os.path.join(args.root, args.key)
@@ -127,6 +128,8 @@ def create_efi(parser, args):
     objcopy_cmd += [
             "--add-section", ".sbat=%s" % args.sbat,
             "--set-section-flags", ".sbat=readonly,data",
+            "--add-section", ".splash=%s" % args.splash,
+            "--set-section-flags", ".splash=readonly,data",
             "--add-section", ".linux=%s" % args.kernel,
             "--set-section-flags", ".linux=readonly,data",
             "--add-section", ".initrd=%s" % args.initrd,
@@ -166,6 +169,8 @@ def main():
     efi_parser.add_argument("--stub", help="path to stub")
     efi_parser.add_argument("--sbat", help="path to sbat",
                             default="/usr/lib/ubuntu-core-initramfs/efi/sbat.txt")
+    efi_parser.add_argument("--splash", help="path to splash",
+                            default="/usr/lib/ubuntu-core-initramfs/efi/splash.bmp")
     if suffix:
         efi_parser.set_defaults(
             stub="/usr/lib/ubuntu-core-initramfs/efi/linux%s.efi.stub" % suffix
