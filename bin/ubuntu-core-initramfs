@@ -155,7 +155,10 @@ def main():
     kernelver = subprocess.check_output(
         ["uname", "-r"], universal_newlines=True
     ).strip()
-    suffix = {"x86_64": "x64", "aarch64": "aa64"}.get(platform.machine())
+    suffix = {"x86_64": "x64",
+              "aarch64": "aa64",
+              "arm": "arm",
+              "riscv64": "riscv64"}.get(platform.machine())
     features = {"x86_64": "main server"}.get(platform.machine(), "main")
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
