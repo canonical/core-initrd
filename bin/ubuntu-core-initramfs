@@ -80,7 +80,7 @@ def create_initrd(parser, args):
                     shutil.copyfileobj(f, output)
             output.write(
                 subprocess.run(
-                    "find . | cpio --create --quiet --format='newc' --owner=0:0 | lz4 -9 -l",
+                    "find . | cpio --create --quiet --format='newc' --owner=0:0 | zstd -1 -T0",
                     cwd=main,
                     capture_output=True,
                     shell=True,
