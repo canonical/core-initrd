@@ -9,14 +9,25 @@ import glob
 import shutil
 
 
+# os.path.join() throws away previous components when it finds one
+# that is an absolute path - we do not want that when using --root as
+# many defaults are absolute, so we use this function to make second
+# and later paths relative.
+def path_join_make_rel_paths(path, *paths):
+    relative_paths = []
+    for p in paths:
+        relative_paths.append(os.path.relpath(os.path.join('/', p), '/'))
+    return os.path.join(path, *relative_paths)
+
+
 def create_initrd(parser, args):
     if not args.kerneldir:
         args.kerneldir = "/lib/modules/%s" % args.kernelver
     if args.root:
-        args.skeleton = os.path.join(args.root, args.skeleton)
-        args.kerneldir = os.path.join(args.root, args.kerneldir)
-        args.firmwaredir = os.path.join(args.root, args.firmwaredir)
-        args.output = os.path.join(args.root, args.output)
+        args.skeleton = path_join_make_rel_paths(args.root, args.skeleton)
+        args.kerneldir = path_join_make_rel_paths(args.root, args.kerneldir)
+        args.firmwaredir = path_join_make_rel_paths(args.root, args.firmwaredir)
+        args.output = path_join_make_rel_paths(args.root, args.output)
     if args.kernelver:
         args.output = "-".join([args.output, args.kernelver])
     with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
@@ -92,13 +103,13 @@ def create_efi(parser, args):
     if not args.stub:
         parser.error("--stub is required, and one was not automatically detected")
     if args.root:
-        args.stub = os.path.join(args.root, args.stub)
-        args.sbat = os.path.join(args.root, args.sbat)
-        args.kernel = os.path.join(args.root, args.kernel)
-        args.initrd = os.path.join(args.root, args.initrd)
-        args.key = os.path.join(args.root, args.key)
-        args.cert = os.path.join(args.root, args.cert)
-        args.output = os.path.join(args.root, args.output)
+        args.stub = path_join_make_rel_paths(args.root, args.stub)
+        args.sbat = path_join_make_rel_paths(args.root, args.sbat)
+        args.kernel = path_join_make_rel_paths(args.root, args.kernel)
+        args.initrd = path_join_make_rel_paths(args.root, args.initrd)
+        args.key = path_join_make_rel_paths(args.root, args.key)
+        args.cert = path_join_make_rel_paths(args.root, args.cert)
+        args.output = path_join_make_rel_paths(args.root, args.output)
     if args.kernelver:
         args.kernel = "-".join([args.kernel, args.kernelver])
         args.initrd = "-".join([args.initrd, args.kernelver])
