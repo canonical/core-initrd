@@ -1,3 +1,17 @@
+ubuntu-core-initramfs (55) jammy; urgency=medium
+
+  [ Dimitri John Ledkov ]
+  * Add additional EFI arch tags
+  * Switch from lz4 to zstd compression
+
+  [ Valentin David ]
+  * Fix overriding of ExecStart for recovery-chooser-trigger
+
+  [ Alfonso Sanchez-Beato ]
+  * ubuntu-core-initramfs: make paths relative when using the --root
+
+ -- Valentin David <valentin.david@canonical.com>  Wed, 27 Apr 2022 11:20:25 +0200
+
 ubuntu-core-initramfs (54) jammy; urgency=medium
 
   [ Valentin David ]
