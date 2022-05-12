@@ -1,4 +1,4 @@
-From 6d156d0ec471aad6fb0a7a9e3fd7d5de1c9b4216 Mon Sep 17 00:00:00 2001
+From 579f04bdc9a1708f7d7b655653b15f977c8c5a87 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Wed, 11 Aug 2021 14:59:46 +0200
 Subject: [PATCH 10/73] sd-boot: Allow on/off and t/f for booleans too
@@ -50,5 +50,5 @@ index b2977546a..0c28cab24 100644
                  return EFI_SUCCESS;
          }
 -- 
-2.25.1
+2.34.1
 

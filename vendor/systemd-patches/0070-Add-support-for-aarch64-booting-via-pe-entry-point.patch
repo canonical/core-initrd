@@ -1,4 +1,4 @@
-From 83f4a3cf91ed2ce56cc617247f83e35d3f20b252 Mon Sep 17 00:00:00 2001
+From d4f9d918b8bcb418429c35971987f02e3b73dfdc Mon Sep 17 00:00:00 2001
 From: Max Resch <resch.max@gmail.com>
 Date: Mon, 11 Oct 2021 15:15:30 +0200
 Subject: [PATCH 70/73] Add support for aarch64 booting via pe-entry point
@@ -754,5 +754,5 @@ index 09171558c..f8735e556 100644
          graphics_mode(FALSE);
          return log_error_status_stall(err, L"Execution of embedded linux image failed: %r", err);
 -- 
-2.25.1
+2.34.1
 

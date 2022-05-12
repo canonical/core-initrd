@@ -1,4 +1,4 @@
-From 5d58a758f5dc9379dcc33e870b88f51bd3dd99a6 Mon Sep 17 00:00:00 2001
+From 28f9198e67d3f0c06294f5baabba194d22aed7fa Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Thu, 16 Sep 2021 16:02:36 +0200
 Subject: [PATCH 30/73] boot: invert if check, to reduce indentation level
@@ -75,5 +75,5 @@ index af02cfb7e..cfe20c27f 100644
  
  static INTN config_entry_compare(ConfigEntry *a, ConfigEntry *b) {
 -- 
-2.25.1
+2.34.1
 

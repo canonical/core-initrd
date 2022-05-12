@@ -1,4 +1,4 @@
-From d866fdf4280bac5da0e296a3c1f1793ad0242c14 Mon Sep 17 00:00:00 2001
+From 6c9a85a6e0586d5a9467725476aa7538590f5dc7 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sun, 15 Aug 2021 13:44:47 +0200
 Subject: [PATCH 29/73] sd-boot: Add support for changing console mode at
@@ -468,5 +468,5 @@ index 9eef51cc7..a5b6435f1 100644
  VOID print_at(UINTN x, UINTN y, UINTN attr, const CHAR16 *str);
 +VOID clear_screen(UINTN attr);
 -- 
-2.25.1
+2.34.1
 

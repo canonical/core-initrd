@@ -1,4 +1,4 @@
-From 0cd12c9883cb39fd82a04d78bb7d6d52045038e9 Mon Sep 17 00:00:00 2001
+From 05275f9a6dec8b365c8cb34fde2eff17c9966bc3 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sun, 15 Aug 2021 13:44:42 +0200
 Subject: [PATCH 28/73] sd-boot: Simplify setting console mode
@@ -329,5 +329,5 @@ index 23848a9c5..ec1a96871 100644
 +EFI_STATUS console_set_mode(INT64 mode);
 +EFI_STATUS console_query_mode(UINTN *x_max, UINTN *y_max);
 -- 
-2.25.1
+2.34.1
 

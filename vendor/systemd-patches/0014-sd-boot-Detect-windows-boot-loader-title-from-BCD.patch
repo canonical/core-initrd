@@ -1,4 +1,4 @@
-From 31b5d10b06b05525980dd7269ff4099355cb1379 Mon Sep 17 00:00:00 2001
+From 15c651b8b4fe1403a1097af50b0aef46de40bf7a Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Fri, 13 Aug 2021 19:03:35 +0200
 Subject: [PATCH 14/73] sd-boot: Detect windows boot loader title from BCD
@@ -84,5 +84,5 @@ index 70f5a2ba5..82da98432 100644
          if (config.auto_firmware && efivar_get_uint64_le(EFI_GLOBAL_GUID, L"OsIndicationsSupported", &osind) == EFI_SUCCESS) {
                  if (osind & EFI_OS_INDICATIONS_BOOT_TO_FW_UI)
 -- 
-2.25.1
+2.34.1
 

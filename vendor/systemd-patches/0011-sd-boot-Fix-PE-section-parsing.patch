@@ -1,4 +1,4 @@
-From 1ae25afdc5e1a9ab607a2c9d7d85fa200de17576 Mon Sep 17 00:00:00 2001
+From 3e39fd89b3e9d05e317dc7c07731f4c5ea96630d Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Fri, 13 Aug 2021 18:55:32 +0200
 Subject: [PATCH 11/73] sd-boot: Fix PE section parsing
@@ -503,5 +503,5 @@ index 8fe79cc02..bef1b55cb 100644
  #define _unused_ __attribute__((__unused__))
  #define _cleanup_(x) __attribute__((__cleanup__(x)))
 -- 
-2.25.1
+2.34.1
 

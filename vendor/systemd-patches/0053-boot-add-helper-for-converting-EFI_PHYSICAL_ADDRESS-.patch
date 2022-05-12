@@ -1,4 +1,4 @@
-From 4051cf25d9d4cb59bd3b948d8d736c906bd822c6 Mon Sep 17 00:00:00 2001
+From 16087acc8fb436c848050af6fcf2b7408d7c6d22 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Alfonso=20S=C3=A1nchez-Beato?=
  <alfonso.sanchez-beato@canonical.com>
 Date: Fri, 25 Feb 2022 15:57:41 +0100
@@ -195,5 +195,5 @@ index 3a29ff2d7..ca95514d7 100644
 +        return (void*) (UINTN) addr;
 +}
 -- 
-2.25.1
+2.34.1
 

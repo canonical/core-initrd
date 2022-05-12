@@ -1,4 +1,4 @@
-From e867d8c531aab8a0c3ea96f39d8bb863d0b9f65a Mon Sep 17 00:00:00 2001
+From 2519e8277664f784f3d8419fc58e7d038a8f4c67 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 14:45:55 +0200
 Subject: [PATCH 46/73] boot: split out code that loads the various menu
@@ -114,5 +114,5 @@ index 3cb990abd..62fc13e15 100644
          if (config.entry_count == 0) {
                  log_error_stall(L"No loader found. Configuration files in \\loader\\entries\\*.conf are needed.");
 -- 
-2.25.1
+2.34.1
 

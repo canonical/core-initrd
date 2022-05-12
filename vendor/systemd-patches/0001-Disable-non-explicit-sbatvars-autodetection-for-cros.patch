@@ -1,4 +1,4 @@
-From 356320ac48c558a8b08bd7f22a80685791a8f04f Mon Sep 17 00:00:00 2001
+From d93c869e950c9e875992832d541eb47c6c0c2d53 Mon Sep 17 00:00:00 2001
 From: James Hilliard <james.hilliard1@gmail.com>
 Date: Sat, 10 Jul 2021 04:36:50 -0600
 Subject: [PATCH 01/73] Disable non-explicit sbatvars autodetection for cross
@@ -26,5 +26,5 @@ index afdf739d9..62d826bec 100644
                                  value = run_command(sh, '-c', cmd).stdout().strip()
                                  message('@0@ (from @1@): @2@'.format(sbatvar[0], sbatvar[1], value))
 -- 
-2.25.1
+2.34.1
 

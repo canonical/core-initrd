@@ -1,4 +1,4 @@
-From fec64b74963f41836d219fc66defe3259c32538a Mon Sep 17 00:00:00 2001
+From 48a9c5a9b34d7199020f824bb77fc280f076b3c5 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 15:39:47 +0200
 Subject: [PATCH 52/73] boot: move TPM conditionalization into measure.h header
@@ -69,5 +69,5 @@ index 9a71aff16..3a42ff422 100644
  
          export_variables(loaded_image);
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From 5a47f141b7dcbc632efc4d225daa171dd0cd90e0 Mon Sep 17 00:00:00 2001
+From 0d28ec1e1da57e96f3e5b2e3b426db6587971e3f Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Wed, 11 Aug 2021 14:59:46 +0200
 Subject: [PATCH 06/73] sd-boot: Add assert implementation
@@ -86,5 +86,5 @@ index 533ac1b7e..8fe79cc02 100644
  
  #if defined(static_assert)
 -- 
-2.25.1
+2.34.1
 

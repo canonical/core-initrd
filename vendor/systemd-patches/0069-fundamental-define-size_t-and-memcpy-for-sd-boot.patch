@@ -1,4 +1,4 @@
-From e4e3dec7772171cafae1a128275f8e0997f67d83 Mon Sep 17 00:00:00 2001
+From 38cf977808fad9015cc5fafa7a34a986ca277c12 Mon Sep 17 00:00:00 2001
 From: Luca Boccassi <luca.boccassi@microsoft.com>
 Date: Fri, 8 Oct 2021 13:06:51 +0100
 Subject: [PATCH 69/73] fundamental: define size_t and memcpy for sd-boot
@@ -100,5 +100,5 @@ index f645d2de7..2a9a114bb 100644
 -typedef size_t  sd_size_t;
  #endif
 -- 
-2.25.1
+2.34.1
 

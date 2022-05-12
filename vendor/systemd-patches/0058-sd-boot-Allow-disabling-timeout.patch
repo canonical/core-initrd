@@ -1,4 +1,4 @@
-From 4c307fe43dee78a3f0cbd349cf259a76c5da89a6 Mon Sep 17 00:00:00 2001
+From ab3f35e85a8999fe4bd908b02fe2f8cc56bad9cf Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Thu, 16 Sep 2021 10:25:10 +0200
 Subject: [PATCH 58/73] sd-boot: Allow disabling timeout
@@ -262,5 +262,5 @@ index d82d679a4..e1d8c935c 100644
          }
  
 -- 
-2.25.1
+2.34.1
 

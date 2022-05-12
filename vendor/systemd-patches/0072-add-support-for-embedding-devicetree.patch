@@ -1,4 +1,4 @@
-From 387f3a0a9e22a60894736c096ed0d7f2fa234506 Mon Sep 17 00:00:00 2001
+From 48fc0d3a17e2fb6be969f12e6996a035228f5caf Mon Sep 17 00:00:00 2001
 From: Max Resch <resch.max@gmail.com>
 Date: Fri, 15 Oct 2021 14:18:57 +0200
 Subject: [PATCH 72/73] add support for embedding devicetree
@@ -140,5 +140,5 @@ index f8735e556..1bda47b94 100644
                           PHYSICAL_ADDRESS_TO_POINTER(linux_base), linux_size,
                           PHYSICAL_ADDRESS_TO_POINTER(initrd_base), initrd_size);
 -- 
-2.25.1
+2.34.1
 

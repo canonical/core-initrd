@@ -1,4 +1,4 @@
-From b37d0cd90cd761aa45831c512f1962f073b67fd8 Mon Sep 17 00:00:00 2001
+From 4d9c7da6e021ee5c39b4f61c6a9022a3de4de24e Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 14 Aug 2021 13:44:12 +0200
 Subject: [PATCH 17/73] sd-boot: Fix marking EFI var default entry
@@ -62,5 +62,5 @@ index 474a7e7d3..5b34cdb18 100644
          if (config->entry_count == 0)
                  return;
 -- 
-2.25.1
+2.34.1
 

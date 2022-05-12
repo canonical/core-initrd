@@ -1,4 +1,4 @@
-From d769766f2ee7604d339fee2eaade376da2299f48 Mon Sep 17 00:00:00 2001
+From 4421eb28952cc3ff61c77ff331e0e7c77e587b4a Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Fri, 17 Sep 2021 10:32:33 +0200
 Subject: [PATCH 31/73] boot: use cleanup-based file handle closing a bit more
@@ -48,5 +48,5 @@ index cfe20c27f..106fda925 100644
  
  #define XBOOTLDR_GUID \
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From 95f8e9a79faf29c5b6452b42bae700bf161d208e Mon Sep 17 00:00:00 2001
+From da1539a02a779a51dd0beaa634d2703dca38ac11 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Mon, 27 Sep 2021 12:29:00 +0200
 Subject: [PATCH 66/73] sd-boot: Remove unnecessary TPM conditionalization
@@ -29,5 +29,5 @@ index 10a044cc9..e20615633 100644
          *ret_buffer = TAKE_PTR(buffer);
          *ret_buffer_size = buffer_size;
 -- 
-2.25.1
+2.34.1
 

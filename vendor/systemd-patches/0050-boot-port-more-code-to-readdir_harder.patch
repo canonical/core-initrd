@@ -1,4 +1,4 @@
-From a93bb5beb83138ab0953eba7f458bdfb3fed45a7 Mon Sep 17 00:00:00 2001
+From 558bd959ed68a8c821ff3a243322a5771d492f1a Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 15:24:50 +0200
 Subject: [PATCH 50/73] boot: port more code to readdir_harder()
@@ -77,5 +77,5 @@ index caeb6aa12..40fb933af 100644
                          continue;
                  if (f->Attribute & EFI_FILE_DIRECTORY)
 -- 
-2.25.1
+2.34.1
 

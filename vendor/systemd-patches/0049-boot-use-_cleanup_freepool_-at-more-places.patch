@@ -1,4 +1,4 @@
-From 96d5ab10bc66c6b15c49dfb9f3b334a9e886212c Mon Sep 17 00:00:00 2001
+From aba2dd824dd6171c0f2fefe31fc051d270c03ba8 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 15:20:40 +0200
 Subject: [PATCH 49/73] boot: use _cleanup_freepool_ at more places
@@ -72,5 +72,5 @@ index dd7731c4d..caeb6aa12 100644
  }
  
 -- 
-2.25.1
+2.34.1
 

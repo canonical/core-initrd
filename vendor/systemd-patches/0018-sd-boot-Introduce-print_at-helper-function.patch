@@ -1,4 +1,4 @@
-From 030c6c92fddae5bc3bfd83f129f2c1a650ec8462 Mon Sep 17 00:00:00 2001
+From e99495ace3514764b018d493438ea753c7ac691d Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 14 Aug 2021 14:02:16 +0200
 Subject: [PATCH 18/73] sd-boot: Introduce print_at helper function
@@ -217,5 +217,5 @@ index f620f1421..9eef51cc7 100644
 +
 +VOID print_at(UINTN x, UINTN y, UINTN attr, const CHAR16 *str);
 -- 
-2.25.1
+2.34.1
 

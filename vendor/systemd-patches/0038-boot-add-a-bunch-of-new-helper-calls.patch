@@ -1,4 +1,4 @@
-From f78d1cd5c921fa9ed030625b25dcf2e9db921330 Mon Sep 17 00:00:00 2001
+From 1961fc9761609afa7c3a4e17c0096a209a1f5452 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 20 Sep 2021 13:47:44 +0200
 Subject: [PATCH 38/73] boot: add a bunch of new helper calls
@@ -254,5 +254,5 @@ index 2ee4f2b51..45e6b940c 100644
 +
 +EFI_STATUS open_directory(EFI_FILE_HANDLE root_dir, const CHAR16 *path, EFI_FILE_HANDLE *ret);
 -- 
-2.25.1
+2.34.1
 

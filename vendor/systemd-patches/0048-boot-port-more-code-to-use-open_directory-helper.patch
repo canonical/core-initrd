@@ -1,4 +1,4 @@
-From ecdd2d2e178d054143c35dff12fccf32c52b0312 Mon Sep 17 00:00:00 2001
+From 4972efedde7546227d85c8fa3eb12895629796ea Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 15:13:29 +0200
 Subject: [PATCH 48/73] boot: port more code to use open_directory() helper
@@ -30,5 +30,5 @@ index f1777d8de..dd7731c4d 100644
                  return;
  
 -- 
-2.25.1
+2.34.1
 

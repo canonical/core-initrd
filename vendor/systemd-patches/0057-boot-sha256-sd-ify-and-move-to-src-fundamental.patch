@@ -1,4 +1,4 @@
-From f61b1367624b0367c0651c505aaca6b9d5ae37d4 Mon Sep 17 00:00:00 2001
+From 0598798c2650ea599afc1ed4c1aa7ee456913c51 Mon Sep 17 00:00:00 2001
 From: Luca Boccassi <luca.boccassi@microsoft.com>
 Date: Thu, 7 Oct 2021 17:15:32 +0100
 Subject: [PATCH 57/73] boot/sha256: sd-ify and move to src/fundamental
@@ -350,5 +350,5 @@ index 000000000..9fc090b4e
 +void *sha256_finish_ctx(struct sha256_ctx *ctx, void *resbuf);
 +void sha256_process_bytes(const void *buffer, size_t len, struct sha256_ctx *ctx);
 -- 
-2.25.1
+2.34.1
 

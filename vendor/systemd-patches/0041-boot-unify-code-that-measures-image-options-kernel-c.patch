@@ -1,4 +1,4 @@
-From 62200e3a7ef28cd47961d526d881e4c8dc3b2477 Mon Sep 17 00:00:00 2001
+From 2236f390687184e709de723d53859815e701e947 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 19:27:25 +0200
 Subject: [PATCH 41/73] boot: unify code that measures image options/kernel
@@ -94,5 +94,5 @@ index ae0659900..c0dc121a7 100644
                           &credential_initrd,
                           &credential_initrd_size);
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From 3d35f93d24e27fd5ac7d3dd1725aea3d02bc43d1 Mon Sep 17 00:00:00 2001
+From 054dd49229405cb4cea117000d7a2d26d12b592e Mon Sep 17 00:00:00 2001
 From: Max Resch <resch.max@gmail.com>
 Date: Thu, 30 Sep 2021 18:43:52 +0200
 Subject: [PATCH 60/73] sd-stub: Provide initrd with
@@ -328,5 +328,5 @@ index 636baa442..09171558c 100644
          return log_error_status_stall(err, L"Execution of embedded linux image failed: %r", err);
  }
 -- 
-2.25.1
+2.34.1
 

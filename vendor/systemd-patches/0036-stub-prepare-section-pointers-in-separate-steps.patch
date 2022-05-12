@@ -1,4 +1,4 @@
-From 4ad186acf7a0cb1a9a50b0dd958b7e8c1411059f Mon Sep 17 00:00:00 2001
+From ee12b777f8162d57a5d8bec157074dc3a8659ed8 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Fri, 17 Sep 2021 10:15:57 +0200
 Subject: [PATCH 36/73] stub: prepare section pointers in separate steps
@@ -60,5 +60,5 @@ index 4879896ac..9a3c9982d 100644
          graphics_mode(FALSE);
          return log_error_status_stall(err, L"Execution of embedded linux image failed: %r", err);
 -- 
-2.25.1
+2.34.1
 

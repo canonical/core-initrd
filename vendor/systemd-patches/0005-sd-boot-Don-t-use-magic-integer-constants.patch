@@ -1,4 +1,4 @@
-From e3a51b71fa6cd37181ff3158fd3b7854e04acca1 Mon Sep 17 00:00:00 2001
+From def20932757be8bda6846ee92d4d209beb929d1b Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Wed, 11 Aug 2021 14:59:46 +0200
 Subject: [PATCH 05/73] sd-boot: Don't use magic integer constants
@@ -73,5 +73,5 @@ index c6b78154c..b048df076 100644
  }
  
 -- 
-2.25.1
+2.34.1
 

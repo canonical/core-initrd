@@ -1,4 +1,4 @@
-From dbfa9b6c480e294624a92d99fe12719e9ba62238 Mon Sep 17 00:00:00 2001
+From 5fc3b2bc6c85ec5648b04deee37c4623af54377c Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 20 Sep 2021 13:32:12 +0200
 Subject: [PATCH 32/73] boot: move TCG/TPM protocol definitions into
@@ -379,5 +379,5 @@ index 91bf3e65d..badf0017a 100644
 +
  #endif
 -- 
-2.25.1
+2.34.1
 

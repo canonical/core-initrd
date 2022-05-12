@@ -1,4 +1,4 @@
-From 222c857fda04db98b71a8d7f8881cf5749927c0d Mon Sep 17 00:00:00 2001
+From d8d01fbc011639247800a60fc83fbeb4a3c0920d Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 14 Aug 2021 13:04:29 +0200
 Subject: [PATCH 15/73] sd-boot: Improve selection of initial entries to show
@@ -76,5 +76,5 @@ index 82da98432..56cd4a489 100644
          for (UINTN i = 0; i < x_max; i++)
                  clearline[i] = ' ';
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From 3acd451ca45f1b2b1cad6dfdaef263dccdea0e02 Mon Sep 17 00:00:00 2001
+From 3656c6bb1bb416526896fd1933622a8831178260 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Mon, 27 Sep 2021 12:20:15 +0200
 Subject: [PATCH 65/73] sd-boot: Use backup LBA location from first GPT header
@@ -65,5 +65,5 @@ index 4f66c1f85..ef7ca6cf4 100644
                                  ret_part_start,
                                  ret_part_size,
 -- 
-2.25.1
+2.34.1
 

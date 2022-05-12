@@ -1,4 +1,4 @@
-From 31e4e3c58b8342f416e86d0e777df1bc6fcc7977 Mon Sep 17 00:00:00 2001
+From f73d7a6b756a80140823da013ab437c901285443 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Wed, 1 Sep 2021 14:40:33 +0200
 Subject: [PATCH 25/73] efi: drop spaces between function name and "("
@@ -113,5 +113,5 @@ index 5df7e5316..d2e267eef 100644
          assert(buffer);
          assert(ctx);
 -- 
-2.25.1
+2.34.1
 

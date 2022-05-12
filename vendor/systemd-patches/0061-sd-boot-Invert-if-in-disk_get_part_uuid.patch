@@ -1,4 +1,4 @@
-From 486d459823395d396b09488e59a495476743cd1f Mon Sep 17 00:00:00 2001
+From 4979fa8f1ebf2e74535eae62cbcdb126aa65b3cf Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Fri, 24 Sep 2021 10:24:38 +0200
 Subject: [PATCH 61/73] sd-boot: Invert if in disk_get_part_uuid()
@@ -60,5 +60,5 @@ index 196dc52be..6d3c8285a 100644
  
          return EFI_NOT_FOUND;
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From d28a5dfc1b164b0f985bb654b08e144f6858f97b Mon Sep 17 00:00:00 2001
+From 8306509ae16435fce993ab05b45e37dbc2c027d1 Mon Sep 17 00:00:00 2001
 From: Max Resch <resch.max@gmail.com>
 Date: Wed, 4 Aug 2021 17:23:27 +0200
 Subject: [PATCH 02/73] sd-boot: time measurements for the ARM64 This adds
@@ -49,5 +49,5 @@ index aee076060..c6b78154c 100644
  UINT64 time_usec(VOID) {
          UINT64 ticks;
 -- 
-2.25.1
+2.34.1
 

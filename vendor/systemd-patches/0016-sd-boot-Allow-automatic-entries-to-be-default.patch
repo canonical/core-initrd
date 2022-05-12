@@ -1,4 +1,4 @@
-From b3bdcabe90a2707941ebc8d21c9332a5cbd01659 Mon Sep 17 00:00:00 2001
+From 33c2f3e1cc3c1d3a1658d78e652113870d1e326a Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 14 Aug 2021 13:06:37 +0200
 Subject: [PATCH 16/73] sd-boot: Allow automatic entries to be default
@@ -82,5 +82,5 @@ index 56cd4a489..474a7e7d3 100644
                                  config->idx_default = i;
                                  return;
 -- 
-2.25.1
+2.34.1
 

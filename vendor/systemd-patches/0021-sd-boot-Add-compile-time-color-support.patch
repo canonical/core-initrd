@@ -1,4 +1,4 @@
-From f7f57b9fa27c140a2f8700368a1a9b60dd5937cd Mon Sep 17 00:00:00 2001
+From 12e9dc541d2313596c13e5ce398cfbc4b3a532f7 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 14 Aug 2021 14:38:43 +0200
 Subject: [PATCH 21/73] sd-boot: Add compile-time color support
@@ -125,5 +125,5 @@ index efa270df6..e632006e0 100644
                  efi_conf.set_quoted('SBAT_PROJECT', meson.project_name())
                  efi_conf.set_quoted('PROJECT_VERSION', meson.project_version())
 -- 
-2.25.1
+2.34.1
 
