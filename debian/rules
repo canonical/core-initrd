@@ -7,10 +7,21 @@ include /usr/share/dpkg/default.mk
 	dh $@ --buildsystem=meson+ninja --sourcedirectory=vendor/systemd --with python3
 
 override_dh_auto_configure:
-	find vendor/systemd-patches/ -type f -printf "%f\n" | sort >> vendor/systemd/debian/patches/series
-	cp vendor/systemd-patches/*.patch vendor/systemd/debian/patches/
-	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a || true
+	cd vendor/systemd;					\
+	    QUILT_PATCHES=debian/patches quilt push -a --fuzz=0
+
+	# Quilt import patches after the last applied patch.
+	# Because we will apply the patches after they are all imported,
+	# we need to add them reversed order.
+	cd vendor/systemd;						\
+	find ../systemd-patches/ -name "*.patch" -print0 |		\
+	    sort -rz |							\
+	    QUILT_PATCHES=debian/patches xargs -0 -n1 quilt import
+
+	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a --fuzz=0
+
 	sed -i '/"minix"/s/^/\/\//' vendor/systemd/src/test/test-path-util.c
+
 	dh_auto_configure --buildsystem=meson+ninja --sourcedirectory=vendor/systemd -- \
       -Db_lto=true \
       -Db_pie=true \
@@ -123,9 +134,21 @@ override_dh_auto_test:
 
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
+
 	sed -i '/"minix"/s/^\/*//' vendor/systemd/src/test/test-path-util.c
-	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt pop -a || true
+
+	find vendor/systemd-patches -name "*.patch" -print0 |		\
+	    cut -z -d/ -f3 |						\
+	    sort -rz |							\
+	    (cd vendor/systemd;						\
+	     QUILT_PATCHES=debian/patches xargs -0 -n1 quilt delete -r)	\
+	  || true
+
+	cd vendor/systemd;					\
+	    QUILT_PATCHES=debian/patches quilt pop -a || true
+
 	rm -rf vendor/systemd/.pc
+
 
 override_dh_auto_install: TEMPLIBDIR := $(shell mktemp -d)
 override_dh_auto_install:
