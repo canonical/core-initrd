@@ -16,6 +16,7 @@ typedef struct PortableMetadata {
 } PortableMetadata;
 
 #define PORTABLE_METADATA_IS_OS_RELEASE(m) (streq((m)->name, "/etc/os-release"))
+#define PORTABLE_METADATA_IS_EXTENSION_RELEASE(m) (startswith((m)->name, "/usr/lib/extension-release.d/extension-release."))
 #define PORTABLE_METADATA_IS_UNIT(m) (!IN_SET((m)->name[0], 0, '/'))
 
 typedef enum PortableFlags {
@@ -63,7 +64,7 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(PortableMetadata*, portable_metadata_unref);
 
 int portable_metadata_hashmap_to_sorted_array(Hashmap *unit_files, PortableMetadata ***ret);
 
-int portable_extract(const char *image, char **matches, char **extension_image_paths, PortableMetadata **ret_os_release, Hashmap **ret_unit_files, sd_bus_error *error);
+int portable_extract(const char *image, char **matches, char **extension_image_paths, PortableMetadata **ret_os_release, OrderedHashmap **ret_extension_releases, Hashmap **ret_unit_files, sd_bus_error *error);
 
 int portable_attach(sd_bus *bus, const char *name_or_path, char **matches, const char *profile, char **extension_images, PortableFlags flags, PortableChange **changes, size_t *n_changes, sd_bus_error *error);
 int portable_detach(sd_bus *bus, const char *name_or_path, char **extension_image_paths, PortableFlags flags, PortableChange **changes, size_t *n_changes, sd_bus_error *error);

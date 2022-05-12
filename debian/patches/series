@@ -81,3 +81,8 @@ linux-5.15-compat-ioprio/man-don-t-mention-IOSchedulingClass-none-anymore-in-the
 lp1955997-unmask-intel-hid-for-HP-machines.patch
 0001-Revert-tests-add-test-case-for-UMask-BindPaths-combi.patch
 deny-list-TEST-55-OOMD-on-ppc64el.patch
+debian/UBUNTU-Don-t-override-Ubuntu-s-default-sysctl-values-LP-1962038.patch
+lp1929345/hwdb-Add-force-release-for-HP-Omen-15-calculator-key.-205.patch
+lp1929345/hwdb-Force-release-calculator-key-on-all-HP-OMEN-laptops.patch
+lp1966381-oomd-calculate-used-memory-with-MemAvailable-instead-of-M.patch
+lp1926860-hwdb-remove-the-tablet-pad-entry-for-the-UC-Logic-1060N.patch

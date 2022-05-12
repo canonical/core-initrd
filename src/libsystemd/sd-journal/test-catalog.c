@@ -53,7 +53,7 @@ static void test_catalog_import_invalid(void) {
 }
 
 static void test_catalog_import_badid(void) {
-        _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
+        _unused_ _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
         const char *input =
 "-- 0027229ca0644181a76c4e92458afaff dededededededededededededededede\n" \
 "Subject: message\n" \
@@ -196,6 +196,7 @@ static void test_catalog_file_lang(void) {
 
 int main(int argc, char *argv[]) {
         _cleanup_(unlink_tempfilep) char database[] = "/tmp/test-catalog.XXXXXX";
+        _cleanup_close_ int fd = -1;
         _cleanup_free_ char *text = NULL;
         int r;
 
@@ -218,7 +219,7 @@ int main(int argc, char *argv[]) {
         test_catalog_import_merge();
         test_catalog_import_merge_no_body();
 
-        assert_se(mkostemp_safe(database) >= 0);
+        assert_se((fd = mkostemp_safe(database)) >= 0);
 
         test_catalog_update(database);
 
