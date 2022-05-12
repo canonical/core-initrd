@@ -1,0 +1,26 @@
+From: I-dont-need-name <43914475+I-dont-need-name@users.noreply.github.com>
+Date: Thu, 26 Aug 2021 12:25:32 +0300
+Subject: hwdb: Add force-release for HP Omen 15 calculator key. (#20538)
+
+* Add force-release for HP Omen 15 calculator key.
+
+The key doesn't create release event so I have come up with this fix to make it work properly.
+---
+ hwdb.d/60-keyboard.hwdb | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hwdb.d/60-keyboard.hwdb b/hwdb.d/60-keyboard.hwdb
+index d369f0a..751f80e 100644
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -707,6 +707,10 @@ evdev:name:gpio-keys:phys:gpio-keys/input0:ev:3:dmi:*:svnHewlett-Packard:pnHPStr
+ evdev:name:gpio-keys:phys:gpio-keys/input0:ev:23:dmi:*:svnHewlett-Packard:pnHPStream7Tablet:*
+  KEYBOARD_KEY_0=unknown
+ 
++# HP Omen 15
++evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP:pnOMENLaptop15*:pvr*
++ KEYBOARD_KEY_a1=!calc
++
+ ##########################################################
+ # Huawei
+ ##########################################################

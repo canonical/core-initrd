@@ -165,7 +165,7 @@ static int dns_query_candidate_add_transaction(
 }
 
 static int dns_query_candidate_go(DnsQueryCandidate *c) {
-        _cleanup_(dns_query_candidate_unrefp) DnsQueryCandidate *keep_c = NULL;
+        _unused_ _cleanup_(dns_query_candidate_unrefp) DnsQueryCandidate *keep_c = NULL;
         DnsTransaction *t;
         int r;
         unsigned n = 0;
@@ -736,18 +736,9 @@ int dns_query_go(DnsQuery *q) {
 
         LIST_FOREACH(scopes, s, q->manager->dns_scopes) {
                 DnsScopeMatch match;
-                const char *name;
 
-                name = dns_question_first_name(dns_query_question_for_protocol(q, s->protocol));
-                if (!name)
-                        continue;
-
-                match = dns_scope_good_domain(s, q->ifindex, q->flags, name);
-                if (match < 0) {
-                        log_debug("Couldn't check if '%s' matches against scope, ignoring.", name);
-                        continue;
-                }
-
+                match = dns_scope_good_domain(s, q);
+                assert(match >= 0);
                 if (match > found) { /* Does this match better? If so, remember how well it matched, and the first one
                                       * that matches this well */
                         found = match;
@@ -772,18 +763,9 @@ int dns_query_go(DnsQuery *q) {
 
         LIST_FOREACH(scopes, s, first->scopes_next) {
                 DnsScopeMatch match;
-                const char *name;
 
-                name = dns_question_first_name(dns_query_question_for_protocol(q, s->protocol));
-                if (!name)
-                        continue;
-
-                match = dns_scope_good_domain(s, q->ifindex, q->flags, name);
-                if (match < 0) {
-                        log_debug("Couldn't check if '%s' matches against scope, ignoring.", name);
-                        continue;
-                }
-
+                match = dns_scope_good_domain(s, q);
+                assert(match >= 0);
                 if (match < found)
                         continue;
 

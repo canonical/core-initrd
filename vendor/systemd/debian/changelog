@@ -1,3 +1,47 @@
+systemd (249.11-0ubuntu3) jammy; urgency=medium
+
+  * oomd: calculate 'used' memory with MemAvailable instead of MemFree (LP: #1966381)
+    File: debian/patches/lp1966381-oomd-calculate-used-memory-with-MemAvailable-instead-of-M.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=15fc4c53d726e1dcae7296a9306cfd453fd1a046
+  * hwdb: remove the tablet pad entry for the UC-Logic 1060N (LP: #1926860)
+    File: debian/patches/lp1926860-hwdb-remove-the-tablet-pad-entry-for-the-UC-Logic-1060N.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=7bf31946a52e55f9f6ea4ecfa30e311685b20997
+
+ -- Nick Rosbrook <nick.rosbrook@canonical.com>  Thu, 07 Apr 2022 15:28:15 -0400
+
+systemd (249.11-0ubuntu2) jammy; urgency=medium
+
+  * Fix calculator key on HP Omen, using upstream 6f2353a & 7092021 (LP: #1929345)
+    Files:
+    - debian/patches/lp1929345/hwdb-Add-force-release-for-HP-Omen-15-calculator-key.-205.patch
+    - debian/patches/lp1929345/hwdb-Force-release-calculator-key-on-all-HP-OMEN-laptops.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=f834f64842191c7c7af450806964297babc764d5
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Fri, 18 Mar 2022 17:12:07 +0100
+
+systemd (249.11-0ubuntu1) jammy; urgency=medium
+
+  * Merge 249.11 bugfix release from upstream systemd-stable
+  * Drop patches applied in upstream systemd-stable v249.11
+    File: debian/patches/pid1-set-SYSTEMD_NSS_DYNAMIC_BYPASS-1-env-var-for-dbus-da.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=67b0362ae91711e037e89ba72af947b788319be5
+  * Refresh patches
+    File: debian/patches/debian/UBUNTU-wait-online-exit-if-no-links-are-managed.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=ef686a8d28ab452ae4756ab2367a322be66d6262
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Mon, 14 Mar 2022 10:57:42 +0100
+
+systemd (249.10-0ubuntu2) jammy; urgency=medium
+
+  * Fix deadlock between pid1 and dbus-daemon (LP: #1871538)
+    File: debian/patches/pid1-set-SYSTEMD_NSS_DYNAMIC_BYPASS-1-env-var-for-dbus-da.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=100a7bfc2d0f82c3afbede04a022c655529cffac
+  * Don't override Ubuntu's default sysctl values (LP: #1962038)
+    File: debian/patches/debian/UBUNTU-Don-t-override-Ubuntu-s-default-sysctl-values-LP-1962038.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b10cdb7da3539b3a3c3e619b470a75c83e46ef11
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Tue, 08 Mar 2022 14:58:00 +0100
+
 systemd (249.10-0ubuntu1) jammy; urgency=medium
 
   [ Lukas Märdian ]
