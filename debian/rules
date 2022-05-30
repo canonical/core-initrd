@@ -213,6 +213,15 @@ override_dh_auto_install:
 	cp -ar factory/* debian/tmp
 	mkdir -p debian/tmp/usr/bin
 	mkdir -p debian/tmp/usr/lib64
+
+	# splash functionality
+	mkdir -p debian/tmp/usr/share/plymouth/themes/
+	cp -a vendor/plymouth-theme-ubuntu-core/ubuntu-core \
+		debian/tmp/usr/share/plymouth/themes/
+	mkdir -p debian/tmp/usr/share/fonts/
+	cp /usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf \
+		debian/tmp/usr/share/fonts/Plymouth.ttf
+
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
 	for p in $(CLEAN_PATHS); do		\
 		rm -r debian/tmp/$$p ;		\
@@ -251,6 +260,12 @@ override_dh_auto_install:
 		/usr/sbin/modinfo						\
 		/usr/sbin/modprobe						\
 		/usr/sbin/rmmod							\
+		/usr/sbin/plymouthd						\
+		/usr/bin/plymouth						\
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so		\
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so		\
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so		\
+		/usr/share/libdrm/amdgpu.ids					\
 		/usr/bin/unsquashfs						\
 		/sbin/dmsetup							\
 		/usr/lib/snapd/snap-bootstrap					\
@@ -272,7 +287,9 @@ endif
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
-	for e in $$(find debian/tmp -type f -executable); do \
+	for e in $$(find debian/tmp -type f -executable) \
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/*.so \
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so; do \
 		LD_PRELOAD= LD_LIBRARY_PATH=$(TEMPLIBDIR) \
 	 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
 	done
@@ -309,6 +326,9 @@ ifneq ($(CI),true)
 	# default initrd
 	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; git checkout 3949a313afc319482898fc9c1654f82f12a07629; GOPATH= ./get-deps.sh )
 endif
+	# Include ubuntu-core plymouth theme in sources
+	[ -d vendor/plymouth-theme-ubuntu-core ] || ( cd vendor; \
+		git clone https://github.com/snapcore/plymouth-theme-ubuntu-core )
 	dh_clean
 
 override_dh_python3:
