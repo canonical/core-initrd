@@ -1,4 +1,4 @@
-From 51c580cbf0f5ca33b856d275a91abfc71afd80b8 Mon Sep 17 00:00:00 2001
+From b358f38bfecd4ce9d7f09bebcf20b3bf27e9c8c2 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 20 Sep 2021 14:06:23 +0200
 Subject: [PATCH 34/73] boot: ReallocatePool() supports NULL pointers as first
@@ -38,5 +38,5 @@ index 106fda925..074a85659 100644
          config->entries[config->entry_count++] = entry;
  }
 -- 
-2.25.1
+2.34.1
 

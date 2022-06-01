@@ -1,4 +1,4 @@
-From b107b57c45a6ae982f54e8731baea322a8b14c9d Mon Sep 17 00:00:00 2001
+From 5ee1fd9465d0010bfc8f2a30ee114507838bb769 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 14 Aug 2021 14:10:35 +0200
 Subject: [PATCH 19/73] sd-boot: Render title entries centered and not to
@@ -96,5 +96,5 @@ index 4732dfa33..5b2fb6482 100644
                  }
  
 -- 
-2.25.1
+2.34.1
 

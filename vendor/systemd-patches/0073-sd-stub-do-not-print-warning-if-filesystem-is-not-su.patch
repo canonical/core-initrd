@@ -1,8 +1,9 @@
-From 178d598b5fae36fa9d54c30668771f9c626724f6 Mon Sep 17 00:00:00 2001
+From d30c4bd3de41641f4d2593344e93cf11aec29a3e Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Alfonso=20S=C3=A1nchez-Beato?=
  <alfonso.sanchez-beato@canonical.com>
 Date: Thu, 3 Mar 2022 11:42:41 +0100
-Subject: [PATCH] sd-stub: do not print warning if filesystem is not supported
+Subject: [PATCH 73/73] sd-stub: do not print warning if filesystem is not
+ supported
 
 Do not print a warning in case we try to load the file system protocol for an
 unsupported file system, just return EFI_SUCCESS instead.
@@ -11,20 +12,19 @@ unsupported file system, just return EFI_SUCCESS instead.
  1 file changed, 19 insertions(+), 3 deletions(-)
 
 diff --git a/src/boot/efi/cpio.c b/src/boot/efi/cpio.c
-index 258755366ed7..2855c4119be7 100644
+index e20615633..fbcb32137 100644
 --- a/src/boot/efi/cpio.c
 +++ b/src/boot/efi/cpio.c
-@@ -324,6 +324,7 @@ EFI_STATUS pack_cpio(
-         _cleanup_freepool_ void *buffer = NULL;
+@@ -336,15 +336,31 @@ EFI_STATUS pack_cpio(
+         _cleanup_freepool_ VOID *buffer = NULL;
          UINT32 inode = 1; /* inode counter, so that each item gets a new inode */
          EFI_STATUS err;
 +        EFI_FILE_IO_INTERFACE *volume;
  
          assert(loaded_image);
          assert(target_dir_prefix);
-@@ -336,9 +337,24 @@ EFI_STATUS pack_cpio(
-                 return EFI_SUCCESS;
-         }
+         assert(ret_buffer);
+         assert(ret_buffer_size);
  
 -        root = LibOpenRoot(loaded_image->DeviceHandle);
 -        if (!root)
@@ -48,5 +48,8 @@ index 258755366ed7..2855c4119be7 100644
 +                return log_error_status_stall(
 +                                err, L"Unable to open root directory: %r", err);
  
-         if (!dropin_dir)
-                 dropin_dir = rel_dropin_dir = xpool_print(L"%D.extra.d", loaded_image->FilePath);
+         loaded_image_path = DevicePathToStr(loaded_image->FilePath);
+         if (!loaded_image_path)
+-- 
+2.34.1
+

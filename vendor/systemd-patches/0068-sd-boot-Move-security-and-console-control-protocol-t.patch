@@ -1,4 +1,4 @@
-From 7d1e97afc3850033ce4735db4e0fa677f3d3ec04 Mon Sep 17 00:00:00 2001
+From bed42913aa05f3567d35f249c172c1ad72d0cf8c Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Thu, 30 Sep 2021 11:12:21 +0200
 Subject: [PATCH 68/73] sd-boot: Move security and console control protocol to
@@ -233,5 +233,5 @@ index e3fb073fd..9fcc45403 100644
  static EFI_SECURITY_FILE_AUTHENTICATION_STATE esfas = NULL;
  
 -- 
-2.25.1
+2.34.1
 

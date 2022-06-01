@@ -1,4 +1,4 @@
-From 88d1a2d867cb574b4a90487b7718ae2c4ad85d4e Mon Sep 17 00:00:00 2001
+From e4d88e1058164c86fc992f64c7ff33a3637b8501 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Mon, 27 Sep 2021 13:07:16 +0200
 Subject: [PATCH 67/73] sd-boot: Use _cleanup_ in more places
@@ -126,5 +126,5 @@ index a9ef1f351..5fdf26240 100644
          return err;
  }
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From 3c430c23ce7d058447d5f37d6e98417f007c1997 Mon Sep 17 00:00:00 2001
+From 3c9909cc1b25b84078259e3bcf7b8e7c1c1be53e Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Tue, 17 Aug 2021 11:44:21 +0200
 Subject: [PATCH 23/73] sd-boot: Use UEFI provided CRC32
@@ -264,5 +264,5 @@ index e632006e0..e6e6f35ae 100644
          sha256.c
          shim.c
 -- 
-2.25.1
+2.34.1
 

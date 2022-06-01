@@ -1,4 +1,4 @@
-From 812f0757c97ca118e6db91538f5b53d1b0488b25 Mon Sep 17 00:00:00 2001
+From 4883dee9d5f0b184ef4631079a3c634765300d1a Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Wed, 1 Sep 2021 11:33:06 +0200
 Subject: [PATCH 24/73] efi: make EFI_GUID generally constant
@@ -274,5 +274,5 @@ index c0d1d6dad..b78408e1a 100644
  
  EFI_STATUS efivar_set(const EFI_GUID *vendor, const CHAR16 *name, const CHAR16 *value, UINT32 flags) {
 -- 
-2.25.1
+2.34.1
 

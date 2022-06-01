@@ -1,4 +1,4 @@
-From b161db729598d8813b168d165f3961b3bfc09b94 Mon Sep 17 00:00:00 2001
+From 1bd6f2ed890c46e0d9967d8e9e36356916393086 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 11 Oct 2021 13:29:57 +0200
 Subject: [PATCH 59/73] stub: also move magic string in stub into .sdmagic PE
@@ -41,5 +41,5 @@ index 555d08fb8..636baa442 100644
  static EFI_STATUS combine_initrd(
                  EFI_PHYSICAL_ADDRESS initrd_base, UINTN initrd_size,
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From d4d0ccb832f5a57a11e43930f96518cc6557daa6 Mon Sep 17 00:00:00 2001
+From 1c938c5ee91a059dbbb2441c61218764471cc8d4 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Wed, 11 Aug 2021 14:59:46 +0200
 Subject: [PATCH 07/73] sd-boot: Assert all the things!
@@ -902,5 +902,5 @@ index b048df076..932a4cfa8 100644
  
          Print(L"\n");
 -- 
-2.25.1
+2.34.1
 

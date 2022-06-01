@@ -1,4 +1,4 @@
-From a0fc95dc80abc576a01ea269e95c98496c376aad Mon Sep 17 00:00:00 2001
+From 86f0fcc6bcd4808c3cbf3b84266df4fa6b0fac01 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 20 Sep 2021 13:33:18 +0200
 Subject: [PATCH 33/73] boot: modernize measure.c
@@ -203,5 +203,5 @@ index 112acd78c..fbca67bbf 100644
                          return tcg;
          }
 -- 
-2.25.1
+2.34.1
 

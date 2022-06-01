@@ -1,4 +1,4 @@
-From 19657cca321dffe4d490779c89d50463f029d362 Mon Sep 17 00:00:00 2001
+From 281b0ecaec67aa8976775ec6164fec2c1b81d04d Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 15:29:03 +0200
 Subject: [PATCH 51/73] boot: port more code over to get_file_info_harder()
@@ -87,5 +87,5 @@ index d20923eac..1505b9d93 100644
          size = info->FileSize;
          if (size < RANDOM_MAX_SIZE_MIN)
 -- 
-2.25.1
+2.34.1
 

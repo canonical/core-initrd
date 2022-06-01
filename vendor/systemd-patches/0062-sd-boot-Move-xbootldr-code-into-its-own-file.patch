@@ -1,4 +1,4 @@
-From f4a1780c17d8b5ec300c806a2e36db920ac6fda0 Mon Sep 17 00:00:00 2001
+From a6c9a06f565bb5054af86cc5eaed6355cde109a8 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Mon, 27 Sep 2021 10:02:50 +0200
 Subject: [PATCH 62/73] sd-boot: Move xbootldr code into its own file
@@ -489,5 +489,5 @@ index 000000000..4cb370af2
 +
 +EFI_STATUS xbootldr_open(EFI_HANDLE *device, EFI_HANDLE *ret_device, EFI_FILE **ret_root_dir);
 -- 
-2.25.1
+2.34.1
 

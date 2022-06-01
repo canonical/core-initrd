@@ -1,4 +1,4 @@
-From f60c81de60efb4b1d0635e20c98a212a5ee80b90 Mon Sep 17 00:00:00 2001
+From 84322d25f2015e2d318a7e522e9750f9a6b8f082 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 19:33:01 +0200
 Subject: [PATCH 43/73] stub: show splash screen earlier
@@ -55,5 +55,5 @@ index 08cf654c8..d0b4972dc 100644
                           L".cred",
                           (const CHAR8*) ".extra/credentials",
 -- 
-2.25.1
+2.34.1
 

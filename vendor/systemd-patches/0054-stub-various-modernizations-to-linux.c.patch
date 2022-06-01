@@ -1,4 +1,4 @@
-From e0dba0f2c34a3d40a22caa4ac52d2ad0256f3529 Mon Sep 17 00:00:00 2001
+From 10f4a703cb0821a516b2668c0985159e1be30fd4 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 22:00:06 +0200
 Subject: [PATCH 54/73] stub: various modernizations to linux.c
@@ -96,5 +96,5 @@ index 3af69e4d5..5232a3ba4 100644
          linux_efi_handover(image, boot_params);
          return EFI_LOAD_ERROR;
 -- 
-2.25.1
+2.34.1
 

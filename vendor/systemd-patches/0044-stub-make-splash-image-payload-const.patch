@@ -1,4 +1,4 @@
-From 4355e946c53e264126667dbc9da4172b15975efb Mon Sep 17 00:00:00 2001
+From 55d1e51f0f90fd6db8f9df607ae4a1435a2e299b Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 20 Sep 2021 17:26:48 +0200
 Subject: [PATCH 44/73] stub: make splash image payload const
@@ -87,5 +87,5 @@ index d0b4972dc..9a71aff16 100644
          if (szs[SECTION_CMDLINE] > 0) {
                  cmdline = (CHAR8*) loaded_image->ImageBase + addrs[SECTION_CMDLINE];
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From c6e0adfaa3a5b4171d54a2d72c329209e1fee078 Mon Sep 17 00:00:00 2001
+From 286c28d0f1c1c3ce56ad61ca47770b76253cb843 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Wed, 11 Aug 2021 14:59:46 +0200
 Subject: [PATCH 09/73] sd-boot: Provide error messages when parsing a config
@@ -76,5 +76,5 @@ index 96099e573..638070d77 100644
                                  config->random_seed_mode = on ? RANDOM_SEED_ALWAYS : RANDOM_SEED_OFF;
                          }
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From c9933bb7642b2bade63b2e980c4ce79736d9bb03 Mon Sep 17 00:00:00 2001
+From fb7d301e6f06adacef9fbe77ac0ef1d6847b308c Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 14 Aug 2021 14:26:12 +0200
 Subject: [PATCH 20/73] sd-boot: Improve key bindings
@@ -118,5 +118,5 @@ index 5b2fb6482..908a268a4 100644
                          print_status(config, loaded_image_path);
                          refresh = TRUE;
 -- 
-2.25.1
+2.34.1
 

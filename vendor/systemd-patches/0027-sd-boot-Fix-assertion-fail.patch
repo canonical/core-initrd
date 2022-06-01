@@ -1,4 +1,4 @@
-From 7fcbff10222b47db805f6f176385f875932bb551 Mon Sep 17 00:00:00 2001
+From 7a077e70e74a735334dc05b075d9d754f6a9bc81 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sat, 11 Sep 2021 11:14:06 +0200
 Subject: [PATCH 27/73] sd-boot: Fix assertion fail
@@ -31,5 +31,5 @@ index 849598f1c..e3fb073fd 100644
  
          if (shim_validate(file_buffer, file_size))
 -- 
-2.25.1
+2.34.1
 

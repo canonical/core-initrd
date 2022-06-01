@@ -1,4 +1,4 @@
-From 9cd12aca49aca67963a42029a236d533498379b2 Mon Sep 17 00:00:00 2001
+From ee5980e3776088debc5a4569138974fa780599a5 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 14:36:56 +0200
 Subject: [PATCH 45/73] boot: split out code that sets various EFI vars from
@@ -118,5 +118,5 @@ index 704213dee..3cb990abd 100644
          return err;
  }
 -- 
-2.25.1
+2.34.1
 

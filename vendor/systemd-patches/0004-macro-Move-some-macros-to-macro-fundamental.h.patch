@@ -1,4 +1,4 @@
-From 37409e0a1a904ae7b4893ca086631dc76065a6d7 Mon Sep 17 00:00:00 2001
+From d07912140eeef4bbc868f9443d6494064be430ae Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Wed, 11 Aug 2021 14:59:46 +0200
 Subject: [PATCH 04/73] macro: Move some macros to macro-fundamental.h
@@ -94,5 +94,5 @@ index 967518600..533ac1b7e 100644
 + */
 +#define STRLEN(x) (sizeof(""x"") - sizeof(typeof(x[0])))
 -- 
-2.25.1
+2.34.1
 

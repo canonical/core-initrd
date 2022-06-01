@@ -1,4 +1,4 @@
-From 1e332ef465d7cc35d0cbd4646fb370fcb26fe706 Mon Sep 17 00:00:00 2001
+From a5d02964c222fdb802eda1fa3d74e944a23713ab Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Mon, 27 Sep 2021 10:54:29 +0200
 Subject: [PATCH 64/73] sd-boot: Split up xbootldr_open()
@@ -408,5 +408,5 @@ index 7ee4ed6f2..4f66c1f85 100644
          *ret_device = new_device;
          *ret_root_dir = root_dir;
 -- 
-2.25.1
+2.34.1
 

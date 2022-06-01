@@ -1,4 +1,4 @@
-From 62d19b97475ad2456f710507038d81049839a690 Mon Sep 17 00:00:00 2001
+From 1698961890b517ec29e1a93e400d3c064e96ac27 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Sun, 15 Aug 2021 13:44:35 +0200
 Subject: [PATCH 22/73] sd-boot: Draw custom edit cursor
@@ -101,5 +101,5 @@ index 549a4814e..13ba792b1 100644
  }
  
 -- 
-2.25.1
+2.34.1
 

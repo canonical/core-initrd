@@ -1,4 +1,4 @@
-From c54c3663f5f0cdc36b79943e80418f433f6a142e Mon Sep 17 00:00:00 2001
+From 1e32b66699122a8819d824ab70f622162f5af300 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Fri, 17 Sep 2021 10:48:46 +0200
 Subject: [PATCH 37/73] boot: add a way to indicate overflow in ALIGN_TO()
@@ -50,5 +50,5 @@ index a5b6435f1..2ee4f2b51 100644
  EFI_STATUS log_oom(void);
  
 -- 
-2.25.1
+2.34.1
 

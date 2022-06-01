@@ -1,4 +1,4 @@
-From 551d428215ec4e64709d38a0c2687a4a9825ce3b Mon Sep 17 00:00:00 2001
+From 1e675d96e316fa1a56241239c79395bb119492a5 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Thu, 16 Sep 2021 23:59:39 +0200
 Subject: [PATCH 35/73] stub: use proper enums instead of hardcoded numeric
@@ -86,5 +86,5 @@ index 5758b5cd9..4879896ac 100644
          graphics_mode(FALSE);
          return log_error_status_stall(err, L"Execution of embedded linux image failed: %r", err);
 -- 
-2.25.1
+2.34.1
 

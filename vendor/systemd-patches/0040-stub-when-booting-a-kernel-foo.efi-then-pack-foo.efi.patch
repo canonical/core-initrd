@@ -1,4 +1,4 @@
-From 7a6d06a0c2e80dd52959dea3b7b7a8afd8828f98 Mon Sep 17 00:00:00 2001
+From ef992f0da424bf45190eea5ee6ce5e0cf0ca9e8a Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 20 Sep 2021 13:47:32 +0200
 Subject: [PATCH 40/73] stub: when booting a kernel foo.efi then pack
@@ -747,5 +747,5 @@ index ea32a7616..3a29ff2d7 100644
  
  #define UINTN_MAX (~(UINTN)0)
 -- 
-2.25.1
+2.34.1
 

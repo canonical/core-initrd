@@ -1,4 +1,4 @@
-From dfc133b5a0355249bfa7032547c42d4c898ca3ac Mon Sep 17 00:00:00 2001
+From b31388b1339c0f2c70b2ebc4518089b4addee1a4 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Fri, 13 Aug 2021 19:03:35 +0200
 Subject: [PATCH 13/73] sd-boot: Add memmem_safe and memory_startswith
@@ -107,5 +107,5 @@ index 407cede48..7455c0549 100644
 +        return (uint8_t*) p + n;
 +}
 -- 
-2.25.1
+2.34.1
 

@@ -1,4 +1,4 @@
-From eba5eb652182fee13411817126dcf694e5a80744 Mon Sep 17 00:00:00 2001
+From b4721c350bb055b44834a76741c1430c9d740647 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 14:47:05 +0200
 Subject: [PATCH 47/73] boot: automatically load drop-in EFI drivers off the
@@ -17,7 +17,7 @@ Fixes: #15617
  create mode 100644 src/boot/efi/drivers.h
 
 diff --git a/src/boot/bootctl.c b/src/boot/bootctl.c
-index bd9681224..47ceba657 100644
+index d6eb6d00a..e22b49036 100644
 --- a/src/boot/bootctl.c
 +++ b/src/boot/bootctl.c
 @@ -1288,6 +1288,7 @@ static int verb_status(int argc, char *argv[], void *userdata) {
@@ -258,5 +258,5 @@ index f07dacb85..287ae3c89 100644
  #define EFI_LOADER_FEATURE_RANDOM_SEED             (UINT64_C(1) << 6)
 +#define EFI_LOADER_FEATURE_LOAD_DRIVER             (UINT64_C(1) << 7)
 -- 
-2.25.1
+2.34.1
 

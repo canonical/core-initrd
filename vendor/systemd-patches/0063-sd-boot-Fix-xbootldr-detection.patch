@@ -1,4 +1,4 @@
-From 657fa8dad4c6fd311ae595c38b80e0e029ac6ff0 Mon Sep 17 00:00:00 2001
+From dad701743d422a0abb9a01bddc498b975af53eba Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Mon, 27 Sep 2021 10:14:53 +0200
 Subject: [PATCH 63/73] sd-boot: Fix xbootldr detection
@@ -45,5 +45,5 @@ index 5ae205349..7ee4ed6f2 100644
                                  continue;
  
 -- 
-2.25.1
+2.34.1
 

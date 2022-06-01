@@ -1,4 +1,4 @@
-From 2d639568e96142b3cd2de5773c5d298d941d36ce Mon Sep 17 00:00:00 2001
+From 225ccf12ec884a5366555d3f7195645ef86504ef Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Fri, 13 Aug 2021 19:03:35 +0200
 Subject: [PATCH 12/73] sd-boot: Try harder to detect ourselves
@@ -112,5 +112,5 @@ index 16eeb4ebb..efa270df6 100644
                                     '-j', '.dynamic',
                                     '-j', '.dynsym',
 -- 
-2.25.1
+2.34.1
 

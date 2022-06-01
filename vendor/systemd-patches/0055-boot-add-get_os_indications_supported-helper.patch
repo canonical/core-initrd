@@ -1,4 +1,4 @@
-From fb46af74c735df51e8a381473fcc589416d3315c Mon Sep 17 00:00:00 2001
+From 5d9bd50fd291234b1786e80208bbade2d5572fc9 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 22:13:23 +0200
 Subject: [PATCH 55/73] boot: add get_os_indications_supported() helper
@@ -96,5 +96,5 @@ index ca95514d7..fa17b18f4 100644
 +
 +UINT64 get_os_indications_supported(VOID);
 -- 
-2.25.1
+2.34.1
 

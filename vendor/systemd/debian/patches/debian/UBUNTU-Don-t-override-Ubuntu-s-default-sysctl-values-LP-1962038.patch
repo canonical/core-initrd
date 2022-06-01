@@ -1,0 +1,30 @@
+From: =?utf-8?q?Lukas_M=C3=A4rdian?= <slyon@ubuntu.com>
+Date: Fri, 25 Feb 2022 12:01:25 +0100
+Subject: Don't override Ubuntu's default sysctl values (LP: #1962038)
+
+---
+ sysctl.d/50-default.conf | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sysctl.d/50-default.conf b/sysctl.d/50-default.conf
+index f41e24b..ea442a8 100644
+--- a/sysctl.d/50-default.conf
++++ b/sysctl.d/50-default.conf
+@@ -16,7 +16,7 @@
+ # Use kernel.sysrq = 1 to allow all keys.
+ # See https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html for a list
+ # of values and keys.
+-kernel.sysrq = 16
++#kernel.sysrq = 16 # Ubuntu uses /etc/sysctl.d/10-magic-sysrq.conf
+ 
+ # Append the PID to the core filename
+ kernel.core_uses_pid = 1
+@@ -24,7 +24,7 @@ kernel.core_uses_pid = 1
+ # Source route verification
+ net.ipv4.conf.default.rp_filter = 2
+ net.ipv4.conf.*.rp_filter = 2
+--net.ipv4.conf.all.rp_filter
++#-net.ipv4.conf.all.rp_filter # Ubuntu uses /etc/sysctl.d/10-network-security.conf
+ 
+ # Do not accept source routing
+ net.ipv4.conf.default.accept_source_route = 0

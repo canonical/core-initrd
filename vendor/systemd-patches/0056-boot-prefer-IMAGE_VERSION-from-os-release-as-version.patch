@@ -1,4 +1,4 @@
-From 91cc6376964aca3cb7d77f69c5b2dac02adf00de Mon Sep 17 00:00:00 2001
+From 5da1e452c27f0ba4dc3c8e775859432a4769dc3f Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Thu, 23 Sep 2021 17:48:26 +0200
 Subject: [PATCH 56/73] boot: prefer IMAGE_VERSION from os-release as version
@@ -57,5 +57,5 @@ index b0e16f710..d82d679a4 100644
                          FreePool(content);
                          content = NULL;
 -- 
-2.25.1
+2.34.1
 

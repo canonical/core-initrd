@@ -1,4 +1,4 @@
-From e606573e17505a20c6415b48fbb2b5491b4c3cd3 Mon Sep 17 00:00:00 2001
+From c4b9057ac622dbee959937a0b34a4fd5584e6dde Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Mon, 20 Sep 2021 14:07:42 +0200
 Subject: [PATCH 39/73] boot: generalize sorting code
@@ -105,5 +105,5 @@ index 45e6b940c..ea32a7616 100644
  
  EFI_STATUS readdir_harder(EFI_FILE_HANDLE handle, EFI_FILE_INFO **buffer, UINTN *buffer_size);
 -- 
-2.25.1
+2.34.1
 

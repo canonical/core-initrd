@@ -1,4 +1,4 @@
-From 3b5f0b6976fd6bdb42eaebee6a305c90a9734b72 Mon Sep 17 00:00:00 2001
+From 900a35e9ba69b1e2f7ebab6839b380a0e15a4262 Mon Sep 17 00:00:00 2001
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 21 Sep 2021 19:28:18 +0200
 Subject: [PATCH 42/73] stub: split out code that sets the various efi vars
@@ -120,5 +120,5 @@ index c0dc121a7..08cf654c8 100644
          if (szs[SECTION_SPLASH] > 0)
                  graphics_splash((UINT8*) (UINTN) loaded_image->ImageBase + addrs[SECTION_SPLASH], szs[SECTION_SPLASH], NULL);
 -- 
-2.25.1
+2.34.1
 

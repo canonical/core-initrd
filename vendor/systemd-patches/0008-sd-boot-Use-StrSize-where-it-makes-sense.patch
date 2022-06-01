@@ -1,4 +1,4 @@
-From 4eadfc1ede2c795b7a1b22ced4ae4244dcf63711 Mon Sep 17 00:00:00 2001
+From 1a5face150845e24d81688222a03d43578d15094 Mon Sep 17 00:00:00 2001
 From: Jan Janssen <medhefgo@web.de>
 Date: Wed, 11 Aug 2021 14:59:46 +0200
 Subject: [PATCH 08/73] sd-boot: Use StrSize where it makes sense
@@ -106,5 +106,5 @@ index 932a4cfa8..b2977546a 100644
  
  EFI_STATUS efivar_set_uint_string(const EFI_GUID *vendor, const CHAR16 *name, UINTN i, UINT32 flags) {
 -- 
-2.25.1
+2.34.1
 

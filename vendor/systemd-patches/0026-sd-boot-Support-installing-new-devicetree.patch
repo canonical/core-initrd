@@ -1,4 +1,4 @@
-From abc7f7f8d6bb6a0857016cb26261ccd29bd6b212 Mon Sep 17 00:00:00 2001
+From 46139d108aad18f2945c306f0845a8fd92cabfa1 Mon Sep 17 00:00:00 2001
 From: Emil Renner Berthing <systemd@esmil.dk>
 Date: Sat, 24 Apr 2021 23:38:28 +0000
 Subject: [PATCH 26/73] sd-boot: Support installing new devicetree
@@ -323,5 +323,5 @@ index 37c468f2a..91bf3e65d 100644
 +
 +#endif
 -- 
-2.25.1
+2.34.1
 
