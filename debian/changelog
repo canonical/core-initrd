@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (51.1+ppa1) focal; urgency=medium
+
+  * cloudimg-rootfs feature: unmount ubuntu-seed before pivot-root.
+
+ -- Dimitri John Ledkov <dimitri.ledkov@canonical.com>  Thu, 16 Jun 2022 14:34:55 +0100
+
 ubuntu-core-initramfs (51.1) focal; urgency=medium
 
   * doc: add instructions on how to release the package
