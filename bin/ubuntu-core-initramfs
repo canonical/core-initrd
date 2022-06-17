@@ -20,6 +20,31 @@ def path_join_make_rel_paths(path, *paths):
     return os.path.join(path, *relative_paths)
 
 
+# Include kernel modules specified in conf_file
+def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file):
+    with open(conf_file) as f:
+        for module in f.readlines():
+            module = module.strip()
+            if module:
+                if module[0] in ["#", ";"]:
+                    continue
+                subprocess.check_call(
+                    [
+                        "/usr/lib/dracut/dracut-install",
+                        "-D",
+                        dest_d,
+                        "-r", kernel_root,
+                        "--kerneldir",
+                        modules_d,
+                        "--firmwaredirs",
+                        fw_d,
+                        "--module",
+                        "--optional",
+                        module,
+                    ]
+                )
+
+
 def create_initrd(parser, args):
     if not args.kerneldir:
         args.kerneldir = "/lib/modules/%s" % args.kernelver
@@ -46,32 +71,19 @@ def create_initrd(parser, args):
             # Needs https://github.com/snapcore/snapd/pull/10351 to land
             if feature == "cloudimg-rootfs":
                 os.unlink(os.path.join(main, "usr/lib/systemd/system/sysroot.mount"))
+            # Add feature files
             subprocess.check_call(["cp", "-ar", "%s/%s/." % (args.skeleton, feature), main])
+            # Add feature kernel modules
+            extra_modules = os.path.join(args.skeleton, "modules", feature,
+                                         "extra-modules.conf")
+            if os.path.exists(extra_modules):
+                add_modules_from_file(main, kernel_root, modules, firmware, extra_modules)
+
         # Update epoch
         pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
-        # Should itirate all the .conf drop ins
+        # Should iterate all the .conf drop ins
         for module_load in glob.iglob("%s/usr/lib/modules-load.d/*.conf" % main):
-            with open(module_load) as f:
-                for module in f.readlines():
-                    module = module.strip()
-                    if module:
-                        if module[0] in ["#", ";"]:
-                            continue
-                        subprocess.check_call(
-                            [
-                                "/usr/lib/dracut/dracut-install",
-                                "-D",
-                                main,
-                                "-r", kernel_root,
-                                "--kerneldir",
-                                modules,
-                                "--firmwaredirs",
-                                firmware,
-                                "--module",
-                                "--optional",
-                                module,
-                            ]
-                        )
+            add_modules_from_file(main, kernel_root, modules, firmware, module_load)
 
         for modulesf in ["modules.order", "modules.builtin", "modules.builtin.bin"]:
             subprocess.check_call(
