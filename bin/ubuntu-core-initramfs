@@ -10,6 +10,7 @@ import shutil
 import re
 import sys
 from collections import namedtuple
+from enum import Enum, auto
 
 
 class ModTable:
@@ -41,6 +42,9 @@ class ModuleDb:
     ModuleInfo = namedtuple('ModuleInfo', ('builtin', 'aliases', 'symbols'))
     alias_line = re.compile(r"^alias +(?P<alias>[^ ]+) +(?P<target>[^ ]+)$")
     modinfo_line = re.compile("^(?P<name>[^.]+)[.](?P<arg>[^.]+)=(?P<value>.+)$")
+    class Installed(Enum):
+        EXPLICIT = auto()
+        IMPLICIT = auto()
 
     @staticmethod
     def __each_alias(path):
@@ -54,6 +58,8 @@ class ModuleDb:
     def __init__(self, module_path):
         self._modules = ModTable()
         self._alias = ModTable()
+        self._deps = ModTable()
+        self._installed = ModTable()
         not_found = set()
 
         with open(os.path.join(module_path, "modules.builtin"), "r") as f:
@@ -102,6 +108,62 @@ class ModuleDb:
                 self._modules[target] = ModuleDb.ModuleInfo(original.builtin,
                                                             original.aliases,
                                                             original.symbols + [alias])
+
+        with open(os.path.join(module_path, "modules.dep"), "r") as f:
+            for line in f.read().splitlines():
+                mod, deps = line.split(':', 1)
+                deps = deps.strip()
+                mod = os.path.basename(mod)
+                mod = os.path.splitext(mod)[0]
+                if len(deps) != 0:
+                    for dep in deps.split():
+                        dep = os.path.basename(dep)
+                        dep = os.path.splitext(dep)[0]
+                        if mod not in self._deps:
+                            self._deps[mod] = []
+                        self._deps[mod].append(dep)
+
+    def mark_installed(self, mod, source):
+        real_mod = self.solve_alias(mod)
+        if real_mod is None:
+            print(f"WARNING: Module {mod} is not known in {source}", file=sys.stderr)
+            return
+        if real_mod in self._installed:
+            old_mode, old_origin, old_source = self._installed[real_mod]
+            if old_mode == ModuleDb.Installed.IMPLICIT:
+                print(f"WARNING: Module {mod} installed by {source}, but is dependency of {old_origin} installed by {old_source}", file=sys.stderr)
+            elif old_mode == ModuleDb.IMPLICIT:
+                return
+        self._installed[mod] = (ModuleDb.Installed.EXPLICIT, mod, source)
+        for dep in self.all_deps(real_mod):
+            if dep in self._installed:
+                dep_mode, dep_origin, dep_source = self._installed[dep]
+                if dep_mode == ModuleDb.Installed.EXPLICIT:
+                    print(f"WARNING: Module {dep} installed by {dep_source}, but is dependency of {mod} installed by {source}", file=sys.stderr)
+            else:
+                self._installed[dep] = (ModuleDb.Installed.IMPLICIT, mod, source)
+
+    def all_deps(self, mod):
+        real_mod = self.solve_alias(mod)
+        if real_mod is None:
+            return
+        queue = self._deps.get(real_mod, [])
+        done = set()
+        while queue:
+            m = queue.pop().replace('_', '-')
+            if m in done:
+                continue
+            yield m
+            done.add(m)
+            if m in self._deps:
+                queue.extend(self._deps[m])
+
+    def solve_alias(self, name):
+        if name in self._modules:
+            return name
+        if name in self._alias:
+            return self.solve_alias(self._alias[name])
+        return None
 
     def __contains__(self, name):
         if name in self._modules:
@@ -185,6 +247,8 @@ def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
                         print(f"WARNING: {conf_file}: Module {module} exports symbols:", file=sys.stderr)
                         for symbol in mod.symbols:
                             print(f" * {symbol}", file=sys.stderr)
+                    if not mod.builtin:
+                        db.mark_installed(module, conf_file)
 
                 subprocess.check_call(
                     [
@@ -224,6 +288,7 @@ def create_initrd(parser, args):
         subprocess.check_call(["cp", "-ar", args.firmwaredir, firmware])
 
         db = ModuleDb(modules)
+        installed_module = set()
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
         for feature in args.features:
