@@ -1,3 +1,10 @@
+ubuntu-core-initramfs (51.2) focal; urgency=medium
+
+  * Update to cloudimg-rootfs feature with ephemeral sysroot.mount and
+    unmounted ubuntu-seed partition (ESP).
+
+ -- Dimitri John Ledkov <dimitri.ledkov@canonical.com>  Wed, 22 Jun 2022 15:10:11 +0100
+
 ubuntu-core-initramfs (51.1) focal; urgency=medium
 
   * doc: add instructions on how to release the package
