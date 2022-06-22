@@ -72,7 +72,9 @@ def create_initrd(parser, args):
             if feature == "cloudimg-rootfs":
                 os.unlink(os.path.join(main, "usr/lib/systemd/system/sysroot.mount"))
             # Add feature files
-            subprocess.check_call(["cp", "-ar", "%s/%s/." % (args.skeleton, feature), main])
+            feature_path = os.path.join(args.skeleton, feature)
+            if os.path.isdir(feature_path):
+                subprocess.check_call(["cp", "-aT", feature_path, main])
             # Add feature kernel modules
             extra_modules = os.path.join(args.skeleton, "modules", feature,
                                          "extra-modules.conf")
