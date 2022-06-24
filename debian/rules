@@ -12,6 +12,7 @@ CLEAN_PATHS=											\
 	etc/modules-load.d									\
 	etc/sysctl.d										\
 	etc/systemd/journald.conf								\
+	etc/systemd/oomd.conf									\
 	etc/systemd/pstore.conf									\
 	etc/systemd/sleep.conf									\
 	etc/systemd/system.conf									\
@@ -23,9 +24,11 @@ CLEAN_PATHS=											\
 	etc/xdg											\
 	usr/bin/busctl										\
 	usr/bin/kernel-install									\
+	usr/bin/oomctl										\
 	usr/bin/systemd-analyze									\
 	usr/bin/systemd-cgls									\
 	usr/bin/systemd-cgtop									\
+	usr/bin/systemd-dissect									\
 	usr/bin/systemd-escape									\
 	usr/bin/systemd-nspawn									\
 	usr/include										\
@@ -36,10 +39,23 @@ CLEAN_PATHS=											\
 	usr/lib/systemd/system-generators/systemd-gpt-auto-generator				\
 	usr/lib/systemd/system-preset								\
 	usr/lib/systemd/system/local-fs.target.wants/tmp.mount					\
+	usr/lib/systemd/system/sysinit.target.wants/systemd-hwdb-update.service			\
+	usr/lib/systemd/system/sysinit.target.wants/systemd-journal-catalog-update.service	\
+	usr/lib/systemd/system/sysinit.target.wants/systemd-update-done.service			\
+	usr/lib/systemd/system/systemd-hwdb-update.service					\
+	usr/lib/systemd/system/systemd-journal-catalog-update.service				\
+	usr/lib/systemd/system/systemd-nspawn@.service						\
+	usr/lib/systemd/system/systemd-oomd.service						\
+	usr/lib/systemd/system/systemd-update-done.service					\
 	usr/lib/systemd/system/tmp.mount							\
+	usr/lib/systemd/systemd-oomd								\
+	usr/lib/systemd/systemd-update-done							\
 	usr/lib/systemd/user									\
 	usr/lib/systemd/user-preset								\
 	usr/lib/sysusers.d									\
+	usr/lib/tmpfiles.d/etc.conf								\
+	usr/share/dbus-1/system-services/org.freedesktop.oom1.service				\
+	usr/share/dbus-1/system.d/org.freedesktop.oom1.conf					\
 	usr/share/doc										\
 	usr/share/factory									\
 	usr/share/locale									\
@@ -199,7 +215,7 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/usr/lib64
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
 	for p in $(CLEAN_PATHS); do		\
-		rm -rf debian/tmp/$$p ;		\
+		rm -r debian/tmp/$$p ;		\
 	done
 	touch debian/tmp/etc/machine-id
 
