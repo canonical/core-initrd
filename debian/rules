@@ -6,6 +6,46 @@ include /usr/share/dpkg/default.mk
 %:
 	dh $@ --buildsystem=meson+ninja --sourcedirectory=vendor/systemd --with python3
 
+CLEAN_PATHS=											\
+	etc/X11											\
+	etc/kernel										\
+	etc/modules-load.d									\
+	etc/sysctl.d										\
+	etc/systemd/journald.conf								\
+	etc/systemd/pstore.conf									\
+	etc/systemd/sleep.conf									\
+	etc/systemd/system.conf									\
+	etc/systemd/system/getty.target.wants							\
+	etc/systemd/user									\
+	etc/systemd/user.conf									\
+	etc/tmpfiles.d										\
+	etc/udev										\
+	etc/xdg											\
+	usr/bin/busctl										\
+	usr/bin/kernel-install									\
+	usr/bin/systemd-analyze									\
+	usr/bin/systemd-cgls									\
+	usr/bin/systemd-cgtop									\
+	usr/bin/systemd-escape									\
+	usr/bin/systemd-nspawn									\
+	usr/include										\
+	usr/lib/*/pkgconfig									\
+	usr/lib/kernel										\
+	usr/lib/systemd/catalog									\
+	usr/lib/systemd/network									\
+	usr/lib/systemd/system-generators/systemd-gpt-auto-generator				\
+	usr/lib/systemd/system-preset								\
+	usr/lib/systemd/system/local-fs.target.wants/tmp.mount					\
+	usr/lib/systemd/system/tmp.mount							\
+	usr/lib/systemd/user									\
+	usr/lib/systemd/user-preset								\
+	usr/lib/sysusers.d									\
+	usr/share/doc										\
+	usr/share/factory									\
+	usr/share/locale									\
+	usr/share/pkgconfig									\
+	usr/share/polkit-1
+
 override_dh_auto_configure:
 	cd vendor/systemd;					\
 	    QUILT_PATCHES=debian/patches quilt push -a --fuzz=0
@@ -158,47 +198,8 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/usr/bin
 	mkdir -p debian/tmp/usr/lib64
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
-	clean_paths="etc/kernel \
-		etc/sysctl.d \
-		etc/modules-load.d \
-		etc/tmpfiles.d \
-		etc/systemd/user \
-		etc/systemd/journald.conf \
-		etc/systemd/user.conf \
-		etc/systemd/system/getty.target.wants \
-		etc/systemd/system.conf \
-		etc/systemd/sleep.conf \
-		etc/systemd/pstore.conf \
-		etc/udev \
-		etc/xdg \
-		etc/X11 \
-		usr/share/locale \
-		usr/share/factory \
-		usr/share/pkgconfig \
-		usr/share/polkit-1 \
-		usr/share/doc \
-		usr/bin/systemd-analyze \
-		usr/lib/kernel \
-		usr/lib/systemd/user \
-		usr/lib/systemd/system-preset \
-		usr/lib/systemd/catalog \
-		usr/lib/systemd/user-preset \
-		usr/lib/systemd/network \
-		usr/lib/systemd/system-generators/systemd-gpt-auto-generator \
-		usr/lib/systemd/system/tmp.mount \
-		usr/lib/systemd/system/local-fs.target.wants/tmp.mount \
-		usr/lib/sysusers.d \
-		usr/lib/*/pkgconfig \
-		usr/include \
-		usr/bin/busctl \
-		usr/bin/systemd-cgtop \
-		usr/bin/systemd-cgls \
-		usr/bin/systemd-escape \
-		usr/bin/kernel-install \
-		usr/bin/systemd-nspawn \
-		"; \
-	for p in $$clean_paths; do \
-		rm -rf debian/tmp/$$p ;\
+	for p in $(CLEAN_PATHS); do		\
+		rm -rf debian/tmp/$$p ;		\
 	done
 	touch debian/tmp/etc/machine-id
 
