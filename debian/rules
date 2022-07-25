@@ -218,11 +218,33 @@ override_dh_auto_install:
 		cp -a $(CURDIR)/debian/tmp/lib/$(DEB_HOST_MULTIARCH)/$$lib* $(TEMPLIBDIR); \
 	done
 	cp -a $(CURDIR)/debian/tmp/usr/lib/systemd/libsystemd-shared* $(TEMPLIBDIR)
-
-	set -e; \
-	for f in "/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.* /lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.* /lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1 /sbin/e2fsck /sbin/fsck.vfat /sbin/fsck /bin/umount /bin/mount /bin/kmod /usr/bin/unsquashfs /sbin/dmsetup /usr/lib/snapd/snap-bootstrap /usr/lib/snapd/info /lib/systemd/systemd-bootchart /lib/systemd/system/snapd.recovery-chooser-trigger.service"; do \
-		LD_PRELOAD= LD_LIBRARY_PATH=$(TEMPLIBDIR) \
-			/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $$f; \
+	set -e;									\
+	for f in								\
+		/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*			\
+		/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*			\
+		/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1			\
+		/sbin/e2fsck							\
+		/sbin/fsck.vfat							\
+		/sbin/fsck /bin/umount						\
+		/bin/mount							\
+		/bin/kmod							\
+		/usr/sbin/depmod						\
+		/usr/sbin/insmod						\
+		/usr/sbin/lsmod							\
+		/usr/sbin/modinfo						\
+		/usr/sbin/modprobe						\
+		/usr/sbin/rmmod							\
+		/usr/bin/unsquashfs						\
+		/sbin/dmsetup							\
+		/usr/lib/snapd/snap-bootstrap					\
+		/usr/lib/snapd/info						\
+		/lib/systemd/systemd-bootchart					\
+		/lib/systemd/system/snapd.recovery-chooser-trigger.service;	\
+	do									\
+		LD_PRELOAD=							\
+		LD_LIBRARY_PATH=$(TEMPLIBDIR)					\
+			/usr/lib/dracut/dracut-install				\
+			-D $(CURDIR)/debian/tmp --ldd $$f;			\
 	done
 	dpkg -L dmsetup | grep rules.d | xargs -L1 /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd
 ifeq ($(DEB_HOST_ARCH),amd64)

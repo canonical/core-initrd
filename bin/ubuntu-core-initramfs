@@ -7,6 +7,179 @@ import pathlib
 import platform
 import glob
 import shutil
+import re
+import sys
+from collections import namedtuple
+from enum import Enum, auto
+
+
+class ModTable:
+
+    def __init__(self):
+        self._table = {}
+
+    def get(self, key, default=None):
+        if not isinstance(key, str):
+            raise TypeError
+        return self._table.get(key.replace('_', '-'), default)
+
+    def __contains__(self, key):
+        return key.replace('_', '-') in self._table
+
+    def __getitem__(self, key):
+        if not isinstance(key, str):
+            raise TypeError
+        return self._table[key.replace('_', '-')]
+
+    def __setitem__(self, key, value):
+        if not isinstance(key, str):
+            raise TypeError
+        self._table[key.replace('_', '-')] = value
+
+
+class ModuleDb:
+
+    ModuleInfo = namedtuple('ModuleInfo', ('builtin', 'aliases', 'symbols'))
+    alias_line = re.compile(r"^alias +(?P<alias>[^ ]+) +(?P<target>[^ ]+)$")
+    modinfo_line = re.compile("^(?P<name>[^.]+)[.](?P<arg>[^.]+)=(?P<value>.+)$")
+    class Installed(Enum):
+        EXPLICIT = auto()
+        IMPLICIT = auto()
+
+    @staticmethod
+    def __each_alias(path):
+        with open(path, "r") as f:
+            data = f.read()
+        for line in data.splitlines():
+            m = ModuleDb.alias_line.fullmatch(line)
+            if m:
+                yield m['alias'], m['target']
+
+    def __init__(self, module_path):
+        self._modules = ModTable()
+        self._alias = ModTable()
+        self._deps = ModTable()
+        self._installed = ModTable()
+        not_found = set()
+
+        with open(os.path.join(module_path, "modules.builtin"), "r") as f:
+            for line in f.read().splitlines():
+                name = os.path.splitext(os.path.basename(line))[0]
+                self._modules[name] = ModuleDb.ModuleInfo(True, [], [])
+
+        with open(os.path.join(module_path, "modules.builtin.modinfo"), "r") as f:
+            for line in f.read().split('\0'):
+                m = ModuleDb.modinfo_line.fullmatch(line)
+                if m:
+                    if m['arg'] == 'alias':
+                        original = self._modules.get(m['name'], ModuleDb.ModuleInfo(True, [], []))
+                        self._modules[m['name']] = ModuleDb.ModuleInfo(original.builtin,
+                                                                    original.aliases + [m['value']],
+                                                                    original.symbols)
+                    self._alias[m['value']] = m['name']
+
+        for root, dirs, files in os.walk(module_path):
+            for f in files:
+                name, ext = os.path.splitext(f)
+                if ext == '.ko':
+                    self._modules[name] = ModuleDb.ModuleInfo(False, [], [])
+
+        for alias, target in ModuleDb.__each_alias(os.path.join(module_path, "modules.alias")):
+            try:
+                original = self._modules[target]
+            except KeyError:
+                if target not in not_found:
+                    print(f"module.alias: cannot find module {target}", file=sys.stderr)
+                    not_found.add(target)
+            else:
+                self._modules[target] = ModuleDb.ModuleInfo(original.builtin,
+                                                            original.aliases + [alias],
+                                                            original.symbols)
+                self._alias[alias] = target
+
+        for alias, target in ModuleDb.__each_alias(os.path.join(module_path, "modules.symbols")):
+            try:
+                original = self._modules[target]
+            except KeyError:
+                if target not in not_found:
+                    print(f"modules.symbols: cannot find module {target}", file=sys.stderr)
+                    not_found.add(target)
+            else:
+                self._modules[target] = ModuleDb.ModuleInfo(original.builtin,
+                                                            original.aliases,
+                                                            original.symbols + [alias])
+
+        with open(os.path.join(module_path, "modules.dep"), "r") as f:
+            for line in f.read().splitlines():
+                mod, deps = line.split(':', 1)
+                deps = deps.strip()
+                mod = os.path.basename(mod)
+                mod = os.path.splitext(mod)[0]
+                if len(deps) != 0:
+                    for dep in deps.split():
+                        dep = os.path.basename(dep)
+                        dep = os.path.splitext(dep)[0]
+                        if mod not in self._deps:
+                            self._deps[mod] = []
+                        self._deps[mod].append(dep)
+
+    def mark_installed(self, mod, source):
+        real_mod = self.solve_alias(mod)
+        if real_mod is None:
+            print(f"WARNING: Module {mod} is not known in {source}", file=sys.stderr)
+            return
+        if real_mod in self._installed:
+            old_mode, old_origin, old_source = self._installed[real_mod]
+            if old_mode == ModuleDb.Installed.IMPLICIT:
+                print(f"WARNING: Module {mod} installed by {source}, but is dependency of {old_origin} installed by {old_source}", file=sys.stderr)
+            elif old_mode == ModuleDb.IMPLICIT:
+                return
+        self._installed[mod] = (ModuleDb.Installed.EXPLICIT, mod, source)
+        for dep in self.all_deps(real_mod):
+            if dep in self._installed:
+                dep_mode, dep_origin, dep_source = self._installed[dep]
+                if dep_mode == ModuleDb.Installed.EXPLICIT:
+                    print(f"WARNING: Module {dep} installed by {dep_source}, but is dependency of {mod} installed by {source}", file=sys.stderr)
+            else:
+                self._installed[dep] = (ModuleDb.Installed.IMPLICIT, mod, source)
+
+    def all_deps(self, mod):
+        real_mod = self.solve_alias(mod)
+        if real_mod is None:
+            return
+        queue = self._deps.get(real_mod, [])
+        done = set()
+        while queue:
+            m = queue.pop().replace('_', '-')
+            if m in done:
+                continue
+            yield m
+            done.add(m)
+            if m in self._deps:
+                queue.extend(self._deps[m])
+
+    def solve_alias(self, name):
+        if name in self._modules:
+            return name
+        if name in self._alias:
+            return self.solve_alias(self._alias[name])
+        return None
+
+    def __contains__(self, name):
+        if name in self._modules:
+            return True
+        if name not in self._alias:
+            return False
+        return self._alias[name] in self
+
+    def __getitem__(self, name):
+        if not isinstance(name, str):
+            raise TypeError
+        if name in self._modules:
+            return self._modules[name]
+        if name in self._alias:
+            return self[self._alias[name]]
+        raise KeyError
 
 
 # os.path.join() throws away previous components when it finds one
@@ -20,14 +193,63 @@ def path_join_make_rel_paths(path, *paths):
     return os.path.join(path, *relative_paths)
 
 
+known_automatic_modules = list(map(re.compile, [
+    r'crypto-.*',
+    r'algif-.*',
+    r'fs-.*',
+    r'nls-.*',
+    r'dm-.*',
+    r'md-.*',
+]))
+
 # Include kernel modules specified in conf_file
-def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file):
+def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
+                          warn_discoverable=False):
+    """Include kernel modules specified in `conf_file`
+
+    Args:
+        dest_d (str): Path to sysroot
+        kernel_root (str): Path to kernel directory
+        modules_d (str): Path to module directory
+        fw_d (str): Path to firmware directory
+        conf_file (str): Path to configuration file
+        db (ModuleDb): A ModuleDb instance which contains information about modules from `modules_d`
+        warn_discoverable (bool): Whether to warn of modules that can be discovered through aliases
+
+    """
+
     with open(conf_file) as f:
         for module in f.readlines():
             module = module.strip()
             if module:
                 if module[0] in ["#", ";"]:
                     continue
+
+                try:
+                    mod = db[module]
+                except KeyError:
+                    print(f"NOTE: {conf_file}: Module {module} not found", file=sys.stderr)
+                    if warn_discoverable and any(r.fullmatch(module.replace('_', '-')) for r in known_automatic_modules):
+                        print(f"WARNING: {conf_file}: Module {module} is probably automatically loaded", file=sys.stderr)
+                else:
+                    if mod.builtin:
+                        print(f"NOTE: {conf_file}: Module {module} is builtin", file=sys.stderr)
+                    if warn_discoverable:
+                        if len(mod.aliases) > 0:
+                              print(f"WARNING: {conf_file}: Module {module} has aliases:", file=sys.stderr)
+                              for alias in mod.aliases:
+                                  print(f" * {alias}", file=sys.stderr)
+                        elif warn_discoverable and any(r.fullmatch(module.replace('_', '-')) for r in known_automatic_modules):
+                              print(f"WARNING: {conf_file}: Module {module} is probably automatically loaded", file=sys.stderr)
+
+                    # A module that has symbols but no alias is likely to be loaded through aliases
+                    if len(mod.aliases) == 0 and len(mod.symbols) > 0:
+                        print(f"WARNING: {conf_file}: Module {module} exports symbols:", file=sys.stderr)
+                        for symbol in mod.symbols:
+                            print(f" * {symbol}", file=sys.stderr)
+                    if not mod.builtin:
+                        db.mark_installed(module, conf_file)
+
                 subprocess.check_call(
                     [
                         "/usr/lib/dracut/dracut-install",
@@ -65,6 +287,8 @@ def create_initrd(parser, args):
         firmware = os.path.join(kernel_root, "usr", "lib", "firmware")
         subprocess.check_call(["cp", "-ar", args.firmwaredir, firmware])
 
+        db = ModuleDb(modules)
+        installed_module = set()
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
         for feature in args.features:
@@ -72,18 +296,21 @@ def create_initrd(parser, args):
             if feature == "cloudimg-rootfs":
                 os.unlink(os.path.join(main, "usr/lib/systemd/system/sysroot.mount"))
             # Add feature files
-            subprocess.check_call(["cp", "-ar", "%s/%s/." % (args.skeleton, feature), main])
+            feature_path = os.path.join(args.skeleton, feature)
+            if os.path.isdir(feature_path):
+                subprocess.check_call(["cp", "-aT", feature_path, main])
             # Add feature kernel modules
             extra_modules = os.path.join(args.skeleton, "modules", feature,
                                          "extra-modules.conf")
             if os.path.exists(extra_modules):
-                add_modules_from_file(main, kernel_root, modules, firmware, extra_modules)
+                add_modules_from_file(main, kernel_root, modules, firmware, extra_modules, db)
 
         # Update epoch
         pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
         # Should iterate all the .conf drop ins
         for module_load in glob.iglob("%s/usr/lib/modules-load.d/*.conf" % main):
-            add_modules_from_file(main, kernel_root, modules, firmware, module_load)
+            add_modules_from_file(main, kernel_root, modules, firmware, module_load, db,
+                                  warn_discoverable=True)
 
         for modulesf in ["modules.order", "modules.builtin", "modules.builtin.bin"]:
             subprocess.check_call(
