@@ -12,6 +12,8 @@ Requires=sysroot-writable.mount
 Wants=snap-initramfs-mounts.service
 After=snap-initramfs-mounts.service
 
+ConditionPathIsMountPoint=/run/mnt/base
+
 [Service]
 Type=oneshot
 RemainAfterExit=true
