@@ -1,3 +1,24 @@
+ubuntu-core-initramfs (56) jammy; urgency=medium
+
+  [ Valentin David ]
+  * Update systemd to 249.11-0ubuntu3
+  * Fix recovery chooser trigger on NUC
+  * Print warnings when modules are force loaded when they don't need to
+  * Move modules that do not need force-loading to modules folder
+  * debian/rules: Remove more unused systemd files
+  * Mount UC mounts only when UC is detected
+
+  [ Jian Hui Lee ]
+  * add required drivers on Intel platform
+
+  [ Alfonso Sanchez-Beato ]
+  * Add modules folder with files specifying kernel modules for initramfs,
+    as an alternative to factory/usr/lib/modules-load.d/, which forces the
+    loading
+  * Move rpi module to modules folder
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Fri, 05 Aug 2022 09:13:09 +0100
+
 ubuntu-core-initramfs (55) jammy; urgency=medium
 
   [ Dimitri John Ledkov ]
