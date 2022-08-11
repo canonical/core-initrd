@@ -5,4 +5,3 @@ debian/tmp/* usr/lib/ubuntu-core-initramfs/main
 debian/tmp/usr/lib/systemd/boot/efi/linux*.efi.stub usr/lib/ubuntu-core-initramfs/efi/
 debian/sbat.txt usr/lib/ubuntu-core-initramfs/efi/
 modules usr/lib/ubuntu-core-initramfs/
-features/* usr/lib/ubuntu-core-initramfs/

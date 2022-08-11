@@ -8,6 +8,8 @@ Wants=sysroot.mount
 After=run-mnt-kernel.mount
 After=snap-initramfs-mounts.service
 
+ConditionPathIsMountPoint=/run/mnt/kernel
+
 [Mount]
 What=/run/mnt/kernel/modules
 Type=none
