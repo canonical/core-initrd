@@ -292,9 +292,6 @@ def create_initrd(parser, args):
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
         for feature in args.features:
-            # Needs https://github.com/snapcore/snapd/pull/10351 to land
-            if feature == "cloudimg-rootfs":
-                os.unlink(os.path.join(main, "usr/lib/systemd/system/sysroot.mount"))
             # Add feature files
             feature_path = os.path.join(args.skeleton, feature)
             if os.path.isdir(feature_path):
