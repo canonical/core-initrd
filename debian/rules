@@ -265,6 +265,8 @@ override_dh_auto_install:
 		/usr/sbin/rmmod							\
 		/usr/sbin/plymouthd						\
 		/usr/bin/plymouth						\
+		/lib/systemd/system/plymouth-start.service			\
+		/lib/systemd/system/plymouth-switch-root.service		\
 		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so		\
 		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so		\
 		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so		\
