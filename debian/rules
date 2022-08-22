@@ -221,8 +221,9 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/usr/share/fonts/
 	cp /usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf \
 		debian/tmp/usr/share/fonts/Plymouth.ttf
-	# We need the seat rules for drm
-	sed 's#{{ROOTBINDIR}}#/bin#' vendor/systemd/src/login/71-seat.rules.in > \
+	# We need the seat rules for drm. Replace jinja template bits for that.
+	sed -e '/{% raw [ -]%}/d' -e '/{% endraw %}/d' -e 's#{{ROOTBINDIR}}#/bin#' \
+	    vendor/systemd/src/login/71-seat.rules.in > \
 	    debian/tmp/lib/udev/rules.d/71-seat.rules
 
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
