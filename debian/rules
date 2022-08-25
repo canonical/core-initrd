@@ -12,6 +12,7 @@ CLEAN_PATHS=											\
 	etc/modules-load.d									\
 	etc/sysctl.d										\
 	etc/systemd/journald.conf								\
+	etc/systemd/logind.conf									\
 	etc/systemd/oomd.conf									\
 	etc/systemd/pstore.conf									\
 	etc/systemd/sleep.conf									\
@@ -24,12 +25,14 @@ CLEAN_PATHS=											\
 	etc/xdg											\
 	usr/bin/busctl										\
 	usr/bin/kernel-install									\
+	usr/bin/loginctl									\
 	usr/bin/oomctl										\
 	usr/bin/systemd-analyze									\
 	usr/bin/systemd-cgls									\
 	usr/bin/systemd-cgtop									\
 	usr/bin/systemd-dissect									\
 	usr/bin/systemd-escape									\
+	usr/bin/systemd-inhibit									\
 	usr/bin/systemd-nspawn									\
 	usr/include										\
 	usr/lib/*/pkgconfig									\
@@ -39,22 +42,33 @@ CLEAN_PATHS=											\
 	usr/lib/systemd/system-generators/systemd-gpt-auto-generator				\
 	usr/lib/systemd/system-preset								\
 	usr/lib/systemd/system/local-fs.target.wants/tmp.mount					\
+	usr/lib/systemd/system/multi-user.target.wants/systemd-logind.service			\
 	usr/lib/systemd/system/sysinit.target.wants/systemd-hwdb-update.service			\
 	usr/lib/systemd/system/sysinit.target.wants/systemd-journal-catalog-update.service	\
 	usr/lib/systemd/system/sysinit.target.wants/systemd-update-done.service			\
+	usr/lib/systemd/system/dbus-org.freedesktop.login1.service				\
 	usr/lib/systemd/system/systemd-hwdb-update.service					\
 	usr/lib/systemd/system/systemd-journal-catalog-update.service				\
+	usr/lib/systemd/system/systemd-logind.service						\
 	usr/lib/systemd/system/systemd-nspawn@.service						\
 	usr/lib/systemd/system/systemd-oomd.service						\
 	usr/lib/systemd/system/systemd-update-done.service					\
 	usr/lib/systemd/system/tmp.mount							\
+	usr/lib/systemd/systemd-logind								\
 	usr/lib/systemd/systemd-oomd								\
 	usr/lib/systemd/systemd-update-done							\
+	usr/lib/systemd/systemd-user-runtime-dir						\
 	usr/lib/systemd/user									\
 	usr/lib/systemd/user-preset								\
 	usr/lib/sysusers.d									\
 	usr/lib/tmpfiles.d/etc.conf								\
+	usr/lib/udev/rules.d/70-power-switch.rules						\
+	usr/lib/udev/rules.d/70-uaccess.rules							\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/security							\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/libpam_misc*						\
+	usr/share/dbus-1/system-services/org.freedesktop.login1.service				\
 	usr/share/dbus-1/system-services/org.freedesktop.oom1.service				\
+	usr/share/dbus-1/system.d/org.freedesktop.login1.conf					\
 	usr/share/dbus-1/system.d/org.freedesktop.oom1.conf					\
 	usr/share/doc										\
 	usr/share/factory									\
@@ -109,7 +123,7 @@ override_dh_auto_configure:
       -Denvironment-d=false \
       -Dbinfmt=false \
       -Dcoredump=false \
-      -Dlogind=false \
+      -Dlogind=true \
       -Dhostnamed=false \
       -Dlocaled=false \
       -Dmachined=false \
@@ -221,10 +235,6 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/usr/share/fonts/
 	cp /usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf \
 		debian/tmp/usr/share/fonts/Plymouth.ttf
-	# We need the seat rules for drm. Replace jinja template bits for that.
-	sed -e '/{% raw [ -]%}/d' -e '/{% endraw %}/d' -e 's#{{ROOTBINDIR}}#/bin#' \
-	    vendor/systemd/src/login/71-seat.rules.in > \
-	    debian/tmp/lib/udev/rules.d/71-seat.rules
 
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
 	for p in $(CLEAN_PATHS); do		\
