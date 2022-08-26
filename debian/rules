@@ -12,6 +12,7 @@ CLEAN_PATHS=											\
 	etc/modules-load.d									\
 	etc/sysctl.d										\
 	etc/systemd/journald.conf								\
+	etc/systemd/logind.conf									\
 	etc/systemd/oomd.conf									\
 	etc/systemd/pstore.conf									\
 	etc/systemd/sleep.conf									\
@@ -24,12 +25,14 @@ CLEAN_PATHS=											\
 	etc/xdg											\
 	usr/bin/busctl										\
 	usr/bin/kernel-install									\
+	usr/bin/loginctl									\
 	usr/bin/oomctl										\
 	usr/bin/systemd-analyze									\
 	usr/bin/systemd-cgls									\
 	usr/bin/systemd-cgtop									\
 	usr/bin/systemd-dissect									\
 	usr/bin/systemd-escape									\
+	usr/bin/systemd-inhibit									\
 	usr/bin/systemd-nspawn									\
 	usr/include										\
 	usr/lib/*/pkgconfig									\
@@ -39,22 +42,33 @@ CLEAN_PATHS=											\
 	usr/lib/systemd/system-generators/systemd-gpt-auto-generator				\
 	usr/lib/systemd/system-preset								\
 	usr/lib/systemd/system/local-fs.target.wants/tmp.mount					\
+	usr/lib/systemd/system/multi-user.target.wants/systemd-logind.service			\
 	usr/lib/systemd/system/sysinit.target.wants/systemd-hwdb-update.service			\
 	usr/lib/systemd/system/sysinit.target.wants/systemd-journal-catalog-update.service	\
 	usr/lib/systemd/system/sysinit.target.wants/systemd-update-done.service			\
+	usr/lib/systemd/system/dbus-org.freedesktop.login1.service				\
 	usr/lib/systemd/system/systemd-hwdb-update.service					\
 	usr/lib/systemd/system/systemd-journal-catalog-update.service				\
+	usr/lib/systemd/system/systemd-logind.service						\
 	usr/lib/systemd/system/systemd-nspawn@.service						\
 	usr/lib/systemd/system/systemd-oomd.service						\
 	usr/lib/systemd/system/systemd-update-done.service					\
 	usr/lib/systemd/system/tmp.mount							\
+	usr/lib/systemd/systemd-logind								\
 	usr/lib/systemd/systemd-oomd								\
 	usr/lib/systemd/systemd-update-done							\
+	usr/lib/systemd/systemd-user-runtime-dir						\
 	usr/lib/systemd/user									\
 	usr/lib/systemd/user-preset								\
 	usr/lib/sysusers.d									\
 	usr/lib/tmpfiles.d/etc.conf								\
+	usr/lib/udev/rules.d/70-power-switch.rules						\
+	usr/lib/udev/rules.d/70-uaccess.rules							\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/security							\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/libpam_misc*						\
+	usr/share/dbus-1/system-services/org.freedesktop.login1.service				\
 	usr/share/dbus-1/system-services/org.freedesktop.oom1.service				\
+	usr/share/dbus-1/system.d/org.freedesktop.login1.conf					\
 	usr/share/dbus-1/system.d/org.freedesktop.oom1.conf					\
 	usr/share/doc										\
 	usr/share/factory									\
@@ -109,7 +123,7 @@ override_dh_auto_configure:
       -Denvironment-d=false \
       -Dbinfmt=false \
       -Dcoredump=false \
-      -Dlogind=false \
+      -Dlogind=true \
       -Dhostnamed=false \
       -Dlocaled=false \
       -Dmachined=false \
@@ -213,6 +227,15 @@ override_dh_auto_install:
 	cp -ar factory/* debian/tmp
 	mkdir -p debian/tmp/usr/bin
 	mkdir -p debian/tmp/usr/lib64
+
+	# splash functionality
+	mkdir -p debian/tmp/usr/share/plymouth/themes/
+	cp -a vendor/plymouth-theme-ubuntu-core/ubuntu-core \
+		debian/tmp/usr/share/plymouth/themes/
+	mkdir -p debian/tmp/usr/share/fonts/
+	cp /usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf \
+		debian/tmp/usr/share/fonts/Plymouth.ttf
+
 	dh_auto_install --destdir=debian/tmp --buildsystem=meson+ninja --sourcedirectory=vendor/systemd
 	for p in $(CLEAN_PATHS); do		\
 		rm -r debian/tmp/$$p ;		\
@@ -251,6 +274,14 @@ override_dh_auto_install:
 		/usr/sbin/modinfo						\
 		/usr/sbin/modprobe						\
 		/usr/sbin/rmmod							\
+		/usr/sbin/plymouthd						\
+		/usr/bin/plymouth						\
+		/lib/systemd/system/plymouth-start.service			\
+		/lib/systemd/system/plymouth-switch-root.service		\
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so		\
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so		\
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so		\
+		/usr/share/libdrm/amdgpu.ids					\
 		/usr/bin/unsquashfs						\
 		/sbin/dmsetup							\
 		/usr/lib/snapd/snap-bootstrap					\
@@ -272,7 +303,9 @@ endif
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
-	for e in $$(find debian/tmp -type f -executable); do \
+	for e in $$(find debian/tmp -type f -executable) \
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/*.so \
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so; do \
 		LD_PRELOAD= LD_LIBRARY_PATH=$(TEMPLIBDIR) \
 	 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
 	done
@@ -309,6 +342,9 @@ ifneq ($(CI),true)
 	# default initrd
 	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; git checkout a6f4149a544ab6fda754507c4cbdaac3ddd83a79; GOPATH= ./get-deps.sh )
 endif
+	# Include ubuntu-core plymouth theme in sources
+	[ -d vendor/plymouth-theme-ubuntu-core ] || ( cd vendor; \
+		git clone https://github.com/snapcore/plymouth-theme-ubuntu-core )
 	dh_clean
 
 override_dh_python3:
