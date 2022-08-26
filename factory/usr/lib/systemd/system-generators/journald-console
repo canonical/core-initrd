@@ -1,9 +1,17 @@
 #!/bin/sh
-if ! grep -q 'snapd_recovery_mode=install' /proc/cmdline
-then
+
+set -eu
+
+if [ "$(/usr/libexec/core/get-arg snapd_recovery_mode || true)" != install ]; then
+    exit 0
+fi
+
+if /usr/libexec/core/get-arg quiet; then
     exit 0
 fi
 
 mkdir -p /run/systemd/journald.conf.d
-echo [Journal] >> /run/systemd/journald.conf.d/core-override.conf
-echo ForwardToConsole=true >> /run/systemd/journald.conf.d/core-override.conf
+cat <<EOF >/run/systemd/journald.conf.d/core-override.conf
+[Journal]
+ForwardToConsole=true
+EOF
