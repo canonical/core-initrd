@@ -317,19 +317,6 @@ endif
 
 override_dh_install:
 	dh_install
-ifneq ($(CI),true)
-ifeq ($(DEB_HOST_ARCH_BITS),64)
-	# This builds a forked snap-bootstrap ito the "cloudimg-rootfs" feature
-	# directory. This is *not* used unless "--feature main cloudimg-rootfs"
-	# is specified . This is only done for the certain cloud kernels during
-	# the "core-initrd create-initrd" time.
-	#
-	# Forked snap-bootstrap until https://github.com/snapcore/snapd/pull/10267 lands
-	GO111MODULE=off GOPATH=$(CURDIR)/vendor/gopath/ HOME=$(CURDIR)/debian CGO_ENABLED=1 go build -buildmode=pie -tags nomanagers -o $(CURDIR)/debian/$(DEB_SOURCE)/usr/lib/$(DEB_SOURCE)/cloudimg-rootfs/usr/lib/snapd/snap-bootstrap github.com/snapcore/snapd/cmd/snap-bootstrap
-	# For some reason tests fail when building in chroot
-	GO111MODULE=off GOPATH=$(CURDIR)/vendor/gopath/ HOME=$(CURDIR)/debian CGO_ENABLED=1  go test -buildmode=pie -tags nomanagers github.com/snapcore/snapd/cmd/snap-bootstrap || :
-endif
-endif
 	rm -rf debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/main/usr/lib/systemd/boot
 ifeq ($(DEB_HOST_ARCH),amd64)
 	mkdir -p debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/early/
@@ -337,11 +324,6 @@ ifeq ($(DEB_HOST_ARCH),amd64)
 endif
 
 override_dh_clean:
-ifneq ($(CI),true)
-	# only needed for the "--feature main cloudimg-rootfs", not used for the
-	# default initrd
-	[ -d vendor/gopath ] || ( mkdir -p vendor/gopath/src/github.com/snapcore/; cd vendor/gopath/src/github.com/snapcore; git clone -b run-cloudimg-rootfs-draft-1 https://github.com/xnox/snapd.git; cd snapd; git checkout a6f4149a544ab6fda754507c4cbdaac3ddd83a79; GOPATH= ./get-deps.sh )
-endif
 	# Include ubuntu-core plymouth theme in sources
 	[ -d vendor/plymouth-theme-ubuntu-core ] || ( cd vendor; \
 		git clone https://github.com/snapcore/plymouth-theme-ubuntu-core )
