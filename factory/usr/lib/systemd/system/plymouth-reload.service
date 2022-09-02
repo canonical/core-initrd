@@ -1,0 +1,11 @@
+[Unit]
+Description=Reload Plymouth theme
+DefaultDependencies=no
+ConditionPathExists=/run/plymouth/pid
+After=plymouth-for-core.service
+After=plymouth-for-classic.service
+Before=plymouth-switch-root.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl reload plymouth-start.service
