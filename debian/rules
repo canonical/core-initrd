@@ -72,6 +72,7 @@ override_dh_auto_configure:
       -Dwheel-group=false \
       -Ddev-kvm-mode=0660 \
       -Dgroup-render-mode=0660 \
+      -Ddefault-net-naming-scheme=v245 \
       -Ddefault-dnssec=no \
       -Dselinux=true \
       -Ddefault-kill-user-processes=false \
