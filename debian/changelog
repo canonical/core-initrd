@@ -1,3 +1,13 @@
+ubuntu-core-initramfs (58) jammy; urgency=medium
+
+  [ Valentin David ]
+  * Do not forward journal to console when quiet
+
+  [ Alfonso Sanchez-Beato ]
+  * Support for splash screen
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Thu, 08 Sep 2022 17:25:24 +0100
+
 ubuntu-core-initramfs (57) jammy; urgency=medium
 
   * Fix cloudimg-rootfs feature in jammy.
