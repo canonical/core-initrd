@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (59) jammy; urgency=medium
+
+  * No change release to pick up snapd 2.57.3
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Thu, 15 Sep 2022 19:38:42 +0100
+
 ubuntu-core-initramfs (58) jammy; urgency=medium
 
   [ Valentin David ]
