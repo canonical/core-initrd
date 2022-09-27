@@ -241,6 +241,8 @@ override_dh_auto_install:
 		rm -r debian/tmp/$$p ;		\
 	done
 	touch debian/tmp/etc/machine-id
+	# This hack should be removed with #113
+	sed -i '/^After=/{;s, *plymouth-start[.]service *, ,;/^After= *$$/d;}' debian/tmp/usr/lib/systemd/system/systemd-ask-password-*
 
 	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/*/:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
