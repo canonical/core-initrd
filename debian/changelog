@@ -1,3 +1,14 @@
+ubuntu-core-initramfs (60) jammy; urgency=medium
+
+  [ Valentin David ]
+  * Break cycle with plymouth systemd-password
+  * Remove populate-writable.service from basic.target
+
+  [ Alfonso Sanchez-Beato ]
+  * Include intel drm module in initramfs, for splash
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Thu, 29 Sep 2022 11:20:59 +0100
+
 ubuntu-core-initramfs (59) jammy; urgency=medium
 
   * No change release to pick up snapd 2.57.3
