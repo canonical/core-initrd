@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -eu
+
+cat <<EOF >>/sysroot/etc/fstab
+/run/mnt/data /writable none bind,x-initrd.mount 0 0
+/run/mnt/kernel/firmware /usr/lib/firmware none bind,x-initrd.mount 0 0
+/run/mnt/kernel/modules /usr/lib/modules none bind,x-initrd.mount 0 0
+EOF
