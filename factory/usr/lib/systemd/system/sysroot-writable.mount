@@ -1,6 +1,6 @@
 [Unit]
 DefaultDependencies=no
-Before=initrd-fs.target
+Before=initrd-root-fs.target
 
 Wants=sysroot.mount
 After=sysroot.mount

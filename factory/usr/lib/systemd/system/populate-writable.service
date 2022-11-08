@@ -2,7 +2,7 @@
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly
 DefaultDependencies=no
-Before=initrd-root-device.target
+Before=initrd-root-fs.target
 After=run-mnt-data.mount
 After=run-mnt-base.mount
 After=sysroot.mount
@@ -24,3 +24,4 @@ ExecStart=/usr/bin/touch /sysroot/run/fstab
 ExecStart=/usr/bin/chroot /sysroot /usr/lib/core/handle-writable-paths / /etc/system-image/writable-paths /run/fstab
 # TODO:UC20: move the-modeenv implementation to snap-bootstrap too
 ExecStart=/usr/lib/the-modeenv
+ExecStart=/usr/lib/core/extra-paths
