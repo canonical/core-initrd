@@ -11,7 +11,7 @@ ubuntu-core-initramfs (61) jammy; urgency=medium
   * factory,debian: include plymouth classic splash and use it if starting
     classic.
 
--- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Wed, 09 Nov 2022 11:18:04 +0000
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Wed, 09 Nov 2022 11:18:04 +0000
 
 ubuntu-core-initramfs (60) jammy; urgency=medium
 
