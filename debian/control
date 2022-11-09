@@ -48,6 +48,7 @@ Build-Depends: debhelper-compat (= 13), dh-python, python3:any, dracut-core, qui
                linux-base <!nocheck>,
                acl <!nocheck>,
                plymouth-label-ft,
+               plymouth-theme-spinner,
                python3:native,
                python3-jinja2:native,
                python3-lxml:native,

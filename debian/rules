@@ -282,8 +282,11 @@ override_dh_auto_install:
 		/lib/systemd/system/plymouth-switch-root.service		\
 		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so		\
 		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so		\
+		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/two-step.so		\
 		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so		\
 		/usr/share/libdrm/amdgpu.ids					\
+		/usr/share/plymouth/themes/bgrt/*				\
+		/usr/share/plymouth/themes/spinner/*				\
 		/usr/bin/unsquashfs						\
 		/sbin/dmsetup							\
 		/usr/lib/snapd/snap-bootstrap					\
