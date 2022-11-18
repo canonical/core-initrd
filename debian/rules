@@ -269,6 +269,7 @@ override_dh_auto_install:
 		/sbin/fsck.vfat							\
 		/sbin/fsck /bin/umount						\
 		/bin/mount							\
+		/usr/bin/mountpoint						\
 		/bin/kmod							\
 		/usr/sbin/depmod						\
 		/usr/sbin/insmod						\
