@@ -10,3 +10,4 @@ ConditionPathIsMountPoint=!/run/mnt/base
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/ln -s data /run/mnt/sysroot
+ExecStart=/usr/lib/classic/extra-paths
