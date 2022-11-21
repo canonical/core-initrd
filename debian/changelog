@@ -1,3 +1,11 @@
+ubuntu-core-initramfs (62) jammy; urgency=medium
+
+  [ Valentin David ]
+  * factory: add generator for kernel mount points on classic. This is
+    a fix for a regression introduced in 61.
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Fri, 18 Nov 2022 18:49:04 +0000
+
 ubuntu-core-initramfs (61) jammy; urgency=medium
 
   [ Dimitri John Ledkov ]
