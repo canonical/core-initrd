@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (63) jammy; urgency=medium
+
+  * No change rebuild to pick up snapd 2.58~rc2+22.04
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Wed, 23 Nov 2022 10:42:40 +0000
+
 ubuntu-core-initramfs (62) jammy; urgency=medium
 
   [ Valentin David ]
