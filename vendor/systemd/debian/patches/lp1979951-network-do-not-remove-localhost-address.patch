@@ -1,0 +1,69 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Mon, 31 Jan 2022 19:26:51 +0900
+Subject: network: do not remove localhost address
+
+Origin: upstream, https://github.com/systemd/systemd/commit/b69bfa43052586cd6894c32d7d3d447195539ec5
+Bug-Ubuntu: https://launchpad.net/bugs/1979951
+
+The original commit was modified to apply to v245, i.e. before link_drop_foreign_addresses existed.
+
+---
+Managing loopback interfaces by networkd is not recommended, but supporeted.
+Even such spurious situation, do not drop the localhost addresses.
+---
+ src/basic/in-addr-util.c    | 13 +++++++++++++
+ src/basic/in-addr-util.h    |  1 +
+ src/network/networkd-link.c |  4 ++++
+ 3 files changed, 18 insertions(+)
+
+diff --git a/src/basic/in-addr-util.c b/src/basic/in-addr-util.c
+index bfe855f..e8c6f41 100644
+--- a/src/basic/in-addr-util.c
++++ b/src/basic/in-addr-util.c
+@@ -92,6 +92,19 @@ int in_addr_is_localhost(int family, const union in_addr_union *u) {
+         return -EAFNOSUPPORT;
+ }
+ 
++int in_addr_is_localhost_one(int family, const union in_addr_union *u) {
++        assert(u);
++
++        if (family == AF_INET)
++                /* 127.0.0.1 */
++                return be32toh(u->in.s_addr) == UINT32_C(0x7F000001);
++
++        if (family == AF_INET6)
++                return IN6_IS_ADDR_LOOPBACK(&u->in6); /* lgtm [cpp/potentially-dangerous-function] */
++
++        return -EAFNOSUPPORT;
++}
++
+ bool in4_addr_equal(const struct in_addr *a, const struct in_addr *b) {
+         assert(a);
+         assert(b);
+diff --git a/src/basic/in-addr-util.h b/src/basic/in-addr-util.h
+index ae2dad0..5a6d17a 100644
+--- a/src/basic/in-addr-util.h
++++ b/src/basic/in-addr-util.h
+@@ -29,6 +29,7 @@ int in_addr_is_link_local(int family, const union in_addr_union *u);
+ 
+ bool in4_addr_is_localhost(const struct in_addr *a);
+ int in_addr_is_localhost(int family, const union in_addr_union *u);
++int in_addr_is_localhost_one(int family, const union in_addr_union *u);
+ 
+ bool in4_addr_is_non_local(const struct in_addr *a);
+ 
+diff --git a/src/network/networkd-link.c b/src/network/networkd-link.c
+index 5a223c1..6f3096c 100644
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -2610,6 +2610,10 @@ static int link_drop_foreign_config(Link *link) {
+                 if (address->family == AF_INET6 && in_addr_is_link_local(AF_INET6, &address->in_addr) == 1 && link_ipv6ll_enabled(link))
+                         continue;
+ 
++                /* Do not remove localhost address (127.0.0.1 and ::1) */
++                if (link->flags & IFF_LOOPBACK && in_addr_is_localhost_one(address->family, &address->in_addr) > 0)
++                        continue;
++
+                 if (link_address_is_dynamic(link, address)) {
+                         if (link->network && FLAGS_SET(link->network->keep_configuration, KEEP_CONFIGURATION_DHCP))
+                                 continue;

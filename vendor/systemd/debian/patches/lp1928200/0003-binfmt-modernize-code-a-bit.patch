@@ -1,0 +1,47 @@
+From f3670df13e144c2f81bf6f9a0bea581e6d555bdd Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 23 Apr 2020 16:27:46 +0200
+Subject: [PATCH 3/5] binfmt: modernize code a bit
+Bug: https://github.com/systemd/systemd/issues/14981
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1928200
+Origin: upstream, https://github.com/systemd/systemd/pull/15566
+
+Let's just copy out the bit of the string we need, and let's make sure
+we refuse rules called "status" and "register", since those are special
+files in binfmt_misc's file system.
+---
+ src/binfmt/binfmt.c | 13 ++++++-------
+ 1 file changed, 6 insertions(+), 7 deletions(-)
+
+diff --git a/src/binfmt/binfmt.c b/src/binfmt/binfmt.c
+index 7ff844c78c..5e812e89a5 100644
+--- a/src/binfmt/binfmt.c
++++ b/src/binfmt/binfmt.c
+@@ -32,18 +32,17 @@ static int delete_rule(const char *rule) {
+         assert(rule);
+         assert(rule[0]);
+ 
+-        x = strdup(rule);
++        e = strchrnul(rule + 1, rule[0]);
++        x = strndup(rule + 1, e - rule - 1);
+         if (!x)
+                 return log_oom();
+ 
+-        e = strchrnul(x+1, x[0]);
+-        *e = 0;
+-
+-        if (!filename_is_valid(x + 1))
++        if (!filename_is_valid(x) ||
++            STR_IN_SET(x, "register", "status"))
+                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+-                                       "Rule file name '%s' is not valid, refusing.", x + 1);
++                                       "Rule file name '%s' is not valid, refusing.", x);
+ 
+-        fn = path_join("/proc/sys/fs/binfmt_misc", x+1);
++        fn = path_join("/proc/sys/fs/binfmt_misc", x);
+         if (!fn)
+                 return log_oom();
+ 
+-- 
+2.25.1
+

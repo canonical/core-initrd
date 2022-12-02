@@ -1,0 +1,46 @@
+From f3e1f00d03445911ee73729219cea88c8a70c612 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 18 Nov 2020 15:12:44 +0100
+Subject: [PATCH] resolved: don't update resolv.conf snippets unnecessarily
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1891215
+Origin: upstream, https://github.com/systemd/systemd/commit/f3e1f00d03445911ee73729219cea88c8a70c612
+
+Fixes: #17577
+---
+ src/resolve/resolved-resolv-conf.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+--- a/src/resolve/resolved-resolv-conf.c
++++ b/src/resolve/resolved-resolv-conf.c
+@@ -9,6 +9,7 @@
+ #include "dns-domain.h"
+ #include "fd-util.h"
+ #include "fileio.h"
++#include "fs-util.h"
+ #include "ordered-set.h"
+ #include "resolved-conf.h"
+ #include "resolved-dns-server.h"
+@@ -371,8 +372,9 @@ int manager_write_resolv_conf(Manager *m
+                 goto fail;
+         }
+ 
+-        if (rename(temp_path_uplink, PRIVATE_UPLINK_RESOLV_CONF) < 0) {
+-                r = log_error_errno(errno, "Failed to move private resolv.conf file into place: %m");
++        r = conservative_rename(AT_FDCWD, temp_path_uplink, AT_FDCWD, PRIVATE_UPLINK_RESOLV_CONF);
++        if (r < 0) {
++                log_error_errno(r, "Failed to move private resolv.conf file into place: %m");
+                 goto fail;
+         }
+ 
+@@ -382,8 +384,9 @@ int manager_write_resolv_conf(Manager *m
+                 goto fail;
+         }
+ 
+-        if (rename(temp_path_stub, PRIVATE_STUB_RESOLV_CONF) < 0) {
+-                r = log_error_errno(errno, "Failed to move private stub-resolv.conf file into place: %m");
++        r = conservative_rename(AT_FDCWD, temp_path_stub, AT_FDCWD, PRIVATE_STUB_RESOLV_CONF);
++        if (r < 0) {
++                log_error_errno(r, "Failed to move private stub-resolv.conf file into place: %m");
+                 goto fail;
+         }
+ 

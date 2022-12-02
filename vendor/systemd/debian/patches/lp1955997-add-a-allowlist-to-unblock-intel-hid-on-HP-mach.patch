@@ -1,0 +1,30 @@
+From: Jeremy Szu <jeremy.szu@canonical.com>
+Date: Tue, 8 Feb 2022 17:22:15 +0100
+Subject: lp1955997: add a allowlist to unblock intel-hid on HP machines
+
+For LP: #1955997, HP retired hp-wireless since 2022 and also confirmed the
+correct source should be intel-hid instead of atkbd. Upstream already unblock
+intel-hid on HP machines but it's risky to backport to stable series because
+of pre-2022 machines.
+I propose to maintain a allowlist on focal. For jammy, please refer to
+LP: #1955997 for more details
+---
+ hwdb.d/60-keyboard.hwdb | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/hwdb.d/60-keyboard.hwdb b/hwdb.d/60-keyboard.hwdb
+index 22f06c5..3a9705b 100644
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -492,6 +492,11 @@ evdev:input:b0003v0458p0708*
+ evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pn*:pvr*
+  KEYBOARD_KEY_8=unknown					# Use hp-wireless instead
+
++# The allowlist to unblock intel-hid on HP machines.
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPZBookFury16inchG9MobileWorkstationPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPZBookStudio16.0InchMobileWorkstationPC:pvr*
++ KEYBOARD_KEY_8=wlan
++
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*:pvr*
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pn*:pvr*
+  KEYBOARD_KEY_81=fn_esc

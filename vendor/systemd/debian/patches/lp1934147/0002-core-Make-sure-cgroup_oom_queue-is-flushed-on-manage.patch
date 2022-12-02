@@ -1,0 +1,56 @@
+From 13e721036bf4ba15eb255d8f0a14800f969ac0d7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20Koutn=C3=BD?= <mkoutny@suse.com>
+Date: Wed, 4 Aug 2021 18:59:35 +0200
+Subject: [PATCH] core: Make sure cgroup_oom_queue is flushed on manager exit
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1934147
+Origin: upstream, https://github.com/systemd/systemd/pull/20199
+
+The unit queues are not serialized/deserialized (they are recreated
+after reexec/reload instead). The destroyed units are not removed from
+the cgroup_oom_queue. That means the queue may contain possibly invalid
+pointers to released units.
+
+Fix this by removing the units from cgroup_oom_queue as we do for
+others. When at it, sync assert checks with currently existing queues
+and put them in order in the manager cleanup code.
+---
+ src/core/manager.c | 4 ++++
+ src/core/unit.c    | 7 +++++--
+ 2 files changed, 9 insertions(+), 2 deletions(-)
+
+--- a/src/core/manager.c
++++ b/src/core/manager.c
+@@ -1326,6 +1326,10 @@ static void manager_clear_jobs_and_units
+         assert(!m->cleanup_queue);
+         assert(!m->gc_unit_queue);
+         assert(!m->gc_job_queue);
++        assert(!m->cgroup_realize_queue);
++        assert(!m->cgroup_empty_queue);
++        assert(!m->cgroup_oom_queue);
++        assert(!m->target_deps_queue);
+         assert(!m->stop_when_unneeded_queue);
+ 
+         assert(hashmap_isempty(m->jobs));
+--- a/src/core/unit.c
++++ b/src/core/unit.c
+@@ -671,6 +671,9 @@ void unit_free(Unit *u) {
+         if (u->in_dbus_queue)
+                 LIST_REMOVE(dbus_queue, u->manager->dbus_unit_queue, u);
+ 
++        if (u->in_cleanup_queue)
++                LIST_REMOVE(cleanup_queue, u->manager->cleanup_queue, u);
++
+         if (u->in_gc_queue)
+                 LIST_REMOVE(gc_queue, u->manager->gc_unit_queue, u);
+ 
+@@ -680,8 +683,8 @@ void unit_free(Unit *u) {
+         if (u->in_cgroup_empty_queue)
+                 LIST_REMOVE(cgroup_empty_queue, u->manager->cgroup_empty_queue, u);
+ 
+-        if (u->in_cleanup_queue)
+-                LIST_REMOVE(cleanup_queue, u->manager->cleanup_queue, u);
++        if (u->in_cgroup_oom_queue)
++                LIST_REMOVE(cgroup_oom_queue, u->manager->cgroup_oom_queue, u);
+ 
+         if (u->in_target_deps_queue)
+                 LIST_REMOVE(target_deps_queue, u->manager->target_deps_queue, u);

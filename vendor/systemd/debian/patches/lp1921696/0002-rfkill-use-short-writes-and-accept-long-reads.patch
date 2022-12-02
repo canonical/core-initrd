@@ -1,0 +1,123 @@
+From a71c09685021cbcecb7566a00342421f635cc002 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Zbigniew=20J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Thu, 18 Feb 2021 10:48:08 +0100
+Subject: [PATCH 2/2] rfkill: use short writes and accept long reads
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/groovy/+source/systemd/+bug/1921696
+Origin: upstream, https://github.com/systemd/systemd/pull/18679
+
+I'm seeing the following with kernel-core-5.10.16-200.fc33.x86_64:
+
+$ sudo SYSTEMD_LOG_LEVEL=debug build/systemd-rfkill
+Reading struct rfkill_event: got 8 bytes.
+A new rfkill device has been added with index 0 and type bluetooth.
+Found cgroup2 on /sys/fs/cgroup/, full unified hierarchy
+Found container virtualization none.
+rfkill0: Operating on rfkill device 'tpacpi_bluetooth_sw'.
+Writing struct rfkill_event successful (8 of 9 bytes).
+Loaded state '0' from /var/lib/systemd/rfkill/platform-thinkpad_acpi:bluetooth.
+Reading struct rfkill_event: got 8 bytes.
+A new rfkill device has been added with index 1 and type wwan.
+rfkill1: Operating on rfkill device 'tpacpi_wwan_sw'.
+Writing struct rfkill_event successful (8 of 9 bytes).
+Loaded state '0' from /var/lib/systemd/rfkill/platform-thinkpad_acpi:wwan.
+Reading struct rfkill_event: got 8 bytes.
+A new rfkill device has been added with index 2 and type bluetooth.
+rfkill2: Operating on rfkill device 'hci0'.
+Writing struct rfkill_event successful (8 of 9 bytes).
+Loaded state '0' from /var/lib/systemd/rfkill/pci-0000:00:14.0-usb-0:7:1.0:bluetooth.
+Reading struct rfkill_event: got 8 bytes.
+A new rfkill device has been added with index 3 and type wlan.
+rfkill3: Operating on rfkill device 'phy0'.
+Writing struct rfkill_event successful (8 of 9 bytes).
+Loaded state '0' from /var/lib/systemd/rfkill/pci-0000:04:00.0:wlan.
+All events read and idle, exiting.
+
+We were expecting a read of exactly RFKILL_EVENT_SIZE_V1==8 bytes. But the
+structure has 9 after [1].
+
+[1] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=14486c82612a177cb910980c70ba900827ca0894
+
+For some reason the kernel does not accept the full structure size, but cuts
+the write short after 8 bytes:
+
+static ssize_t rfkill_fop_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *pos)
+{
+	struct rfkill_event ev;
+
+	/* we don't need the 'hard' variable but accept it */
+	if (count < RFKILL_EVENT_SIZE_V1 - 1)
+		return -EINVAL;
+
+	/*
+	 * Copy as much data as we can accept into our 'ev' buffer,
+	 * but tell userspace how much we've copied so it can determine
+	 * our API version even in a write() call, if it cares.
+	 */
+	count = min(count, sizeof(ev));
+	if (copy_from_user(&ev, buf, count))
+		return -EFAULT;
+
+... so it should accept the full size. I'm not sure what is going on here.
+
+But we don't care about the extra fields, so let's accept a write as long as
+it's at least RFKILL_EVENT_SIZE_V1.
+
+Fixes #18677.
+---
+ src/rfkill/rfkill.c | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/src/rfkill/rfkill.c b/src/rfkill/rfkill.c
+index 238d2cb579..e2d1a1be5f 100644
+--- a/src/rfkill/rfkill.c
++++ b/src/rfkill/rfkill.c
+@@ -171,14 +171,17 @@ static int load_state(Context *c, const struct rfkill_event *event) {
+                 .op = RFKILL_OP_CHANGE,
+                 .soft = b,
+         };
++        assert_cc(offsetof(struct rfkill_event, op) < RFKILL_EVENT_SIZE_V1);
++        assert_cc(offsetof(struct rfkill_event, soft) < RFKILL_EVENT_SIZE_V1);
+ 
+         ssize_t l = write(c->rfkill_fd, &we, sizeof we);
+         if (l < 0)
+                 return log_error_errno(errno, "Failed to restore rfkill state for %i: %m", event->idx);
+-        if (l != sizeof we)
++        if (l < RFKILL_EVENT_SIZE_V1)
+                 return log_error_errno(SYNTHETIC_ERRNO(EIO),
+                                        "Couldn't write rfkill event structure, too short (wrote %zd of %zu bytes).",
+                                        l, sizeof we);
++        log_debug("Writing struct rfkill_event successful (%zd of %zu bytes).", l, sizeof we);
+ 
+         log_debug("Loaded state '%s' from %s.", one_zero(b), state_file);
+         return 0;
+@@ -304,7 +307,7 @@ static int run(int argc, char *argv[]) {
+         }
+ 
+         for (;;) {
+-                struct rfkill_event event;
++                struct rfkill_event event = {};
+ 
+                 ssize_t l = read(c.rfkill_fd, &event, sizeof event);
+                 if (l < 0) {
+@@ -332,9 +335,15 @@ static int run(int argc, char *argv[]) {
+                         break;
+                 }
+ 
+-                if (l != RFKILL_EVENT_SIZE_V1)
+-                        return log_error_errno(SYNTHETIC_ERRNO(EIO), "Read event structure of unexpected size (%zd, not %d)",
++                if (l < RFKILL_EVENT_SIZE_V1)
++                        return log_error_errno(SYNTHETIC_ERRNO(EIO), "Short read of struct rfkill_event: (%zd < %d)",
+                                                l, RFKILL_EVENT_SIZE_V1);
++                log_debug("Reading struct rfkill_event: got %zd bytes.", l);
++
++                /* The event structure has more fields. We only care about the first few, so it's OK if we
++                 * don't read the full structure. */
++                assert_cc(offsetof(struct rfkill_event, op) < RFKILL_EVENT_SIZE_V1);
++                assert_cc(offsetof(struct rfkill_event, type) < RFKILL_EVENT_SIZE_V1);
+ 
+                 const char *type = rfkill_type_to_string(event.type);
+                 if (!type) {
+-- 
+2.25.1
+

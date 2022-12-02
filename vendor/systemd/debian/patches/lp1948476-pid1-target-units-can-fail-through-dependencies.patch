@@ -1,0 +1,51 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Wed, 22 Jul 2020 15:49:29 +0200
+Subject: pid1: target units can fail through dependencies
+
+Fixes #16401.
+
+c80a9a33d04fb4381327a69ce929c94a9f1d0e6c introduced the .can_fail field,
+but didn't set it on .targets. Targets can fail through dependencies.
+This leaves .slice and .device units as the types that cannot fail.
+
+$ systemctl cat bad.service bad.target bad-fallback.service
+[Service]
+Type=oneshot
+ExecStart=false
+
+[Unit]
+OnFailure=bad-fallback.service
+
+[Service]
+Type=oneshot
+ExecStart=echo Fixing everythign!
+
+$ sudo systemctl start bad.target
+systemd[1]: Starting bad.service...
+systemd[1]: bad.service: Main process exited, code=exited, status=1/FAILURE
+systemd[1]: bad.service: Failed with result 'exit-code'.
+systemd[1]: Failed to start bad.service.
+systemd[1]: Dependency failed for bad.target.
+systemd[1]: bad.target: Job bad.target/start failed with result 'dependency'.
+systemd[1]: bad.target: Triggering OnFailure= dependencies.
+systemd[1]: Starting bad-fallback.service...
+echo[46901]: Fixing everythign!
+systemd[1]: bad-fallback.service: Succeeded.
+systemd[1]: Finished bad-fallback.service.
+---
+ src/core/target.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/core/target.c b/src/core/target.c
+index 357ca70..e433e46 100644
+--- a/src/core/target.c
++++ b/src/core/target.c
+@@ -193,6 +193,8 @@ const UnitVTable target_vtable = {
+                 "Target\0"
+                 "Install\0",
+ 
++        .can_fail = true,
++
+         .load = target_load,
+         .coldplug = target_coldplug,
+ 

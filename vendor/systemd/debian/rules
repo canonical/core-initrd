@@ -83,7 +83,8 @@ CONFFLAGS = \
 	-Dnobody-group=nogroup \
 	-Dbump-proc-sys-fs-nr-open=false \
 	-Ddev-kvm-mode=0660 \
-	-Dgroup-render-mode=0660
+	-Dgroup-render-mode=0660 \
+	-Ddefault-net-naming-scheme=v245 # LP: #1945225
 
 # resolved's DNSSEC support is still not mature enough, don't enable it by
 # default on stable Debian or any Ubuntu releases

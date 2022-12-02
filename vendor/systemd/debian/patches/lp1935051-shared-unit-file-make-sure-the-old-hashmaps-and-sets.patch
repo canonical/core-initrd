@@ -1,0 +1,153 @@
+From 3fb2326f3ed87aa0b26078d307ebfb299e36286d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Zbigniew=20J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Thu, 28 May 2020 14:58:35 +0200
+Subject: [PATCH] shared/unit-file: make sure the old hashmaps and sets are
+ freed upon replacement
+Bug: https://github.com/systemd/systemd/issues/15220
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1935051
+Origin: upstream, https://github.com/systemd/systemd/commit/3fb2326f3ed87aa0b26078d307ebfb299e36286d
+
+Possibly fixes #15220. (There might be another leak. I'm still investigating.)
+
+The leak would occur when the path cache was rebuilt. So in normal circumstances
+it wouldn't be too bad, since usually the path cache is not rebuilt too often. But
+the case in #15220, where new unit files are created in a loop and started, the leak
+occurs once for each unit file:
+
+$ for i in {1..300}; do cp ~/.config/systemd/user/test0001.service ~/.config/systemd/user/test$(printf %04d $i).service; systemctl --user start test$(printf %04d $i).service;done
+---
+ src/basic/hash-funcs.c |  2 ++
+ src/basic/hash-funcs.h |  1 +
+ src/basic/hashmap.h    |  8 ++++++++
+ src/basic/set.h        |  8 ++++++++
+ src/core/manager.c     |  2 +-
+ src/shared/unit-file.c | 24 +++++++++++++-----------
+ 6 files changed, 33 insertions(+), 12 deletions(-)
+
+--- a/src/basic/hash-funcs.c
++++ b/src/basic/hash-funcs.c
+@@ -53,6 +53,8 @@ void path_hash_func(const char *q, struc
+ }
+ 
+ DEFINE_HASH_OPS(path_hash_ops, char, path_hash_func, path_compare);
++DEFINE_HASH_OPS_WITH_KEY_DESTRUCTOR(path_hash_ops_free,
++                                    char, path_hash_func, path_compare, free);
+ 
+ void trivial_hash_func(const void *p, struct siphash *state) {
+         siphash24_compress(&p, sizeof(p), state);
+--- a/src/basic/hash-funcs.h
++++ b/src/basic/hash-funcs.h
+@@ -80,6 +80,7 @@ extern const struct hash_ops string_hash
+ 
+ void path_hash_func(const char *p, struct siphash *state);
+ extern const struct hash_ops path_hash_ops;
++extern const struct hash_ops path_hash_ops_free;
+ 
+ /* This will compare the passed pointers directly, and will not dereference them. This is hence not useful for strings
+  * or suchlike. */
+--- a/src/basic/hashmap.h
++++ b/src/basic/hashmap.h
+@@ -89,6 +89,14 @@ OrderedHashmap *internal_ordered_hashmap
+ #define hashmap_new(ops) internal_hashmap_new(ops  HASHMAP_DEBUG_SRC_ARGS)
+ #define ordered_hashmap_new(ops) internal_ordered_hashmap_new(ops  HASHMAP_DEBUG_SRC_ARGS)
+ 
++#define hashmap_free_and_replace(a, b)          \
++        ({                                      \
++                hashmap_free(a);                \
++                (a) = (b);                      \
++                (b) = NULL;                     \
++                0;                              \
++        })
++
+ HashmapBase *internal_hashmap_free(HashmapBase *h, free_func_t default_free_key, free_func_t default_free_value);
+ static inline Hashmap *hashmap_free(Hashmap *h) {
+         return (void*) internal_hashmap_free(HASHMAP_BASE(h), NULL, NULL);
+--- a/src/basic/set.h
++++ b/src/basic/set.h
+@@ -5,6 +5,14 @@
+ #include "hashmap.h"
+ #include "macro.h"
+ 
++#define set_free_and_replace(a, b)              \
++        ({                                      \
++                set_free(a);                    \
++                (a) = (b);                      \
++                (b) = NULL;                     \
++                0;                              \
++        })
++
+ Set *internal_set_new(const struct hash_ops *hash_ops HASHMAP_DEBUG_PARAMS);
+ #define set_new(ops) internal_set_new(ops HASHMAP_DEBUG_SRC_ARGS)
+ 
+--- a/src/core/manager.c
++++ b/src/core/manager.c
+@@ -700,7 +700,7 @@ static int manager_setup_prefix(Manager
+ static void manager_free_unit_name_maps(Manager *m) {
+         m->unit_id_map = hashmap_free(m->unit_id_map);
+         m->unit_name_map = hashmap_free(m->unit_name_map);
+-        m->unit_path_cache = set_free_free(m->unit_path_cache);
++        m->unit_path_cache = set_free(m->unit_path_cache);
+         m->unit_cache_mtime =  0;
+ }
+ 
+--- a/src/shared/unit-file.c
++++ b/src/shared/unit-file.c
+@@ -229,9 +229,9 @@ static bool lookup_paths_mtime_good(cons
+ int unit_file_build_name_map(
+                 const LookupPaths *lp,
+                 usec_t *cache_mtime,
+-                Hashmap **ret_unit_ids_map,
+-                Hashmap **ret_unit_names_map,
+-                Set **ret_path_cache) {
++                Hashmap **unit_ids_map,
++                Hashmap **unit_names_map,
++                Set **path_cache) {
+ 
+         /* Build two mappings: any name → main unit (i.e. the end result of symlink resolution), unit name →
+          * all aliases (i.e. the entry for a given key is a a list of all names which point to this key). The
+@@ -239,7 +239,8 @@ int unit_file_build_name_map(
+          * have a key, but it is not present in the value for itself, there was an alias pointing to it, but
+          * the unit itself is not loadable.
+          *
+-         * At the same, build a cache of paths where to find units.
++         * At the same, build a cache of paths where to find units. The non-const parameters are for input
++         * and output. Existing contents will be freed before the new contents are stored.
+          */
+ 
+         _cleanup_hashmap_free_ Hashmap *ids = NULL, *names = NULL;
+@@ -253,8 +254,8 @@ int unit_file_build_name_map(
+         if (cache_mtime && *cache_mtime > 0 && lookup_paths_mtime_good(lp, *cache_mtime))
+                 return 0;
+ 
+-        if (ret_path_cache) {
+-                paths = set_new(&path_hash_ops);
++        if (path_cache) {
++                paths = set_new(&path_hash_ops_free);
+                 if (!paths)
+                         return log_oom();
+         }
+@@ -296,7 +297,7 @@ int unit_file_build_name_map(
+                         if (!filename)
+                                 return log_oom();
+ 
+-                        if (ret_path_cache) {
++                        if (paths) {
+                                 r = set_consume(paths, filename);
+                                 if (r < 0)
+                                         return log_oom();
+@@ -419,10 +420,11 @@ int unit_file_build_name_map(
+ 
+         if (cache_mtime)
+                 *cache_mtime = mtime;
+-        *ret_unit_ids_map = TAKE_PTR(ids);
+-        *ret_unit_names_map = TAKE_PTR(names);
+-        if (ret_path_cache)
+-                *ret_path_cache = TAKE_PTR(paths);
++
++        hashmap_free_and_replace(*unit_ids_map, ids);
++        hashmap_free_and_replace(*unit_names_map, names);
++        if (path_cache)
++                set_free_and_replace(*path_cache, paths);
+ 
+         return 1;
+ }

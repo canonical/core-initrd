@@ -1,0 +1,36 @@
+From 0282c0285a3e3c2e409305ce28555a6ad0489539 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 23 Apr 2020 16:25:53 +0200
+Subject: [PATCH 2/5] shutdown: unregister all binfmt_misc entries before
+ entering shutdown loop
+Bug: https://github.com/systemd/systemd/issues/14981
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1928200
+Origin: upstream, https://github.com/systemd/systemd/pull/15566
+
+Apparently if the new "F" flag is used they might pin files, which
+blocks us from unmounting things. Let's hence clear this up explicitly.
+Before entering our umount loop.
+
+Fixes: #14981
+---
+ src/shutdown/shutdown.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+--- a/src/shutdown/shutdown.c
++++ b/src/shutdown/shutdown.c
+@@ -16,6 +16,7 @@
+ 
+ #include "alloc-util.h"
+ #include "async.h"
++#include "binfmt-util.h"
+ #include "cgroup-setup.h"
+ #include "cgroup-util.h"
+ #include "def.h"
+@@ -373,6 +374,7 @@ int main(int argc, char *argv[]) {
+                 sync_with_progress();
+ 
+         disable_coredumps();
++        disable_binfmt();
+ 
+         log_info("Sending SIGTERM to remaining processes...");
+         broadcast_signal(SIGTERM, true, true, arg_timeout);

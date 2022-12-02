@@ -1,0 +1,91 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 17 Feb 2022 14:49:54 +0100
+Subject: pid1: set SYSTEMD_NSS_DYNAMIC_BYPASS=1 env var for dbus-daemon
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+There's currently a deadlock between PID 1 and dbus-daemon: in some
+cases dbus-daemon will do NSS lookups (which are blocking) at the same
+time PID 1 synchronously blocks on some call to dbus-daemon. Let's break
+that by setting SYSTEMD_NSS_DYNAMIC_BYPASS=1 env var for dbus-daemon,
+which will disable synchronously blocking varlink calls from nss-systemd
+to PID 1.
+
+In the long run we should fix this differently: remove all synchronous
+calls to dbus-daemon from PID 1. This is not trivial however: so far we
+had the rule that synchronous calls from PID 1 to the dbus broker are OK
+as long as they only go to interfaces implemented by the broke itself
+rather than services reachable through it. Given that the relationship
+between PID 1 and dbus is kinda special anyway, this was considered
+acceptable for the sake of simplicity, since we quite often need
+metadata about bus peers from the broker, and the asynchronous logic
+would substantially complicate even the simplest method handlers.
+
+This mostly reworks the existing code that sets SYSTEMD_NSS_BYPASS_BUS=
+(which is a similar hack to deal with deadlocks between nss-systemd and
+dbus-daemon itself) to set SYSTEMD_NSS_DYNAMIC_BYPASS=1 instead. No code
+was checking SYSTEMD_NSS_BYPASS_BUS= anymore anyway, and it used to
+solve a similar problem, hence it's an obvious piece of code to rework
+like this.
+
+Issue originally tracked down by Lukas Märdian. This patch is inspired
+and closely based on his patch:
+
+       https://github.com/systemd/systemd/pull/22038
+
+Fixes: #15316
+Co-authored-by: Lukas Märdian <slyon@ubuntu.com>
+---
+ src/core/execute.c | 10 +++++-----
+ src/core/execute.h |  2 +-
+ src/core/service.c |  2 +-
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/execute.c b/src/core/execute.c
+index ca40874..b8d1ae4 100644
+--- a/src/core/execute.c
++++ b/src/core/execute.c
+@@ -1829,11 +1829,11 @@ static int build_environment(
+                 our_env[n_env++] = x;
+         }
+ 
+-        /* If this is D-Bus, tell the nss-systemd module, since it relies on being able to use D-Bus look up dynamic
+-         * users via PID 1, possibly dead-locking the dbus daemon. This way it will not use D-Bus to resolve names, but
+-         * check the database directly. */
+-        if (p->flags & EXEC_NSS_BYPASS_BUS) {
+-                x = strdup("SYSTEMD_NSS_BYPASS_BUS=1");
++        /* If this is D-Bus, tell the nss-systemd module, since it relies on being able to use blocking
++         * Varlink calls back to us for look up dynamic users in PID 1. Break the deadlock between D-Bus and
++         * PID 1 by disabling use of PID1' NSS interface for looking up dynamic users. */
++        if (p->flags & EXEC_NSS_DYNAMIC_BYPASS) {
++                x = strdup("SYSTEMD_NSS_DYNAMIC_BYPASS=1");
+                 if (!x)
+                         return -ENOMEM;
+                 our_env[n_env++] = x;
+diff --git a/src/core/execute.h b/src/core/execute.h
+index 4c7a5b8..2a261f3 100644
+--- a/src/core/execute.h
++++ b/src/core/execute.h
+@@ -348,7 +348,7 @@ typedef enum ExecFlags {
+         EXEC_APPLY_TTY_STDIN   = 1 << 2,
+         EXEC_PASS_LOG_UNIT     = 1 << 3, /* Whether to pass the unit name to the service's journal stream connection */
+         EXEC_CHOWN_DIRECTORIES = 1 << 4, /* chown() the runtime/state/cache/log directories to the user we run as, under all conditions */
+-        EXEC_NSS_BYPASS_BUS    = 1 << 5, /* Set the SYSTEMD_NSS_BYPASS_BUS environment variable, to disable nss-systemd for dbus */
++        EXEC_NSS_DYNAMIC_BYPASS    = 1 << 5, /* Set the SYSTEMD_NSS_DYNAMIC_BYPASS environment variable, to disable nss-systemd blocking on PID 1, for use by dbus-daemon */
+         EXEC_CGROUP_DELEGATE   = 1 << 6,
+         EXEC_IS_CONTROL        = 1 << 7,
+         EXEC_CONTROL_CGROUP    = 1 << 8, /* Place the process not in the indicated cgroup but in a subcgroup '/.control', but only EXEC_CGROUP_DELEGATE and EXEC_IS_CONTROL is set, too */
+diff --git a/src/core/service.c b/src/core/service.c
+index 7b90822..debd9d6 100644
+--- a/src/core/service.c
++++ b/src/core/service.c
+@@ -1569,7 +1569,7 @@ static int service_spawn(
+                 return -ENOMEM;
+ 
+         /* System D-Bus needs nss-systemd disabled, so that we don't deadlock */
+-        SET_FLAG(exec_params.flags, EXEC_NSS_BYPASS_BUS,
++        SET_FLAG(exec_params.flags, EXEC_NSS_DYNAMIC_BYPASS,
+                  MANAGER_IS_SYSTEM(UNIT(s)->manager) && unit_has_name(UNIT(s), SPECIAL_DBUS_SERVICE));
+ 
+         strv_free_and_replace(exec_params.environment, final_env);

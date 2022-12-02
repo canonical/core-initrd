@@ -1,0 +1,126 @@
+From 2c8ec0095e6fd2e72879d4915ff8a9e5c0664d0b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20Sekleta=CC=81r?= <msekleta@redhat.com>
+Date: Mon, 19 Oct 2020 11:10:31 +0200
+Subject: [PATCH] udev/net_id: don't generate slot based names if multiple
+ devices might claim the same slot
+
+Bug-Ubuntu: https://launchpad.net/bugs/1945225
+Origin: https://github.com/systemd/systemd/commit/2c8ec0095e6fd2e72879d4915ff8a9e5c0664d0b
+
+diff --git a/man/systemd.net-naming-scheme.xml b/man/systemd.net-naming-scheme.xml
+index 324c94dbd9..b33488b9e4 100644
+--- a/man/systemd.net-naming-scheme.xml
++++ b/man/systemd.net-naming-scheme.xml
+@@ -192,6 +192,9 @@
+           <para>SR-IOV virtual devices are named based on the name of the parent interface, with a suffix of
+           <constant>v</constant> and the virtual device number, with any leading zeros removed. The bus
+           number is ignored.</para>
++
++          <para>In some configurations a parent PCI bridge of a given network controller may be associated
++          with a slot. In such case we don't generate this device property to avoid possible naming conflicts.</para>
+           </listitem>
+         </varlistentry>
+ 
+@@ -354,6 +357,17 @@
+           multiple similarly named containers (who only differ in container name suffix) should be less
+           likely (but still possible, since the 24bit hash value is very small).</para></listitem>
+         </varlistentry>
++
++        <varlistentry>
++          <term><constant>v246</constant></term>
++
++          <listitem><para>If the PCI slot is assocated with PCI bridge and that has multiple child network
++          controllers then all of them might derive the same value of <varname>ID_NET_NAME_SLOT</varname>
++          property. That could cause naming conflict if the property is selected as a device name. Now, we detect the
++          situation, slot - bridge relation, and we don't produce the <varname>ID_NET_NAME_SLOT</varname> property to
++          avoid possible naming conflict.</para></listitem>
++        </varlistentry>
++
+       </variablelist>
+ 
+     <para>Note that <constant>latest</constant> may be used to denote the latest scheme known (to this
+diff --git a/src/shared/netif-naming-scheme.c b/src/shared/netif-naming-scheme.c
+index 710b6376da..338ff661f3 100644
+--- a/src/shared/netif-naming-scheme.c
++++ b/src/shared/netif-naming-scheme.c
+@@ -12,6 +12,7 @@ static const NamingScheme naming_schemes[] = {
+         { "v241", NAMING_V241 },
+         { "v243", NAMING_V243 },
+         { "v245", NAMING_V245 },
++        { "v246", NAMING_V246 },
+         /* … add more schemes here, as the logic to name devices is updated … */
+ };
+ 
+diff --git a/src/shared/netif-naming-scheme.h b/src/shared/netif-naming-scheme.h
+index 6fb26d5cab..e12464b6a3 100644
+--- a/src/shared/netif-naming-scheme.h
++++ b/src/shared/netif-naming-scheme.h
+@@ -31,6 +31,7 @@ typedef enum NamingSchemeFlags {
+         NAMING_NETDEVSIM           = 1 << 6, /* Generate names for netdevsim devices, see eaa9d507d855 */
+         NAMING_LABEL_NOPREFIX      = 1 << 7, /* Don't prepend ID_NET_LABEL_ONBOARD with interface type prefix */
+         NAMING_NSPAWN_LONG_HASH    = 1 << 8, /* Shorten nspawn interfaces by including 24bit hash, instead of simple truncation  */
++        NAMING_BRIDGE_NO_SLOT      = 1 << 9, /* Don't use PCI hotplug slot information if the corresponding device is a PCI bridge */
+ 
+         /* And now the masks that combine the features above */
+         NAMING_V238 = 0,
+@@ -39,6 +40,7 @@ typedef enum NamingSchemeFlags {
+         NAMING_V241 = NAMING_V240 | NAMING_STABLE_VIRTUAL_MACS,
+         NAMING_V243 = NAMING_V241 | NAMING_NETDEVSIM | NAMING_LABEL_NOPREFIX,
+         NAMING_V245 = NAMING_V243 | NAMING_NSPAWN_LONG_HASH,
++        NAMING_V246 = NAMING_V245 | NAMING_BRIDGE_NO_SLOT,
+ 
+         _NAMING_SCHEME_FLAGS_INVALID = -1,
+ } NamingSchemeFlags;
+diff --git a/src/udev/udev-builtin-net_id.c b/src/udev/udev-builtin-net_id.c
+index b88133e37d..d3db37a8e0 100644
+--- a/src/udev/udev-builtin-net_id.c
++++ b/src/udev/udev-builtin-net_id.c
+@@ -243,6 +243,25 @@ static bool is_pci_ari_enabled(sd_device *dev) {
+         return streq(a, "1");
+ }
+ 
++static bool is_pci_bridge(sd_device *dev) {
++        const char *v, *p;
++
++        if (sd_device_get_sysattr_value(dev, "modalias", &v) < 0)
++                return false;
++
++        if (!startswith(v, "pci:"))
++                return false;
++
++        p = strrchr(v, 's');
++        if (!p)
++                return false;
++        if (p[1] != 'c')
++                return false;
++
++        /* PCI device subclass 04 corresponds to PCI bridge */
++        return strneq(p + 2, "04", 2);
++}
++
+ static int dev_pci_slot(sd_device *dev, struct netnames *names) {
+         unsigned long dev_port = 0;
+         unsigned domain, bus, slot, func;
+@@ -343,10 +362,18 @@ static int dev_pci_slot(sd_device *dev, struct netnames *names) {
+                             read_one_line_file(str, &address) >= 0 &&
+                             startswith(sysname, address)) {
+                                 hotplug_slot = i;
++
++                                /* We found the match between PCI device and slot. However, we won't use the
++                                 * slot index if the device is a PCI bridge, because it can have other child
++                                 * devices that will try to claim the same index and that would create name
++                                 * collision. */
++                                if (naming_scheme_has(NAMING_BRIDGE_NO_SLOT) && is_pci_bridge(hotplug_slot_dev))
++                                        hotplug_slot = 0;
++
+                                 break;
+                         }
+                 }
+-                if (hotplug_slot > 0)
++                if (hotplug_slot >= 0)
+                         break;
+                 if (sd_device_get_parent_with_subsystem_devtype(hotplug_slot_dev, "pci", NULL, &hotplug_slot_dev) < 0)
+                         break;
+-- 
+2.25.1
+

@@ -1,0 +1,120 @@
+From 846acb6798a63f35162f58e1146d1a1f40849e86 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 23 Apr 2020 16:36:45 +0200
+Subject: [PATCH 4/5] binfmt: also unregister binfmt entries from unit
+Bug: https://github.com/systemd/systemd/issues/14981
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1928200
+Origin: upstream, https://github.com/systemd/systemd/pull/15566
+
+We unregister binfmt_misc twice during shutdown with this change:
+
+1. A previous commit added support for doing that in the final shutdown
+   phase, i.e. when we do the aggressive umount loop. This is the robust
+   thing to do, in case the earlier ("clean") shutdown phase didn't work
+   for some reason.
+
+2. This commit adds support for doing that when systemd-binfmt.service
+   is stopped. This is a good idea so that people can order mounts
+   before the service if they want to register binaries from such
+   mounts, as in that case we'll undo the registration on shutdown
+   again, before unmounting those mounts.
+
+And all that, just because of that weird "F" flag the kernel introduced
+that can pin files...
+
+Fixes: #14981
+---
+ src/binfmt/binfmt.c             | 16 ++++++++++++++--
+ units/systemd-binfmt.service.in |  1 +
+ 2 files changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/src/binfmt/binfmt.c b/src/binfmt/binfmt.c
+index 5e812e89a5..06aee22dc0 100644
+--- a/src/binfmt/binfmt.c
++++ b/src/binfmt/binfmt.c
+@@ -10,6 +10,7 @@
+ #include <sys/types.h>
+ 
+ #include "alloc-util.h"
++#include "binfmt-util.h"
+ #include "conf-files.h"
+ #include "def.h"
+ #include "fd-util.h"
+@@ -24,6 +25,7 @@
+ 
+ static bool arg_cat_config = false;
+ static PagerFlags arg_pager_flags = 0;
++static bool arg_unregister = false;
+ 
+ static int delete_rule(const char *rule) {
+         _cleanup_free_ char *x = NULL, *fn = NULL;
+@@ -115,6 +117,7 @@ static int help(void) {
+                "     --version          Show package version\n"
+                "     --cat-config       Show configuration files\n"
+                "     --no-pager         Do not pipe output into a pager\n"
++               "     --unregister       Unregister all existing entries\n"
+                "\nSee the %s for details.\n"
+                , program_invocation_short_name
+                , link
+@@ -128,6 +131,7 @@ static int parse_argv(int argc, char *argv[]) {
+                 ARG_VERSION = 0x100,
+                 ARG_CAT_CONFIG,
+                 ARG_NO_PAGER,
++                ARG_UNREGISTER,
+         };
+ 
+         static const struct option options[] = {
+@@ -135,6 +139,7 @@ static int parse_argv(int argc, char *argv[]) {
+                 { "version",    no_argument, NULL, ARG_VERSION    },
+                 { "cat-config", no_argument, NULL, ARG_CAT_CONFIG },
+                 { "no-pager",   no_argument, NULL, ARG_NO_PAGER   },
++                { "unregister", no_argument, NULL, ARG_UNREGISTER },
+                 {}
+         };
+ 
+@@ -161,6 +166,10 @@ static int parse_argv(int argc, char *argv[]) {
+                         arg_pager_flags |= PAGER_DISABLE;
+                         break;
+ 
++                case ARG_UNREGISTER:
++                        arg_unregister = true;
++                        break;
++
+                 case '?':
+                         return -EINVAL;
+ 
+@@ -168,9 +177,9 @@ static int parse_argv(int argc, char *argv[]) {
+                         assert_not_reached("Unhandled option");
+                 }
+ 
+-        if (arg_cat_config && argc > optind)
++        if ((arg_unregister || arg_cat_config) && argc > optind)
+                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+-                                       "Positional arguments are not allowed with --cat-config");
++                                       "Positional arguments are not allowed with --cat-config or --unregister");
+ 
+         return 1;
+ }
+@@ -188,6 +197,9 @@ static int run(int argc, char *argv[]) {
+ 
+         r = 0;
+ 
++        if (arg_unregister)
++                return disable_binfmt();
++
+         if (argc > optind) {
+                 int i;
+ 
+diff --git a/units/systemd-binfmt.service.in b/units/systemd-binfmt.service.in
+index 0c0f26451b..e54e95e11d 100644
+--- a/units/systemd-binfmt.service.in
++++ b/units/systemd-binfmt.service.in
+@@ -28,4 +28,5 @@ ConditionDirectoryNotEmpty=|/run/binfmt.d
+ Type=oneshot
+ RemainAfterExit=yes
+ ExecStart=@rootlibexecdir@/systemd-binfmt
++ExecStop=@rootlibexecdir@/systemd-binfmt --unregister
+ TimeoutSec=90s
+-- 
+2.25.1
+

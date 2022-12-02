@@ -1,0 +1,48 @@
+Description: core: move reset_arguments() to the end of main's finish
+Origin: upstream, https://github.com/systemd/systemd/commit/7d9eea2bd3d4f83668c7a78754d201b22
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1958284
+---
+From: Anita Zhang <the.anitazha@gmail.com>
+Date: Thu, 17 Sep 2020 01:49:17 -0700
+Subject: core: move reset_arguments() to the end of main's finish
+
+Fixes #16991
+
+fb39af4ce42d7ef9af63009f271f404038703704 replaced `free_arguments()` with
+`reset_arguments()`, which frees arg_* variables as before, but also resets all
+of them to the default values. `reset_arguments()` was positioned
+in such a way that it overrode some arg_* values still in use at shutdown.
+
+To avoid further unintentional resets, I moved `reset_arguments()`
+right before the return, when nothing else will be using the arg_* variables.
+---
+ src/core/main.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/main.c b/src/core/main.c
+index e32ed02..615949b 100644
+--- a/src/core/main.c
++++ b/src/core/main.c
+@@ -2717,7 +2717,6 @@ finish:
+                 m = manager_free(m);
+         }
+ 
+-        reset_arguments();
+         mac_selinux_finish();
+ 
+         if (reexecute)
+@@ -2744,6 +2743,7 @@ finish:
+                  * in become_shutdown() so normally we cannot free them yet. */
+                 watchdog_free_device();
+                 arg_watchdog_device = mfree(arg_watchdog_device);
++                reset_arguments();
+                 return retval;
+         }
+ #endif
+@@ -2769,5 +2769,6 @@ finish:
+                 freeze_or_exit_or_reboot();
+         }
+ 
++        reset_arguments();
+         return retval;
+ }

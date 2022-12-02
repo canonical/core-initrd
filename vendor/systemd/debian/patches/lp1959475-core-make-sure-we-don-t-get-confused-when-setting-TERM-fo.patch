@@ -1,0 +1,34 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 22 Apr 2020 21:52:22 +0200
+Subject: core: make sure we don't get confused when setting TERM for a tty fd
+
+Origin: upstream, https://github.com/systemd/systemd/commit/e8cf09b2a2ad0d48e5493050d54251d5f512d9b6
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1959475
+
+Fixes: #15344
+---
+ src/core/execute.c | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/execute.c b/src/core/execute.c
+index a99e746..75aca6b 100644
+--- a/src/core/execute.c
++++ b/src/core/execute.c
+@@ -1785,12 +1785,13 @@ static int build_environment(
+ 
+                 tty_path = exec_context_tty_path(c);
+ 
+-                /* If we are forked off PID 1 and we are supposed to operate on /dev/console, then let's try to inherit
+-                 * the $TERM set for PID 1. This is useful for containers so that the $TERM the container manager
+-                 * passes to PID 1 ends up all the way in the console login shown. */
++                /* If we are forked off PID 1 and we are supposed to operate on /dev/console, then let's try
++                 * to inherit the $TERM set for PID 1. This is useful for containers so that the $TERM the
++                 * container manager passes to PID 1 ends up all the way in the console login shown. */
+ 
+-                if (path_equal(tty_path, "/dev/console") && getppid() == 1)
++                if (path_equal_ptr(tty_path, "/dev/console") && getppid() == 1)
+                         term = getenv("TERM");
++
+                 if (!term)
+                         term = default_term_for_tty(tty_path);
+ 

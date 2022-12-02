@@ -1,0 +1,99 @@
+From 61764fe4e27c3499eef9e0a300efebcc2f979403 Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Tue, 8 Jun 2021 17:13:27 -0400
+Subject: [PATCH 3/3] test: add test to verify RequiredForOnline= setting with
+ ActivationPolicy=
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1931578
+Origin: upstream, https://github.com/systemd/systemd/pull/19883
+
+Add test to verify that the RequiredForOnline= value is correct based on
+the configuration of ActivationPolicy=
+---
+ .../25-activation-policy.network.d/bound.conf |  5 +++
+ .../required-no.conf                          |  2 +
+ .../required-yes.conf                         |  2 +
+ test/test-network/systemd-networkd-tests.py   | 45 +++++++++++++++++++
+ 4 files changed, 54 insertions(+)
+ create mode 100644 test/test-network/conf/25-activation-policy.network.d/bound.conf
+ create mode 100644 test/test-network/conf/25-activation-policy.network.d/required-no.conf
+ create mode 100644 test/test-network/conf/25-activation-policy.network.d/required-yes.conf
+
+--- /dev/null
++++ b/test/test-network/conf/25-activation-policy.network.d/bound.conf
+@@ -0,0 +1,5 @@
++[Link]
++ActivationPolicy=bound
++
++[Network]
++BindCarrier=dummy98
+--- /dev/null
++++ b/test/test-network/conf/25-activation-policy.network.d/required-no.conf
+@@ -0,0 +1,2 @@
++[Link]
++RequiredForOnline=no
+--- /dev/null
++++ b/test/test-network/conf/25-activation-policy.network.d/required-yes.conf
+@@ -0,0 +1,2 @@
++[Link]
++RequiredForOnline=yes
+--- a/test/test-network/systemd-networkd-tests.py
++++ b/test/test-network/systemd-networkd-tests.py
+@@ -1597,6 +1597,7 @@ class NetworkdNetworkTests(unittest.Test
+     units = [
+         '11-dummy.netdev',
+         '12-dummy.netdev',
++        '12-dummy.network',
+         '23-active-slave.network',
+         '24-keep-configuration-static.network',
+         '24-search-domain.network',
+@@ -2259,6 +2260,50 @@ class NetworkdNetworkTests(unittest.Test
+             with self.subTest(test=test):
+                 self._test_activation_policy(test)
+ 
++    def _test_activation_policy_required_for_online(self, policy, required):
++        self.setUp()
++        conffile = '25-activation-policy.network'
++        units = ['11-dummy.netdev', '12-dummy.netdev', '12-dummy.network', conffile]
++        if policy:
++            units += [f'{conffile}.d/{policy}.conf']
++        if required:
++            units += [f'{conffile}.d/required-{required}.conf']
++        copy_unit_to_networkd_unit_path(*units, dropins=False)
++        start_networkd()
++
++        if policy.endswith('down') or policy == 'manual':
++            self.wait_operstate('test1', 'off', setup_state='configuring')
++        else:
++            self.wait_online(['test1'])
++
++        if policy == 'always-down':
++            # if always-down, required for online is forced to no
++            expected = False
++        elif required:
++            # otherwise if required for online is specified, it should match that
++            expected = required == 'yes'
++        elif policy:
++            # otherwise if only policy specified, required for online defaults to
++            # true if policy is up, always-up, or bound
++            expected = policy.endswith('up') or policy == 'bound'
++        else:
++            # default is true, if neither are specified
++            expected = True
++
++        output = check_output(*networkctl_cmd, '-n', '0', 'status', 'test1', env=env)
++        print(output)
++
++        yesno = 'yes' if expected else 'no'
++        self.assertRegex(output, f'Required For Online: {yesno}')
++
++        self.tearDown()
++
++    def test_activation_policy_required_for_online(self):
++        for policy in ['up', 'always-up', 'manual', 'always-down', 'down', 'bound', '']:
++            for required in ['yes', 'no', '']:
++                with self.subTest(policy=policy, required=required):
++                    self._test_activation_policy_required_for_online(policy, required)
++
+     def test_domain(self):
+         copy_unit_to_networkd_unit_path('12-dummy.netdev', '24-search-domain.network')
+         start_networkd()

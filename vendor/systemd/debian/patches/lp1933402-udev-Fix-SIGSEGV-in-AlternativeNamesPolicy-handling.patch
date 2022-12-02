@@ -1,0 +1,26 @@
+From 61fd7d6720c562c88ab79062ff8d131e5e3c7b1b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?L=C3=A9na=C3=AFc=20Huard?= <lenaic@lhuard.fr>
+Date: Wed, 1 Apr 2020 23:45:08 +0200
+Subject: [PATCH] udev: Fix SIGSEGV in AlternativeNamesPolicy handling
+
+The function sd_device_get_property_value has some paths where it exits without
+touching the n pointer. In those cases, n remained uninitialized until it was
+eventually read inside isempty where it caused the segmentation fault.
+
+Fixes #15078
+
+Origin: upstream, https://github.com/systemd/systemd/commit/61fd7d6720c562c88ab79062ff8d131e5e3c7b1b
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1933402
+Last-Updated: 2021-06-28
+
+--- a/src/udev/net/link-config.c
++++ b/src/udev/net/link-config.c
+@@ -508,7 +508,7 @@ int link_config_apply(link_config_ctx *c
+ 
+         if (config->alternative_names_policy)
+                 for (NamePolicy *p = config->alternative_names_policy; *p != _NAMEPOLICY_INVALID; p++) {
+-                        const char *n;
++                        const char *n = NULL;
+ 
+                         switch (*p) {
+                         case NAMEPOLICY_DATABASE:

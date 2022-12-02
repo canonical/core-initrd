@@ -1,0 +1,28 @@
+Description: Fix timezone setting on read-only etc
+ Due to our read-only /etc workaround, the localtime link on such
+ system ends up in /etc/writable, not /etc. To make the link target
+ correct in both normal and such systems, makes the path absolute.
+ .
+ On Ubuntu Core, this eliminates the need for the wrapper script, and
+ makes the DBus interface work properly.
+Author: Ratchanan Srirattanamet <ratchanan@ubports.com>
+Origin: other
+Bug-Ubuntu: https://bugs.launchpad.net/snappy/+bug/1650688
+Forwarded: not-needed (part of read-only /etc workaround)
+Last-Update: 2021-09-24
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/src/timedate/timedated.c
++++ b/src/timedate/timedated.c
+@@ -320,9 +320,9 @@
+                         return r;
+                 }
+ 
+-                source = "../usr/share/zoneinfo/UTC";
++                source = "/usr/share/zoneinfo/UTC";
+         } else {
+-                p = path_join("../usr/share/zoneinfo", c->zone);
++                p = path_join("/usr/share/zoneinfo", c->zone);
+                 if (!p)
+                         return -ENOMEM;
+ 

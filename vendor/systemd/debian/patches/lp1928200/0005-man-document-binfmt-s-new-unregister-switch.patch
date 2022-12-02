@@ -1,0 +1,34 @@
+From cd9aa8f0f91b113acb079e79750c146c0529c2d7 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 23 Apr 2020 16:51:37 +0200
+Subject: [PATCH 5/5] man: document binfmt's new --unregister switch
+Bug: https://github.com/systemd/systemd/issues/14981
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1928200
+Origin: upstream, https://github.com/systemd/systemd/pull/15566
+
+---
+ man/systemd-binfmt.service.xml | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/man/systemd-binfmt.service.xml b/man/systemd-binfmt.service.xml
+index 27e34195af..41a8247c5f 100644
+--- a/man/systemd-binfmt.service.xml
++++ b/man/systemd-binfmt.service.xml
+@@ -41,6 +41,14 @@
+ 
+   <refsect1><title>Options</title>
+     <variablelist>
++
++      <varlistentry>
++        <term><option>--unregister</option></term>
++        <listitem><para>If passed, instead of registering configured binary formats in the kernel, the
++        reverse operation is executed: all currently registered binary formats are unregistered from the
++        kernel.</para></listitem>
++      </varlistentry>
++
+       <xi:include href="standard-options.xml" xpointer="cat-config" />
+       <xi:include href="standard-options.xml" xpointer="no-pager" />
+       <xi:include href="standard-options.xml" xpointer="help" />
+-- 
+2.25.1
+

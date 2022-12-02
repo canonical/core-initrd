@@ -1,0 +1,63 @@
+From 869f52f21831b611160c4937bef822ca94c802ba Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Sun, 11 Jul 2021 16:59:27 -0400
+Subject: [PATCH] cgroup: do 'catchup' for unit cgroup inotify watch files
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1934147
+Origin: upstream, https://github.com/systemd/systemd/pull/20199
+
+While reexec/reload, we drop the inotify watch on cgroup file(s), so
+we need to re-check them in case they changed and we missed the event.
+
+Fixes: #20198
+---
+ src/core/cgroup.c | 18 ++++++++++++++++++
+ src/core/cgroup.h |  2 ++
+ src/core/unit.c   |  2 ++
+ 3 files changed, 22 insertions(+)
+
+--- a/src/core/cgroup.c
++++ b/src/core/cgroup.c
+@@ -3530,6 +3530,21 @@ void unit_invalidate_cgroup_bpf(Unit *u)
+         }
+ }
+ 
++void unit_cgroup_catchup(Unit *u) {
++        assert(u);
++
++        if (!UNIT_HAS_CGROUP_CONTEXT(u))
++                return;
++
++        /* We dropped the inotify watch during reexec/reload, so we need to
++         * check these as they may have changed.
++         * Note that (currently) the kernel doesn't actually update cgroup
++         * file modification times, so we can't just serialize and then check
++         * the mtime for file(s) we are interested in. */
++        unit_add_to_cgroup_empty_queue(u);
++        unit_add_to_cgroup_oom_queue(u);
++}
++
+ bool unit_cgroup_delegate(Unit *u) {
+         CGroupContext *c;
+ 
+--- a/src/core/cgroup.h
++++ b/src/core/cgroup.h
+@@ -269,6 +269,8 @@ void manager_invalidate_startup_units(Ma
+ const char* cgroup_device_policy_to_string(CGroupDevicePolicy i) _const_;
+ CGroupDevicePolicy cgroup_device_policy_from_string(const char *s) _pure_;
+ 
++void unit_cgroup_catchup(Unit *u);
++
+ bool unit_cgroup_delegate(Unit *u);
+ 
+ int compare_job_priority(const void *a, const void *b);
+--- a/src/core/unit.c
++++ b/src/core/unit.c
+@@ -3985,6 +3985,8 @@ void unit_catchup(Unit *u) {
+ 
+         if (UNIT_VTABLE(u)->catchup)
+                 UNIT_VTABLE(u)->catchup(u);
++
++        unit_cgroup_catchup(u);
+ }
+ 
+ static bool fragment_mtime_newer(const char *path, usec_t mtime, bool path_masked) {

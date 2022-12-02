@@ -1,0 +1,33 @@
+From: Alban Bedel <alban.bedel@aerq.com>
+Date: Wed, 15 Jun 2022 13:12:46 +0200
+Subject: units: remove the restart limit on the modprobe@.service
+
+Origin: upstream, https://github.com/systemd/systemd/commit/9625350e5381a68c1179ae4581e7586c206663e1
+Bug-Ubuntu: https://launchpad.net/bugs/1982462
+
+They are various cases where the same module might be repeatedly
+loaded in a short time frame, for example if a service depending on a
+module keep restarting, or if many instances of such service get
+started at the same time. If this happend the modprobe@.service
+instance will be marked as failed because it hit the restart limit.
+
+Overall it doesn't seems to make much sense to have a restart limit on
+the modprobe service so just disable it.
+
+Fixes: #23742
+---
+ units/modprobe@.service | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/units/modprobe@.service b/units/modprobe@.service
+index 34a0557..be83b5d 100644
+--- a/units/modprobe@.service
++++ b/units/modprobe@.service
+@@ -14,6 +14,7 @@ Before=sysinit.target
+ Documentation=man:modprobe(8)
+ ConditionCapability=CAP_SYS_MODULE
+ ConditionPathExists=!/sys/module/%I
++StartLimitIntervalSec=0
+ 
+ [Service]
+ Type=oneshot

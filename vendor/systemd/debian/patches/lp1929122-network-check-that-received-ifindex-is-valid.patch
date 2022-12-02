@@ -1,0 +1,23 @@
+From 25b831bac8a5e545e1eda5199392c11c7aed4e42 Mon Sep 17 00:00:00 2001
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Thu, 25 Jun 2020 13:13:47 +0900
+Subject: [PATCH] network: check that received ifindex is valid
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1929122
+Origin: upstream, https://github.com/systemd/systemd/commit/25b831bac8a5e545e1eda5199392c11c7aed4e42
+
+---
+ src/network/networkd-manager.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+--- a/src/network/networkd-manager.c
++++ b/src/network/networkd-manager.c
+@@ -1260,6 +1260,9 @@ int manager_rtnl_process_nexthop(sd_netl
+         if (r < 0 && r != -ENODATA) {
+                 log_warning_errno(r, "rtnl: could not get NHA_OIF attribute, ignoring: %m");
+                 return 0;
++        } else if (tmp->oif <= 0) {
++                log_warning("rtnl: received nexthop message with invalid ifindex %d, ignoring.", tmp->oif);
++                return 0;
+         }
+ 
+         r = link_get(m, tmp->oif, &link);

@@ -1,0 +1,24 @@
+From: Boqun Feng <boqun.feng@gmail.com>
+Date: Wed, 13 Oct 2021 11:32:09 +0800
+Subject: virt: Support detection for ARM64 Hyper-V guests
+
+The detection of Microsoft Hyper-V VMs is done by cpuid currently,
+however there is no cpuid on ARM64. And since ARM64 is now a supported
+architecture for Microsoft Hyper-V guests[1], then use DMI tables to
+detect a Hyper-V guest, which is more generic and works for ARM64.
+
+[1]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=7aff79e297ee1aa0126924921fd87a4ae59d2467
+---
+ src/basic/virt.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+--- a/src/basic/virt.c
++++ b/src/basic/virt.c
+@@ -158,6 +158,7 @@ static int detect_vm_dmi(void) {
+                 { "Parallels",           VIRTUALIZATION_PARALLELS },
+                 /* https://wiki.freebsd.org/bhyve */
+                 { "BHYVE",               VIRTUALIZATION_BHYVE     },
++                { "Microsoft",           VIRTUALIZATION_MICROSOFT },
+         };
+         unsigned i;
+         int r;

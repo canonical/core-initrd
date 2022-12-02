@@ -1,0 +1,29 @@
+From: Kai-Heng Feng <kai.heng.feng@canonical.com>
+Date: Fri, 4 Jun 2021 00:20:32 +0800
+Subject: hwdb: Add ProBook to use micmute hotkey
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1930910
+Origin: upstream, https://github.com/systemd/systemd/commit/a7161e0288d1fc82e4a2de876995d834c8640027
+
+Like HP EliteBooks and ZBooks, all ProBooks use the same micmute
+scancode.
+
+(cherry picked from commit a7161e0288d1fc82e4a2de876995d834c8640027)
+---
+ hwdb.d/60-keyboard.hwdb | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -593,9 +593,9 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook*:pvr*
+ # HP ProBook 440 G2
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHP440G2:pvr*
+-# several HP ProBooks 4xx
+-evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHP*ProBook4*:pvr*
+-evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHP*ProBook*4*:pvr*
++# HP ProBook
++evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHP*ProBook*:pvr*
++evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHP*ProBook*:pvr*
+ # HP ZBook
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHPZBook*:pvr*
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPZBook*:pvr*
