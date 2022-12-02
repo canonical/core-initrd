@@ -1,0 +1,95 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Mon, 22 Mar 2021 12:51:47 +0100
+Subject: shared/calendarspec: when mktime() moves us backwards, jump forward
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Origin: upstream, https://github.com/systemd/systemd/commit/129cb6e249bef30dc33e08f98f0b27a6de976f6f
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1966800
+
+When trying to calculate the next firing of 'Sun *-*-* 01:00:00', we'd fall
+into an infinite loop, because mktime() moves us "backwards":
+
+Before this patch:
+tm_within_bounds: good=0 2021-03-29 01:00:00 → 2021-03-29 00:00:00
+tm_within_bounds: good=0 2021-03-29 01:00:00 → 2021-03-29 00:00:00
+tm_within_bounds: good=0 2021-03-29 01:00:00 → 2021-03-29 00:00:00
+...
+
+We rely on mktime() normalizing the time. The man page does not say that it'll
+move the time forward, but our algorithm relies on this. So let's catch this
+case explicitly.
+
+With this patch:
+$ TZ=Europe/Dublin faketime 2021-03-21 build/systemd-analyze calendar --iterations=5 'Sun *-*-* 01:00:00'
+Normalized form: Sun *-*-* 01:00:00
+    Next elapse: Sun 2021-03-21 01:00:00 GMT
+       (in UTC): Sun 2021-03-21 01:00:00 UTC
+       From now: 59min left
+       Iter. #2: Sun 2021-04-04 01:00:00 IST
+       (in UTC): Sun 2021-04-04 00:00:00 UTC
+       From now: 1 weeks 6 days left           <---- note the 2 week jump here
+       Iter. #3: Sun 2021-04-11 01:00:00 IST
+       (in UTC): Sun 2021-04-11 00:00:00 UTC
+       From now: 2 weeks 6 days left
+       Iter. #4: Sun 2021-04-18 01:00:00 IST
+       (in UTC): Sun 2021-04-18 00:00:00 UTC
+       From now: 3 weeks 6 days left
+       Iter. #5: Sun 2021-04-25 01:00:00 IST
+       (in UTC): Sun 2021-04-25 00:00:00 UTC
+       From now: 1 months 4 days left
+
+Fixes https://bugzilla.redhat.com/show_bug.cgi?id=1941335.
+---
+Dropped the test/test-functions change to resolve git conflict in v245.
+---
+ src/shared/calendarspec.c    | 19 +++++++++++--------
+ src/test/test-calendarspec.c |  3 +++
+ 2 files changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/src/shared/calendarspec.c b/src/shared/calendarspec.c
+index 217ab3f..6fb9b67 100644
+--- a/src/shared/calendarspec.c
++++ b/src/shared/calendarspec.c
+@@ -1160,15 +1160,18 @@ static int tm_within_bounds(struct tm *tm, bool utc) {
+                 return negative_errno();
+ 
+         /* Did any normalization take place? If so, it was out of bounds before */
+-        bool good = t.tm_year == tm->tm_year &&
+-                    t.tm_mon  == tm->tm_mon  &&
+-                    t.tm_mday == tm->tm_mday &&
+-                    t.tm_hour == tm->tm_hour &&
+-                    t.tm_min  == tm->tm_min  &&
+-                    t.tm_sec  == tm->tm_sec;
+-        if (!good)
++        int cmp = CMP(t.tm_year, tm->tm_year) ?:
++                  CMP(t.tm_mon, tm->tm_mon) ?:
++                  CMP(t.tm_mday, tm->tm_mday) ?:
++                  CMP(t.tm_hour, tm->tm_hour) ?:
++                  CMP(t.tm_min, tm->tm_min) ?:
++                  CMP(t.tm_sec, tm->tm_sec);
++
++        if (cmp < 0)
++                return -EDEADLK; /* Refuse to go backward */
++        if (cmp > 0)
+                 *tm = t;
+-        return good;
++        return cmp == 0;
+ }
+ 
+ static bool matches_weekday(int weekdays_bits, const struct tm *tm, bool utc) {
+diff --git a/src/test/test-calendarspec.c b/src/test/test-calendarspec.c
+index 9c2be7f..9e96cdb 100644
+--- a/src/test/test-calendarspec.c
++++ b/src/test/test-calendarspec.c
+@@ -216,6 +216,9 @@ int main(int argc, char* argv[]) {
+         // Confirm that timezones in the Spec work regardless of current timezone
+         test_next("2017-09-09 20:42:00 Pacific/Auckland", "", 12345, 1504946520000000);
+         test_next("2017-09-09 20:42:00 Pacific/Auckland", "EET", 12345, 1504946520000000);
++        /* Check that we don't start looping if mktime() moves us backwards */
++        test_next("Sun *-*-* 01:00:00 Europe/Dublin", "", 1616412478000000, 1617494400000000);
++        test_next("Sun *-*-* 01:00:00 Europe/Dublin", "IST", 1616412478000000, 1617494400000000);
+ 
+         assert_se(calendar_spec_from_string("test", &c) < 0);
+         assert_se(calendar_spec_from_string(" utc", &c) < 0);

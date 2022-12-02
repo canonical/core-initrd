@@ -1,0 +1,25 @@
+From c1b8c966eccb7be1cae0a30670f5e1fcd88b47fa Mon Sep 17 00:00:00 2001
+From: Jeremy Szu <jeremy.szu@canonical.com>
+Date: Thu, 17 Jun 2021 19:00:38 +0800
+Subject: [PATCH] hwdb: Add mic mute key mapping for HP Elite Dragonfly
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1932352
+Origin: upstream, https://github.com/systemd/systemd/commit/c1b8c966eccb7be1cae0a30670f5e1fcd88b47fa
+
+ * HP confirmed there are two marketing name
+   * HP Elite Dragonfly G2 Notebook PC
+   * HP Elite Dragonfly Max Notebook PC
+---
+ hwdb.d/60-keyboard.hwdb | 2 ++
+ 1 file changed, 2 insertions(+)
+
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -591,6 +591,8 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett
+ # HP EliteBook
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHPEliteBook*:pvr*
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook*:pvr*
++# HP Elite Dragonfly
++evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteDragonfly*:pvr*
+ # HP ProBook 440 G2
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHP440G2:pvr*
+ # HP ProBook

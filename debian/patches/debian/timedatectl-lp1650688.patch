@@ -1,0 +1,53 @@
+Description: Fix retrieving timezone on read-only /etc
+ get_timezone() retrieve it by reading the link destination of
+ /etc/localtime, which on systems with read-only /etc will always point
+ to /etc/writable. Makes this function aware of the /etc/writable
+ redirection and handle it.
+ .
+ [ratchanan@ubports.com: add descrtiption and other metadata.]
+Author: Michael Vogt <michael.vogt@ubuntu.com>
+Origin: vendor, https://bugs.launchpad.net/snappy/+bug/1650688/comments/46
+Bug-Ubuntu: https://bugs.launchpad.net/snappy/+bug/1650688
+Forwarded: not-needed (part of read-only /etc workaround)
+Last-Update: 2021-09-24
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+diff --git a/src/basic/time-util.c b/src/basic/time-util.c
+index d7028ac..b9bb4da 100644
+--- a/src/basic/time-util.c
++++ b/src/basic/time-util.c
+@@ -1391,6 +1391,25 @@ bool clock_supported(clockid_t clock) {
+         }
+ }
+ 
++/* Hack for Ubuntu phone: check if path is an existing symlink to
++ * /etc/writable; if it is, update that instead */
++static const char* writable_filename(const char *path) {
++        ssize_t r;
++        static char realfile_buf[PATH_MAX];
++        _cleanup_free_ char *realfile = NULL;
++        const char *result = path;
++        int orig_errno = errno;
++
++        r = readlink_and_make_absolute(path, &realfile);
++        if (r >= 0 && startswith(realfile, "/etc/writable")) {
++                snprintf(realfile_buf, sizeof(realfile_buf), "%s", realfile);
++                result = realfile_buf;
++        }
++
++        errno = orig_errno;
++        return result;
++}
++
+ int get_timezone(char **ret) {
+         _cleanup_free_ char *t = NULL;
+         const char *e;
+@@ -1398,7 +1417,7 @@ int get_timezone(char **ret) {
+         int r;
+         bool use_utc_fallback = false;
+ 
+-        r = readlink_malloc("/etc/localtime", &t);
++        r = readlink_malloc(writable_filename("/etc/localtime"), &t);
+         if (r < 0) {
+                 if (r == -ENOENT)
+                         use_utc_fallback = true;

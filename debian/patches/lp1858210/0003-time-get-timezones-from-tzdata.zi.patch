@@ -1,0 +1,90 @@
+From 147bc3639b3d7b15fc7b548b24715e7c4d95c6e1 Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Wed, 30 Jun 2021 07:30:28 -0400
+Subject: [PATCH 3/3] time: get timezones from tzdata.zi
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1858210
+Origin: upstream, https://github.com/systemd/systemd/pull/20066
+
+The zone1970.tab file doesn't include any timezone 'aliases'. Instead
+of parsing it, parse the tzdata.zi file which does include all zones
+as well as aliases.
+
+This keeps the parsing function for zone1970.tab as a fallback in case
+the tzdata.zi file isn't found.
+---
+ src/basic/time-util.c | 58 ++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 57 insertions(+), 1 deletion(-)
+
+--- a/src/basic/time-util.c
++++ b/src/basic/time-util.c
+@@ -1243,13 +1243,69 @@ static int get_timezones_from_zone1970_t
+         return 0;
+ }
+ 
++static int get_timezones_from_tzdata_zi(char ***ret) {
++        _cleanup_fclose_ FILE *f = NULL;
++        _cleanup_strv_free_ char **zones = NULL;
++        int r;
++
++        f = fopen("/usr/share/zoneinfo/tzdata.zi", "re");
++        if (!f)
++                return -errno;
++
++        for (;;) {
++                _cleanup_free_ char *line = NULL, *type = NULL, *f1 = NULL, *f2 = NULL;
++
++                r = read_line(f, LONG_LINE_MAX, &line);
++                if (r < 0)
++                        return r;
++                if (r == 0)
++                        break;
++
++                const char *p = line;
++
++                /* The only lines we care about are Zone and Link lines.
++                 * Zone line format is:
++                 * 'Zone' 'timezone' ...
++                 * Link line format is:
++                 * 'Link' 'target' 'alias'
++                 * See 'man zic' for more detail. */
++                r = extract_many_words(&p, NULL, 0, &type, &f1, &f2, NULL);
++                if (r < 0)
++                        continue;
++
++                char *tz;
++                if (*type == 'Z' || *type == 'z')
++                        /* Zone lines have timezone in field 1. */
++                        tz = f1;
++                else if (*type == 'L' || *type == 'l')
++                        /* Link lines have timezone in field 2. */
++                        tz = f2;
++                else
++                        /* Not a line we care about. */
++                        continue;
++
++                r = strv_extend(&zones, tz);
++                if (r < 0)
++                        return r;
++        }
++
++        *ret = TAKE_PTR(zones);
++        return 0;
++}
++
+ int get_timezones(char ***ret) {
+         _cleanup_strv_free_ char **zones = NULL;
+         int r;
+ 
+         assert(ret);
+ 
+-        r = get_timezones_from_zone1970_tab(&zones);
++        r = get_timezones_from_tzdata_zi(&zones);
++        if (r == -ENOENT) {
++                log_debug_errno(r, "Could not get timezone data from tzdata.zi, using zone1970.tab: %m");
++                r = get_timezones_from_zone1970_tab(&zones);
++                if (r == -ENOENT)
++                        log_debug_errno(r, "Could not get timezone data from zone1970.tab, using UTC: %m");
++        }
+         if (r < 0 && r != -ENOENT)
+                 return r;
+ 

@@ -1,0 +1,184 @@
+From 1098142436f46b889f6b7bcc87af54bc5b95d560 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 18 Nov 2020 15:11:43 +0100
+Subject: [PATCH] fs-util: add conservative_rename() that suppresses
+ unnecessary renames
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1891215
+Origin: upstream, https://github.com/systemd/systemd/commit/1098142436f46b889f6b7bcc87af54bc5b95d560
+
+if the source and destination file match in contents and basic file
+attributes, don#t rename, but just remove source.
+
+This is a simple way to suppress inotify events + mtime changes when
+atomically updating files.
+---
+ src/basic/fs-util.c     | 77 +++++++++++++++++++++++++++++++++++++++++
+ src/basic/fs-util.h     |  2 ++
+ src/test/test-fs-util.c | 48 +++++++++++++++++++++++++
+ 3 files changed, 127 insertions(+)
+
+--- a/src/basic/fs-util.c
++++ b/src/basic/fs-util.c
+@@ -1479,3 +1479,80 @@ int open_parent(const char *path, int fl
+ 
+         return fd;
+ }
++
++int conservative_rename(
++                int olddirfd, const char *oldpath,
++                int newdirfd, const char *newpath) {
++
++        _cleanup_close_ int old_fd = -1, new_fd = -1;
++        struct stat old_stat, new_stat;
++
++        /* Renames the old path to thew new path, much like renameat() — except if both are regular files and
++         * have the exact same contents and basic file attributes already. In that case remove the new file
++         * instead. This call is useful for reducing inotify wakeups on files that are updated but don't
++         * actually change. This function is written in a style that we rather rename too often than suppress
++         * too much. i.e. whenever we are in doubt we rather rename than fail. After all reducing inotify
++         * events is an optimization only, not more. */
++
++        old_fd = openat(olddirfd, oldpath, O_CLOEXEC|O_RDONLY|O_NOCTTY|O_NOFOLLOW);
++        if (old_fd < 0)
++                goto do_rename;
++
++        new_fd = openat(newdirfd, newpath, O_CLOEXEC|O_RDONLY|O_NOCTTY|O_NOFOLLOW);
++        if (new_fd < 0)
++                goto do_rename;
++
++        if (fstat(old_fd, &old_stat) < 0)
++                goto do_rename;
++
++        if (!S_ISREG(old_stat.st_mode))
++                goto do_rename;
++
++        if (fstat(new_fd, &new_stat) < 0)
++                goto do_rename;
++
++        if (new_stat.st_ino == old_stat.st_ino &&
++            new_stat.st_dev == old_stat.st_dev)
++                goto is_same;
++
++        if (old_stat.st_mode != new_stat.st_mode ||
++            old_stat.st_size != new_stat.st_size ||
++            old_stat.st_uid != new_stat.st_uid ||
++            old_stat.st_gid != new_stat.st_gid)
++                goto do_rename;
++
++        for (;;) {
++                char buf1[16*1024];
++                char buf2[sizeof(buf1) + 1];
++                ssize_t l1, l2;
++
++                l1 = read(old_fd, buf1, sizeof(buf1));
++                if (l1 < 0)
++                        goto do_rename;
++
++                l2 = read(new_fd, buf2, l1 + 1);
++                if (l1 != l2)
++                        goto do_rename;
++
++                if (l1 == 0) /* EOF on both! And everything's the same so far, yay! */
++                        break;
++
++                if (memcmp(buf1, buf2, l1) != 0)
++                        goto do_rename;
++        }
++
++is_same:
++        /* Everything matches? Then don't rename, instead remove the source file, and leave the existing
++         * destination in place */
++
++        if (unlinkat(olddirfd, oldpath, 0) < 0)
++                goto do_rename;
++
++        return 0;
++
++do_rename:
++        if (renameat(olddirfd, oldpath, newdirfd, newpath) < 0)
++                return -errno;
++
++        return 1;
++}
+--- a/src/basic/fs-util.h
++++ b/src/basic/fs-util.h
+@@ -122,3 +122,5 @@ int fsync_path_at(int at_fd, const char
+ int syncfs_path(int atfd, const char *path);
+ 
+ int open_parent(const char *path, int flags, mode_t mode);
++
++int conservative_rename(int olddirfd, const char *oldpath, int newdirfd, const char *newpath);
+--- a/src/test/test-fs-util.c
++++ b/src/test/test-fs-util.c
+@@ -3,7 +3,9 @@
+ #include <unistd.h>
+ 
+ #include "alloc-util.h"
++#include "copy.h"
+ #include "fd-util.h"
++#include "fileio.h"
+ #include "fs-util.h"
+ #include "id128-util.h"
+ #include "macro.h"
+@@ -849,6 +851,53 @@ static void test_chmod_and_chown_unsafe(
+         assert_se(S_ISLNK(st.st_mode));
+ }
+ 
++static void test_conservative_rename(void) {
++        _cleanup_(unlink_and_freep) char *p = NULL;
++        _cleanup_free_ char *q = NULL;
++        struct stat st;
++
++        assert_se(tempfn_random_child(NULL, NULL, &p) >= 0);
++        assert_se(write_string_file(p, "this is a test", WRITE_STRING_FILE_CREATE) >= 0);
++
++        assert_se(tempfn_random_child(NULL, NULL, &q) >= 0);
++
++        /* Check that the hardlinked "copy" is detected */
++        assert_se(link(p, q) >= 0);
++        assert_se(conservative_rename(AT_FDCWD, q, AT_FDCWD, p) == 0);
++        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
++
++        /* Check that a manual copy is detected */
++        assert_se(stat(p, &st) >= 0);
++        assert_se(copy_file(p, q, 0, st.st_mode, 0, 0, COPY_REFLINK) >= 0);
++        assert_se(conservative_rename(AT_FDCWD, q, AT_FDCWD, p) == 0);
++        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
++
++        /* Check that a manual new writeout is also detected */
++        assert_se(write_string_file(q, "this is a test", WRITE_STRING_FILE_CREATE) >= 0);
++        assert_se(conservative_rename(AT_FDCWD, q, AT_FDCWD, p) == 0);
++        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
++
++        /* Check that a minimally changed version is detected */
++        assert_se(write_string_file(q, "this is a_test", WRITE_STRING_FILE_CREATE) >= 0);
++        assert_se(conservative_rename(AT_FDCWD, q, AT_FDCWD, p) > 0);
++        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
++
++        /* Check that this really is new updated version */
++        assert_se(write_string_file(q, "this is a_test", WRITE_STRING_FILE_CREATE) >= 0);
++        assert_se(conservative_rename(AT_FDCWD, q, AT_FDCWD, p) == 0);
++        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
++
++        /* Make sure we detect extended files */
++        assert_se(write_string_file(q, "this is a_testx", WRITE_STRING_FILE_CREATE) >= 0);
++        assert_se(conservative_rename(AT_FDCWD, q, AT_FDCWD, p) > 0);
++        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
++
++        /* Make sure we detect truncated files */
++        assert_se(write_string_file(q, "this is a_test", WRITE_STRING_FILE_CREATE) >= 0);
++        assert_se(conservative_rename(AT_FDCWD, q, AT_FDCWD, p) > 0);
++        assert_se(access(q, F_OK) < 0 && errno == ENOENT);
++}
++
+ int main(int argc, char *argv[]) {
+         test_setup_logging(LOG_INFO);
+ 
+@@ -867,6 +916,7 @@ int main(int argc, char *argv[]) {
+         test_rename_noreplace();
+         test_chmod_and_chown();
+         test_chmod_and_chown_unsafe();
++        test_conservative_rename();
+ 
+         return 0;
+ }

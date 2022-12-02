@@ -1,0 +1,40 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 24 Nov 2021 15:58:50 +0100
+Subject: test: make test-execute pass on Linux 5.15
+
+Linux 5.15 broke kernel API:
+
+https://github.com/torvalds/linux/commit/e70344c05995a190a56bbd1a23dc2218bcc8c924
+
+Previously setting IOPRIO_CLASS_NONE for a process would then report
+IOPRIO_CLASS_NONE back. But since 5.15 it reports IOPRIO_CLASS_BE
+instead. Since IOPRIO_CLASS_NONE is an alias for a special setting of
+IOPRIO_CLASS_BE this makes some sense, but it's also a kernel API
+breakage that our testsuite trips up on.
+
+(I made some minimal effort to inform the kernel people about this API
+breakage during the 5.15 rc phase, but noone was interested.)
+
+Either way let's hadle this gracefully in our test suite and accept
+"best-effort" too when "none" was set.
+
+(This is only triggable if the tests are run on 5.15 with full privs)
+
+(cherry picked from commit d9b8771108cf2955efc3852b477391017d2c599a)
+---
+ test/test-execute/exec-ioschedulingclass-none.service | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/test/test-execute/exec-ioschedulingclass-none.service b/test/test-execute/exec-ioschedulingclass-none.service
+index b6af122..8f917d3 100644
+--- a/test/test-execute/exec-ioschedulingclass-none.service
++++ b/test/test-execute/exec-ioschedulingclass-none.service
+@@ -2,6 +2,7 @@
+ Description=Test for IOSchedulingClass=none
+ 
+ [Service]
+-ExecStart=/bin/sh -x -c 'c=$$(LC_ALL=C ionice); test "$${c%%:*}" = "none"'
++# Old kernels might report "none" here, new kernels "best-effort".
++ExecStart=/bin/sh -x -c 'c=$$(LC_ALL=C ionice); test "$${c%%:*}" = "none" -o "$${c%%:*}" = "best-effort"'
+ Type=oneshot
+ IOSchedulingClass=none

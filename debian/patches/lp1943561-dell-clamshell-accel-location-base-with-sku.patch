@@ -1,0 +1,29 @@
+From: =?utf-8?b?IllhbyBXZWkgKOmtj+mKmOW7tyki?= <yao.wei@canonical.com>
+Date: Tue, 14 Sep 2021 18:30:26 +0800
+Subject: Add Dell models that requires ACCEL_LOCATION=base
+
+Origin: upstream, https://github.com/systemd/systemd/pull/20661
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1943561
+
+This adds additional 6 models that without this param, the screen
+rotates when the clamshell laptop rotates, which is an unwanted
+behavior.
+---
+ hwdb.d/60-sensor.hwdb | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+--- a/hwdb.d/60-sensor.hwdb
++++ b/hwdb.d/60-sensor.hwdb
+@@ -247,6 +247,12 @@ sensor:modalias:acpi:*KIOX000A*:dmi:*svn
+ # Dell
+ #########################################
+ sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:pnVostro5581:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0A36:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0A3E:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B09:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B0B:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B0D:*
++sensor:modalias:platform:HID-SENSOR-200073:dmi:*svnDell*:sku0B11:*
+  ACCEL_LOCATION=base
+ 
+ # Dell Venue 10 Pro 5055

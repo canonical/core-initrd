@@ -1,0 +1,82 @@
+From 965cc99416a3b5a2a71127e9e6d2e4a95ab3c432 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 23 Apr 2020 16:36:06 +0200
+Subject: [PATCH 1/5] shared: add common helper for unregistering all binfmt
+ entries
+Bug: https://github.com/systemd/systemd/issues/14981
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1928200
+Origin: upstream, https://github.com/systemd/systemd/pull/15566
+
+---
+ src/shared/binfmt-util.c | 33 +++++++++++++++++++++++++++++++++
+ src/shared/binfmt-util.h |  4 ++++
+ src/shared/meson.build   |  2 ++
+ 3 files changed, 39 insertions(+)
+ create mode 100644 src/shared/binfmt-util.c
+ create mode 100644 src/shared/binfmt-util.h
+
+diff --git a/src/shared/binfmt-util.c b/src/shared/binfmt-util.c
+new file mode 100644
+index 0000000000..0229726b42
+--- /dev/null
++++ b/src/shared/binfmt-util.c
+@@ -0,0 +1,33 @@
++#include <sys/stat.h>
++#include <sys/statvfs.h>
++#include <sys/vfs.h>
++
++#include "binfmt-util.h"
++#include "fileio.h"
++#include "missing_magic.h"
++#include "stat-util.h"
++
++int disable_binfmt(void) {
++        int r;
++
++        /* Flush out all rules. This is important during shutdown to cover for rules using "F", since those
++         * might pin a file and thus block us from unmounting stuff cleanly.
++         *
++         * We are a bit careful here, since binfmt_misc might still be an autofs which we don't want to
++         * trigger. */
++
++        r = path_is_fs_type("/proc/sys/fs/binfmt_misc", BINFMTFS_MAGIC);
++        if (r == 0 || r == -ENOENT) {
++                log_debug("binfmt_misc is not mounted, not detaching entries.");
++                return 0;
++        }
++        if (r < 0)
++                return log_warning_errno(r, "Failed to determine whether binfmt_misc is mounted: %m");
++
++        r = write_string_file("/proc/sys/fs/binfmt_misc/status", "-1", WRITE_STRING_FILE_DISABLE_BUFFER);
++        if (r < 0)
++                return log_warning_errno(r, "Failed to unregister binfmt_misc entries: %m");
++
++        log_debug("Unregistered all remaining binfmt_misc entries.");
++        return 0;
++}
+diff --git a/src/shared/binfmt-util.h b/src/shared/binfmt-util.h
+new file mode 100644
+index 0000000000..70feaad314
+--- /dev/null
++++ b/src/shared/binfmt-util.h
+@@ -0,0 +1,4 @@
++/* SPDX-License-Identifier: LGPL-2.1+ */
++#pragma once
++
++int disable_binfmt(void);
+diff --git a/src/shared/meson.build b/src/shared/meson.build
+index 483148492c..e608ea8a1d 100644
+--- a/src/shared/meson.build
++++ b/src/shared/meson.build
+@@ -12,6 +12,8 @@ shared_sources = files('''
+         barrier.h
+         base-filesystem.c
+         base-filesystem.h
++        binfmt-util.c
++        binfmt-util.h
+         bitmap.c
+         bitmap.h
+         blkid-util.h
+-- 
+2.25.1
+

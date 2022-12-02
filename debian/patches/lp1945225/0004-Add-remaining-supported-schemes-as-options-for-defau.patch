@@ -1,0 +1,25 @@
+From aa0a23ec8629aa033a098ab55e9d97ccd9fbf39c Mon Sep 17 00:00:00 2001
+From: dann frazier <dann.frazier@canonical.com>
+Date: Mon, 27 Sep 2021 11:00:53 -0600
+Subject: [PATCH] Add remaining supported schemes as options for
+ default-net-naming-scheme
+
+[dannf: Needed to allow setting a build-time default of v245.
+ Backport drops addition of v249, not yet supported]
+
+Bug-Ubuntu: https://launchpad.net/bugs/1945225
+Origin: https://github.com/systemd/systemd/commit/aa0a23ec8629aa033a098ab55e9d97ccd9fbf39c
+
+Index: systemd/meson_options.txt
+===================================================================
+--- systemd.orig/meson_options.txt
++++ systemd/meson_options.txt
+@@ -176,7 +176,7 @@ option('default-hierarchy', type : 'comb
+        choices : ['legacy', 'hybrid', 'unified'], value : 'unified',
+        description : 'default cgroup hierarchy')
+ option('default-net-naming-scheme', type : 'combo',
+-       choices : ['latest', 'v238', 'v239', 'v240'],
++       choices : ['latest', 'v238', 'v239', 'v240', 'v241', 'v243', 'v245', 'v247'],
+        description : 'default net.naming-scheme= value')
+ option('status-unit-format-default', type : 'combo',
+        choices : ['description', 'name'],

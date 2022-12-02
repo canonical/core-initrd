@@ -1,0 +1,172 @@
+From: Denys Fedoryshchenko <nuclearcat@nuclearcat.com>
+Date: Tue, 20 Jul 2021 11:44:01 +0200
+Subject: resolved: disable event sources before unreffing them
+Origin: upstream, https://github.com/systemd/systemd/commit/97935302283729c9206b84f5e00b1aff0f78ad19
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1934221
+Reviewed-by: Lukas Märdian <slyon@ubuntu.com>
+
+We generally operate on the assumption that a source is "gone" as soon
+as we unref it. This is generally true because we have the only reference.
+But if something else holds the reference, our unref doesn't really stop
+the source and it could fire again.
+
+In particular, on_query_timeout() is called with DnsQuery* as userdata, and
+it calls dns_query_stop() which invalidates that pointer. If it was ever
+called again, we'd be accessing already-freed memory.
+
+I don't see what would hold the reference. sd-event takes a temporary reference,
+but on the sd_event object, not on the individual sources. And our sources
+are non-floating, so there is no reference from the sd_event object to the
+sources.
+
+For #18427.
+---
+ src/resolve/resolved-dns-query.c       | 2 +-
+ src/resolve/resolved-dns-scope.c       | 8 ++++----
+ src/resolve/resolved-dns-stream.c      | 4 ++--
+ src/resolve/resolved-dns-stub.c        | 4 ++--
+ src/resolve/resolved-dns-transaction.c | 4 ++--
+ src/resolve/resolved-llmnr.c           | 8 ++++----
+ src/resolve/resolved-mdns.c            | 4 ++--
+ 7 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/src/resolve/resolved-dns-query.c b/src/resolve/resolved-dns-query.c
+index 4a41921..614cc32 100644
+--- a/src/resolve/resolved-dns-query.c
++++ b/src/resolve/resolved-dns-query.c
+@@ -333,7 +333,7 @@ static void dns_query_stop(DnsQuery *q) {
+ 
+         assert(q);
+ 
+-        q->timeout_event_source = sd_event_source_unref(q->timeout_event_source);
++        q->timeout_event_source = sd_event_source_disable_unref(q->timeout_event_source);
+ 
+         LIST_FOREACH(candidates_by_query, c, q->candidates)
+                 dns_query_candidate_stop(c);
+diff --git a/src/resolve/resolved-dns-scope.c b/src/resolve/resolved-dns-scope.c
+index d7e7b5a..4701736 100644
+--- a/src/resolve/resolved-dns-scope.c
++++ b/src/resolve/resolved-dns-scope.c
+@@ -110,9 +110,9 @@ DnsScope* dns_scope_free(DnsScope *s) {
+         hashmap_free(s->transactions_by_key);
+ 
+         ordered_hashmap_free_with_destructor(s->conflict_queue, dns_resource_record_unref);
+-        sd_event_source_unref(s->conflict_event_source);
++        sd_event_source_disable_unref(s->conflict_event_source);
+ 
+-        sd_event_source_unref(s->announce_event_source);
++        sd_event_source_disable_unref(s->announce_event_source);
+ 
+         dns_cache_flush(&s->cache);
+         dns_zone_flush(&s->zone);
+@@ -998,7 +998,7 @@ static int on_conflict_dispatch(sd_event_source *es, usec_t usec, void *userdata
+         assert(es);
+         assert(scope);
+ 
+-        scope->conflict_event_source = sd_event_source_unref(scope->conflict_event_source);
++        scope->conflict_event_source = sd_event_source_disable_unref(scope->conflict_event_source);
+ 
+         for (;;) {
+                 _cleanup_(dns_resource_key_unrefp) DnsResourceKey *key = NULL;
+@@ -1204,7 +1204,7 @@ static int on_announcement_timeout(sd_event_source *s, usec_t usec, void *userda
+ 
+         assert(s);
+ 
+-        scope->announce_event_source = sd_event_source_unref(scope->announce_event_source);
++        scope->announce_event_source = sd_event_source_disable_unref(scope->announce_event_source);
+ 
+         (void) dns_scope_announce(scope, false);
+         return 0;
+diff --git a/src/resolve/resolved-dns-stream.c b/src/resolve/resolved-dns-stream.c
+index 2a10694..d46302e 100644
+--- a/src/resolve/resolved-dns-stream.c
++++ b/src/resolve/resolved-dns-stream.c
+@@ -17,8 +17,8 @@
+ static void dns_stream_stop(DnsStream *s) {
+         assert(s);
+ 
+-        s->io_event_source = sd_event_source_unref(s->io_event_source);
+-        s->timeout_event_source = sd_event_source_unref(s->timeout_event_source);
++        s->io_event_source = sd_event_source_disable_unref(s->io_event_source);
++        s->timeout_event_source = sd_event_source_disable_unref(s->timeout_event_source);
+         s->fd = safe_close(s->fd);
+ 
+         /* Disconnect us from the server object if we are now not usable anymore */
+diff --git a/src/resolve/resolved-dns-stub.c b/src/resolve/resolved-dns-stub.c
+index ce994a7..851a78a 100644
+--- a/src/resolve/resolved-dns-stub.c
++++ b/src/resolve/resolved-dns-stub.c
+@@ -577,8 +577,8 @@ int manager_dns_stub_start(Manager *m) {
+ void manager_dns_stub_stop(Manager *m) {
+         assert(m);
+ 
+-        m->dns_stub_udp_event_source = sd_event_source_unref(m->dns_stub_udp_event_source);
+-        m->dns_stub_tcp_event_source = sd_event_source_unref(m->dns_stub_tcp_event_source);
++        m->dns_stub_udp_event_source = sd_event_source_disable_unref(m->dns_stub_udp_event_source);
++        m->dns_stub_tcp_event_source = sd_event_source_disable_unref(m->dns_stub_tcp_event_source);
+ 
+         m->dns_stub_udp_fd = safe_close(m->dns_stub_udp_fd);
+         m->dns_stub_tcp_fd = safe_close(m->dns_stub_tcp_fd);
+diff --git a/src/resolve/resolved-dns-transaction.c b/src/resolve/resolved-dns-transaction.c
+index 2f3fb68..5e29275 100644
+--- a/src/resolve/resolved-dns-transaction.c
++++ b/src/resolve/resolved-dns-transaction.c
+@@ -59,14 +59,14 @@ static void dns_transaction_close_connection(DnsTransaction *t) {
+                 t->stream = dns_stream_unref(t->stream);
+         }
+ 
+-        t->dns_udp_event_source = sd_event_source_unref(t->dns_udp_event_source);
++        t->dns_udp_event_source = sd_event_source_disable_unref(t->dns_udp_event_source);
+         t->dns_udp_fd = safe_close(t->dns_udp_fd);
+ }
+ 
+ static void dns_transaction_stop_timeout(DnsTransaction *t) {
+         assert(t);
+ 
+-        t->timeout_event_source = sd_event_source_unref(t->timeout_event_source);
++        t->timeout_event_source = sd_event_source_disable_unref(t->timeout_event_source);
+ }
+ 
+ DnsTransaction* dns_transaction_free(DnsTransaction *t) {
+diff --git a/src/resolve/resolved-llmnr.c b/src/resolve/resolved-llmnr.c
+index 61e5034..5ffa984 100644
+--- a/src/resolve/resolved-llmnr.c
++++ b/src/resolve/resolved-llmnr.c
+@@ -11,16 +11,16 @@
+ void manager_llmnr_stop(Manager *m) {
+         assert(m);
+ 
+-        m->llmnr_ipv4_udp_event_source = sd_event_source_unref(m->llmnr_ipv4_udp_event_source);
++        m->llmnr_ipv4_udp_event_source = sd_event_source_disable_unref(m->llmnr_ipv4_udp_event_source);
+         m->llmnr_ipv4_udp_fd = safe_close(m->llmnr_ipv4_udp_fd);
+ 
+-        m->llmnr_ipv6_udp_event_source = sd_event_source_unref(m->llmnr_ipv6_udp_event_source);
++        m->llmnr_ipv6_udp_event_source = sd_event_source_disable_unref(m->llmnr_ipv6_udp_event_source);
+         m->llmnr_ipv6_udp_fd = safe_close(m->llmnr_ipv6_udp_fd);
+ 
+-        m->llmnr_ipv4_tcp_event_source = sd_event_source_unref(m->llmnr_ipv4_tcp_event_source);
++        m->llmnr_ipv4_tcp_event_source = sd_event_source_disable_unref(m->llmnr_ipv4_tcp_event_source);
+         m->llmnr_ipv4_tcp_fd = safe_close(m->llmnr_ipv4_tcp_fd);
+ 
+-        m->llmnr_ipv6_tcp_event_source = sd_event_source_unref(m->llmnr_ipv6_tcp_event_source);
++        m->llmnr_ipv6_tcp_event_source = sd_event_source_disable_unref(m->llmnr_ipv6_tcp_event_source);
+         m->llmnr_ipv6_tcp_fd = safe_close(m->llmnr_ipv6_tcp_fd);
+ }
+ 
+diff --git a/src/resolve/resolved-mdns.c b/src/resolve/resolved-mdns.c
+index 921720f..15c3263 100644
+--- a/src/resolve/resolved-mdns.c
++++ b/src/resolve/resolved-mdns.c
+@@ -15,10 +15,10 @@
+ void manager_mdns_stop(Manager *m) {
+         assert(m);
+ 
+-        m->mdns_ipv4_event_source = sd_event_source_unref(m->mdns_ipv4_event_source);
++        m->mdns_ipv4_event_source = sd_event_source_disable_unref(m->mdns_ipv4_event_source);
+         m->mdns_ipv4_fd = safe_close(m->mdns_ipv4_fd);
+ 
+-        m->mdns_ipv6_event_source = sd_event_source_unref(m->mdns_ipv6_event_source);
++        m->mdns_ipv6_event_source = sd_event_source_disable_unref(m->mdns_ipv6_event_source);
+         m->mdns_ipv6_fd = safe_close(m->mdns_ipv6_fd);
+ }
+ 

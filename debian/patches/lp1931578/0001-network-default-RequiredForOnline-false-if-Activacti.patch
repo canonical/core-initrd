@@ -1,0 +1,108 @@
+From 7c644a696668abc4e77ddc6d3dd3036f6c773f9d Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Tue, 8 Jun 2021 12:01:31 -0400
+Subject: [PATCH 1/3] network: default RequiredForOnline=false if
+ ActivactionPolicy= not set to up
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1931578
+Origin: upstream, https://github.com/systemd/systemd/pull/19883
+
+If ActivationPolicy= is set to down, always-down, or manual, then any
+matching link will delay boot (due to delaying network-online.target).
+
+If RequiredForOnline= wasn't explicitly set, then default it to false
+if ActivationPolicy= is down or manual. If ActivationPolicy=always-down,
+then force RequiredForOnline=no.
+---
+ man/systemd.network.xml        | 18 ++++++++++++++----
+ src/network/networkd-network.c | 19 +++++++++++++++++--
+ src/network/networkd-network.h |  2 +-
+ 3 files changed, 32 insertions(+), 7 deletions(-)
+
+--- a/man/systemd.network.xml
++++ b/man/systemd.network.xml
+@@ -215,11 +215,16 @@
+           <command>systemd-networkd-wait-online</command>. When <literal>no</literal>, the network is ignored
+           when checking for online state. When a minimum operational state and an optional maximum operational
+           state are set, <literal>yes</literal> is implied, and this controls the minimum and maximum
+-          operational state required for the network interface to be considered online.
+-          Defaults to <literal>yes</literal>.</para>
++          operational state required for the network interface to be considered online.</para>
+ 
+-          <para>The network will be brought up normally in all cases, but in
+-          the event that there is no address being assigned by DHCP or the
++          <para>Defaults to <literal>yes</literal> when <varname>ActivationPolicy=</varname> is not set,
++          or set to <literal>up</literal>, <literal>always-up</literal>, or <literal>bound</literal>.
++          Defaults to <literal>no</literal> when <varname>ActivationPolicy=</varname> is set to
++          <literal>manual</literal> or <literal>down</literal>. This is forced to <literal>no</literal>
++          when <varname>ActivationPolicy=</varname> is set to <literal>always-down</literal>.</para>
++
++          <para>The network will be brought up normally (as configured by <varname>ActivationPolicy=</varname>),
++          but in the event that there is no address being assigned by DHCP or the
+           cable is not plugged in, the link will simply remain offline and be
+           skipped automatically by <command>systemd-networkd-wait-online</command>
+           if <literal>RequiredForOnline=no</literal>.</para>
+@@ -248,6 +253,11 @@
+           the administrative state. When <varname>BindCarrier=</varname> is also set, this is
+           automatically set to <literal>bound</literal> and any other value is ignored.</para>
+ 
++          <para>When the policy is set to <literal>down</literal> or <literal>manual</literal>,
++          the default value of <varname>RequiredForOnline=</varname> is <literal>no</literal>.
++          When the policy is set to <literal>always-down</literal>, the value of
++          <varname>RequiredForOnline=</varname> forced to <literal>no</literal>.</para>
++
+           <para>The administrative state is not the same as the carrier state, so using
+           <literal>always-up</literal> does not mean the link will never lose carrier. The link
+           carrier depends on both the administrative state as well as the network device's physical
+--- a/src/network/networkd-network.c
++++ b/src/network/networkd-network.c
+@@ -303,6 +303,21 @@ int network_verify(Network *network) {
+         if (network->ignore_carrier_loss < 0)
+                 network->ignore_carrier_loss = network->configure_without_carrier;
+ 
++        if (IN_SET(network->activation_policy, ACTIVATION_POLICY_DOWN, ACTIVATION_POLICY_ALWAYS_DOWN, ACTIVATION_POLICY_MANUAL)) {
++                if (network->required_for_online < 0 ||
++                    (network->required_for_online == true && network->activation_policy == ACTIVATION_POLICY_ALWAYS_DOWN)) {
++                        log_debug("%s: Setting RequiredForOnline=no because ActivationPolicy=%s.", network->filename,
++                                  activation_policy_to_string(network->activation_policy));
++                        network->required_for_online = false;
++                } else if (network->required_for_online == true)
++                        log_warning("%s: RequiredForOnline=yes and ActivationPolicy=%s, "
++                                    "this may cause a delay at boot.", network->filename,
++                                    activation_policy_to_string(network->activation_policy));
++        }
++
++        if (network->required_for_online < 0)
++                network->required_for_online = true;
++
+         if (network->keep_configuration < 0)
+                 network->keep_configuration = KEEP_CONFIGURATION_NO;
+ 
+@@ -401,7 +416,7 @@ int network_load_one(Manager *manager, O
+                 .manager = manager,
+                 .n_ref = 1,
+ 
+-                .required_for_online = true,
++                .required_for_online = -1,
+                 .required_operstate_for_online = LINK_OPERSTATE_RANGE_DEFAULT,
+                 .dhcp = ADDRESS_FAMILY_NO,
+                 .dhcp_critical = -1,
+@@ -1347,7 +1362,7 @@ int config_parse_required_for_online(
+         int r;
+ 
+         if (isempty(rvalue)) {
+-                network->required_for_online = true;
++                network->required_for_online = -1;
+                 network->required_operstate_for_online = LINK_OPERSTATE_RANGE_DEFAULT;
+                 return 0;
+         }
+--- a/src/network/networkd-network.h
++++ b/src/network/networkd-network.h
+@@ -249,7 +249,7 @@ struct Network {
+ 
+         bool iaid_set;
+ 
+-        bool required_for_online; /* Is this network required to be considered online? */
++        int required_for_online; /* Is this network required to be considered online? */
+         LinkOperationalStateRange required_operstate_for_online;
+         ActivationPolicy activation_policy;
+ 

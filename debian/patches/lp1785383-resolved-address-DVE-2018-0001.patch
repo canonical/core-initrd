@@ -1,0 +1,161 @@
+From 1ed4e584f3a03f47d2313314b6b5a78c9dc6f135 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 12 Nov 2020 17:05:36 +0100
+Subject: [PATCH] resolved: address DVE-2018-0001
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/bionic/+source/systemd/+bug/1785383
+Origin: upstream, https://github.com/systemd/systemd/commit/1ed4e584f3a03f47d2313314b6b5a78c9dc6f135
+
+This is an updated version of #8608 with more restrictive logic. To
+quite the original bug:
+
+    Some captive portals, lie and do not respond with the captive portal
+    IP address, if the query is with EDNS0 enabled and D0 bit set to
+    zero. Thus retry "secure" domain name look ups with less secure
+    methods, upon NXDOMAIN.
+
+https://github.com/dns-violations/dns-violations/blob/master/2018/DVE-2018-0001.md
+
+Yes, this fix sucks hard, but I guess this is what we need to do to make
+sure resolved works IRL.
+
+Heavily based on the original patch from Dimitri John Ledkov, and I
+copied the commentary verbatim.
+
+Replaces: #8608
+---
+ src/resolve/resolved-dns-transaction.c | 69 +++++++++++++++++++++-----
+ src/resolve/resolved-dns-transaction.h |  7 ++-
+ 2 files changed, 62 insertions(+), 14 deletions(-)
+
+--- a/src/resolve/resolved-dns-transaction.c
++++ b/src/resolve/resolved-dns-transaction.c
+@@ -204,7 +204,8 @@ int dns_transaction_new(DnsTransaction *
+         t->answer_nsec_ttl = (uint32_t) -1;
+         t->key = dns_resource_key_ref(key);
+         t->current_feature_level = _DNS_SERVER_FEATURE_LEVEL_INVALID;
+-        t->clamp_feature_level = _DNS_SERVER_FEATURE_LEVEL_INVALID;
++        t->clamp_feature_level_servfail = _DNS_SERVER_FEATURE_LEVEL_INVALID;
++        t->clamp_feature_level_nxdomain = _DNS_SERVER_FEATURE_LEVEL_INVALID;
+ 
+         t->id = pick_new_id(s->manager);
+ 
+@@ -378,15 +379,20 @@ static int dns_transaction_pick_server(D
+ 
+         /* If we changed the server invalidate the feature level clamping, as the new server might have completely
+          * different properties. */
+-        if (server != t->server)
+-                t->clamp_feature_level = _DNS_SERVER_FEATURE_LEVEL_INVALID;
++        if (server != t->server) {
++                t->clamp_feature_level_servfail = _DNS_SERVER_FEATURE_LEVEL_INVALID;
++                t->clamp_feature_level_nxdomain = _DNS_SERVER_FEATURE_LEVEL_INVALID;
++        }
+ 
+         t->current_feature_level = dns_server_possible_feature_level(server);
+ 
+         /* Clamp the feature level if that is requested. */
+-        if (t->clamp_feature_level != _DNS_SERVER_FEATURE_LEVEL_INVALID &&
+-            t->current_feature_level > t->clamp_feature_level)
+-                t->current_feature_level = t->clamp_feature_level;
++        if (t->clamp_feature_level_servfail != _DNS_SERVER_FEATURE_LEVEL_INVALID &&
++            t->current_feature_level > t->clamp_feature_level_servfail)
++                t->current_feature_level = t->clamp_feature_level_servfail;
++        if (t->clamp_feature_level_nxdomain != _DNS_SERVER_FEATURE_LEVEL_INVALID &&
++            t->current_feature_level > t->clamp_feature_level_nxdomain)
++                t->current_feature_level = t->clamp_feature_level_nxdomain;
+ 
+         log_debug("Using feature level %s for transaction %u.", dns_server_feature_level_to_string(t->current_feature_level), t->id);
+ 
+@@ -1005,19 +1011,19 @@ void dns_transaction_process_reply(DnsTr
+                         /* Reduce this feature level by one and try again. */
+                         switch (t->current_feature_level) {
+                         case DNS_SERVER_FEATURE_LEVEL_TLS_DO:
+-                                t->clamp_feature_level = DNS_SERVER_FEATURE_LEVEL_TLS_PLAIN;
++                                t->clamp_feature_level_servfail = DNS_SERVER_FEATURE_LEVEL_TLS_PLAIN;
+                                 break;
+                         case DNS_SERVER_FEATURE_LEVEL_TLS_PLAIN + 1:
+                                 /* Skip plain TLS when TLS is not supported */
+-                                t->clamp_feature_level = DNS_SERVER_FEATURE_LEVEL_TLS_PLAIN - 1;
++                                t->clamp_feature_level_servfail = DNS_SERVER_FEATURE_LEVEL_TLS_PLAIN - 1;
+                                 break;
+                         default:
+-                                t->clamp_feature_level = t->current_feature_level - 1;
++                                t->clamp_feature_level_servfail = t->current_feature_level - 1;
+                         }
+ 
+                         log_debug("Server returned error %s, retrying transaction with reduced feature level %s.",
+                                   dns_rcode_to_string(DNS_PACKET_RCODE(p)),
+-                                  dns_server_feature_level_to_string(t->clamp_feature_level));
++                                  dns_server_feature_level_to_string(t->clamp_feature_level_servfail));
+ 
+                         dns_transaction_retry(t, false /* use the same server */);
+                         return;
+@@ -1086,13 +1092,51 @@ void dns_transaction_process_reply(DnsTr
+                 return;
+         }
+ 
++        if (t->scope->protocol == DNS_PROTOCOL_DNS &&
++            DNS_PACKET_RCODE(p) == DNS_RCODE_NXDOMAIN &&
++            p->opt && !DNS_PACKET_DO(p) &&
++            t->current_feature_level >= DNS_SERVER_FEATURE_LEVEL_EDNS0 &&
++            IN_SET(t->current_feature_level, DNS_SERVER_FEATURE_LEVEL_UDP, DNS_SERVER_FEATURE_LEVEL_EDNS0, DNS_SERVER_FEATURE_LEVEL_DO, DNS_SERVER_FEATURE_LEVEL_LARGE) &&
++            t->scope->dnssec_mode != DNSSEC_YES) {
++
++                /* Some captive portals are special in that the Aruba/Datavalet hardware will miss
++                 * replacing the packets with the local server IP to point to the authenticated side
++                 * of the network if EDNS0 is enabled. Instead they return NXDOMAIN, with DO bit set
++                 * to zero... nothing to see here, yet respond with the captive portal IP, when using
++                 * the more simple UDP level.
++                 *
++                 * Common portal names that fail like so are:
++                 *     secure.datavalet.io
++                 *     securelogin.arubanetworks.com
++                 *     securelogin.networks.mycompany.com
++                 *
++                 * Thus retry NXDOMAIN RCODES with a lower feature level.
++                 *
++                 * Do not lower the server's tracked feature level, as the captive portal should not
++                 * be lying for the wider internet (e.g. _other_ queries were observed fine with
++                 * EDNS0 on these networks, post auth), i.e. let's just lower the level transaction's
++                 * feature level.
++                 *
++                 * This is reported as https://github.com/dns-violations/dns-violations/blob/master/2018/DVE-2018-0001.md
++                 */
++
++                t->clamp_feature_level_nxdomain = DNS_SERVER_FEATURE_LEVEL_UDP;
++
++                log_debug("Server returned error %s in EDNS0 mode, retrying transaction with reduced feature level %s (DVE-2018-0001 mitigation)",
++                          dns_rcode_to_string(DNS_PACKET_RCODE(p)),
++                          dns_server_feature_level_to_string(t->clamp_feature_level_nxdomain));
++
++                dns_transaction_retry(t, false /* use the same server */);
++                return;
++        }
++
+         if (t->server) {
+                 /* Report that we successfully received a valid packet with a good rcode after we initially got a bad
+                  * rcode and subsequently downgraded the protocol */
+ 
+                 if (IN_SET(DNS_PACKET_RCODE(p), DNS_RCODE_SUCCESS, DNS_RCODE_NXDOMAIN) &&
+-                    t->clamp_feature_level != _DNS_SERVER_FEATURE_LEVEL_INVALID)
+-                        dns_server_packet_rcode_downgrade(t->server, t->clamp_feature_level);
++                    t->clamp_feature_level_servfail != _DNS_SERVER_FEATURE_LEVEL_INVALID)
++                        dns_server_packet_rcode_downgrade(t->server, t->clamp_feature_level_servfail);
+ 
+                 /* Report that the OPT RR was missing */
+                 if (!p->opt)
+--- a/src/resolve/resolved-dns-transaction.h
++++ b/src/resolve/resolved-dns-transaction.h
+@@ -105,8 +105,11 @@ struct DnsTransaction {
+         /* The features of the DNS server at time of transaction start */
+         DnsServerFeatureLevel current_feature_level;
+ 
+-        /* If we got SERVFAIL back, we retry the lookup, using a lower feature level than we used before. */
+-        DnsServerFeatureLevel clamp_feature_level;
++        /* If we got SERVFAIL back, we retry the lookup, using a lower feature level than we used
++         * before. Similar, if we get NXDOMAIN in pure EDNS0 mode, we check in EDNS0-less mode before giving
++         * up (as mitigation for DVE-2018-0001). */
++        DnsServerFeatureLevel clamp_feature_level_servfail;
++        DnsServerFeatureLevel clamp_feature_level_nxdomain;
+ 
+         /* Query candidates this transaction is referenced by and that
+          * shall be notified about this specific transaction

@@ -1,0 +1,64 @@
+From: Jeremy Szu <jeremy.szu@canonical.com>
+Date: Thu, 24 Mar 2022 17:04:54 +0000
+Subject: lp1966179-add-more-hp-dmi-to-unblock-intel-hid-event
+
+Same story from lp1955997, some HP machines are using intel-hid instead
+of HPQ6001. Thus, add them in the allowing list.
+Specify the dmi string precisely to prevent introduce the regression.
+
+Below launchpad tickets could be reference:
+from 1966170:
+pnHPProBook44014inchG9NotebookPC
+pnHPProBook45015.6inchG9NotebookPC
+
+from 1965898:
+pnHPElitex36083013inchG92-in-1NotebookPC
+
+from 1966014:
+pnHPEliteBook104014inchG9NotebookPC
+pnHPEliteBook84014inchG9NotebookPC
+pnHPElitex360104014inchG92-in-1NotebookPC
+pnHPEliteBook86016inchG9NotebookPC
+
+from 1964913:
+pnHPEliteBook64014inchG9NotebookPC
+pnHPEliteBook65015.6inchG9NotebookPC
+
+In the mail from HP (please see the lp1966179), HP also confirmed the
+previous two platforms' dmi string need to adjust.
+pnHPZBookFury16G9MobileWorkstationPC
+pnHPZBookStudio16inchG9MobileWorkstationPC
+
+In the MM channel from BillYu and AndyChi, for Thanos13 and Warpath13
+pnHPEliteBook83013inchG9NotebookPC
+pnHPEliteBook63013inchG9NotebookPC
+---
+ hwdb.d/60-keyboard.hwdb | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/hwdb.d/60-keyboard.hwdb b/hwdb.d/60-keyboard.hwdb
+index 0a8a76d..f56c8a3 100644
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -493,8 +493,19 @@ evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pn*:pvr*
+  KEYBOARD_KEY_8=unknown					# Use hp-wireless instead
+ 
+ # The allowlist to unblock intel-hid on HP machines.
+-evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPZBookFury16inchG9MobileWorkstationPC:pvr*
+-evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPZBookStudio16.0InchMobileWorkstationPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPZBookFury16G9MobileWorkstationPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPZBookStudio16inchG9MobileWorkstationPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPProBook44014inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPProBook45015.6inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPElitex36083013inchG92-in-1NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook104014inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook84014inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPElitex360104014inchG92-in-1NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook86016inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook64014inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook65015.6inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook83013inchG9NotebookPC:pvr*
++evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook63013inchG9NotebookPC:pvr*
+  KEYBOARD_KEY_8=wlan
+ 
+ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*:pvr*

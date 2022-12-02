@@ -1,0 +1,19 @@
+From: Andy Chi <andy.chi@canonical.com>
+Date: Mon, 22 Nov 2021 21:51:30 +0800
+Subject: keymap: Add microphone mute keymap for Dell Machine
+
+---
+ hwdb.d/60-keyboard.hwdb | 2 ++
+ 1 file changed, 2 insertions(+)
+
+--- a/hwdb.d/60-keyboard.hwdb
++++ b/hwdb.d/60-keyboard.hwdb
+@@ -371,6 +371,8 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnDell*:p
+ evdev:name:Dell WMI hotkeys:dmi:bvn*:bvr*:bd*:svnDell*:pnLatitude*
+ # Dell Precision microphone mute
+ evdev:name:Dell WMI hotkeys:dmi:bvn*:bvr*:bd*:svnDell*:pnPrecision*
++# Dell XPS microphone mute
++evdev:name:Dell WMI hotkeys:dmi:bvn*:bvr*:bd*:svnDell*:pnXPS*:*
+  KEYBOARD_KEY_100150=f20                                   # Mic mute toggle, should be micmute
+ 
+ # Dell Latitude privacy microphone mute

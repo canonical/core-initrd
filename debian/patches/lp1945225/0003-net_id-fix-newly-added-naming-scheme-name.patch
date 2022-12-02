@@ -1,0 +1,65 @@
+From 66ad93e86d5a62b92422475b538db6c4b48a0a38 Mon Sep 17 00:00:00 2001
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 22 Oct 2020 14:03:57 +0200
+Subject: [PATCH] net_id: fix newly added naming scheme name
+
+v246 is long released. Hence the new scheme should be named v247.
+
+(Interesting, how we pretty systematically for the last releases changed
+the scheme only every second release)
+
+Bug-Ubuntu: https://launchpad.net/bugs/1945225
+Origin: https://github.com/systemd/systemd/commit/66ad93e86d5a62b92422475b538db6c4b48a0a38
+
+diff --git a/man/systemd.net-naming-scheme.xml b/man/systemd.net-naming-scheme.xml
+index b33488b9e4..e894db7cd6 100644
+--- a/man/systemd.net-naming-scheme.xml
++++ b/man/systemd.net-naming-scheme.xml
+@@ -270,7 +270,8 @@
+   <refsect1>
+     <title>History</title>
+ 
+-    <para>The following "naming schemes" have been defined:</para>
++    <para>The following "naming schemes" have been defined (which may be chosen at system boot-up time via
++    the <varname>net.naming-scheme=</varname> kernel command line switch, see above:</para>
+ 
+     <variablelist>
+         <varlistentry>
+@@ -359,7 +360,7 @@
+         </varlistentry>
+ 
+         <varlistentry>
+-          <term><constant>v246</constant></term>
++          <term><constant>v247</constant></term>
+ 
+           <listitem><para>If the PCI slot is assocated with PCI bridge and that has multiple child network
+           controllers then all of them might derive the same value of <varname>ID_NET_NAME_SLOT</varname>
+diff --git a/src/shared/netif-naming-scheme.c b/src/shared/netif-naming-scheme.c
+index 338ff661f3..0a701b0e92 100644
+--- a/src/shared/netif-naming-scheme.c
++++ b/src/shared/netif-naming-scheme.c
+@@ -12,7 +12,7 @@ static const NamingScheme naming_schemes[] = {
+         { "v241", NAMING_V241 },
+         { "v243", NAMING_V243 },
+         { "v245", NAMING_V245 },
+-        { "v246", NAMING_V246 },
++        { "v247", NAMING_V247 },
+         /* … add more schemes here, as the logic to name devices is updated … */
+ };
+ 
+diff --git a/src/shared/netif-naming-scheme.h b/src/shared/netif-naming-scheme.h
+index e12464b6a3..db47d2909e 100644
+--- a/src/shared/netif-naming-scheme.h
++++ b/src/shared/netif-naming-scheme.h
+@@ -40,7 +40,7 @@ typedef enum NamingSchemeFlags {
+         NAMING_V241 = NAMING_V240 | NAMING_STABLE_VIRTUAL_MACS,
+         NAMING_V243 = NAMING_V241 | NAMING_NETDEVSIM | NAMING_LABEL_NOPREFIX,
+         NAMING_V245 = NAMING_V243 | NAMING_NSPAWN_LONG_HASH,
+-        NAMING_V246 = NAMING_V245 | NAMING_BRIDGE_NO_SLOT,
++        NAMING_V247 = NAMING_V245 | NAMING_BRIDGE_NO_SLOT,
+ 
+         _NAMING_SCHEME_FLAGS_INVALID = -1,
+ } NamingSchemeFlags;
+-- 
+2.25.1
+

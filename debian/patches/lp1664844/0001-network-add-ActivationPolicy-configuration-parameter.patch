@@ -1,0 +1,344 @@
+From 61135582e0b2e847e49c96af05e4d101323ce00c Mon Sep 17 00:00:00 2001
+From: Dan Streetman <ddstreet@canonical.com>
+Date: Thu, 18 Jun 2020 16:09:40 -0400
+Subject: [PATCH 1/3] network: add ActivationPolicy= configuration parameter
+Origin: upstream, https://github.com/systemd/systemd/pull/16228
+Bug-Ubuntu: https://bugs.launchpad.net/netplan/+bug/1664844
+
+This parameter allows configuring the activation policy for an interface,
+meaning how it manages the interface's administrative state (IFF_UP flag).
+The policy can be configured to bring the interface either up or down when
+the interface is (re)configured, to always force the interface either up or
+down, or to never change the interface administrative state.
+
+If the interface is bound with BindCarrier=, its administrative state is
+controlled by the interface(s) it's bound to, and this parameter is forced
+to 'bound'.
+
+This changes the default behavior of how systemd-networkd sets the IFF_UP
+flag; previously, it was set up (if not already up) every time the
+link_joined() function was called. Now, with the default ActivationPolicy=
+setting of 'up', it will only set the IFF_UP flag once, the first time
+link_joined() is called, during an interface's configuration; and on
+the first link_joined() call each time the interface is reconfigured.
+
+Fixes: #3031
+Fixes: #17437
+---
+ man/systemd.network.xml                       | 39 ++++++++++++-
+ src/network/networkd-link.c                   | 58 ++++++++++++++++++-
+ src/network/networkd-link.h                   |  1 +
+ src/network/networkd-network-gperf.gperf      |  1 +
+ src/network/networkd-network.c                | 40 ++++++++++++-
+ src/network/networkd-network.h                | 16 +++++
+ .../fuzz-network-parser/directives.network    |  1 +
+ 7 files changed, 148 insertions(+), 8 deletions(-)
+
+--- a/man/systemd.network.xml
++++ b/man/systemd.network.xml
+@@ -225,6 +225,36 @@
+           if <literal>RequiredForOnline=no</literal>.</para>
+         </listitem>
+       </varlistentry>
++      <varlistentry>
++        <term><varname>ActivationPolicy=</varname></term>
++        <listitem>
++          <para>Specifies the policy for <command>systemd-networkd</command> managing the link
++          administrative state. Specifically, this controls how <command>systemd-networkd</command>
++          changes the network device's <literal>IFF_UP</literal> flag, which is sometimes
++          controlled by system administrators by running e.g., <command>ip set dev eth0 up</command>
++          or <command>ip set dev eth0 down</command>, and can also be changed with
++          <command>networkctl up eth0</command> or <command>networkctl down eth0</command>.</para>
++
++          <para>Takes one of <literal>up</literal>, <literal>always-up</literal>,
++          <literal>manual</literal>, <literal>always-down</literal>, <literal>down</literal>,
++          or <literal>bound</literal>. When <literal>manual</literal>, <command>systemd-networkd</command>
++          will not change the link's admin state automatically; the system administrator must bring the
++          interface up or down manually, as desired. When <literal>up</literal> (the default) or
++          <literal>always-up</literal>, or <literal>down</literal> or <literal>always-down</literal>,
++          <command>systemd-networkd</command> will set the link up or down, respectively,
++          when the interface is (re)configured. When <literal>always-up</literal> or
++          <literal>always-down</literal>, <command>systemd-networkd</command> will set the link up
++          or down, respectively, any time <command>systemd-networkd</command> detects a change in
++          the administrative state. When <varname>BindCarrier=</varname> is also set, this is
++          automatically set to <literal>bound</literal> and any other value is ignored.</para>
++
++          <para>The administrative state is not the same as the carrier state, so using
++          <literal>always-up</literal> does not mean the link will never lose carrier. The link
++          carrier depends on both the administrative state as well as the network device's physical
++          connection. However, to avoid reconfiguration failures, when using <literal>always-up</literal>,
++          <varname>IgnoreCarrierLoss=</varname> is forced to true.</para>
++        </listitem>
++      </varlistentry>
+     </variablelist>
+   </refsect1>
+ 
+@@ -464,8 +494,9 @@
+           <listitem>
+             <para>A link name or a list of link names. When set, controls the behavior of the current
+             link. When all links in the list are in an operational down state, the current link is brought
+-            down. When at least one link has carrier, the current interface is brought up.
+-            </para>
++            down. When at least one link has carrier, the current interface is brought up.</para>
++
++            <para>This forces <varname>ActivationPolicy=</varname> to be set to <literal>bound</literal>.</para>
+           </listitem>
+         </varlistentry>
+         <varlistentry>
+@@ -819,6 +850,10 @@
+           of the interface even if its carrier is lost. When unset, the value specified with
+           <option>ConfigureWithoutCarrier=</option> is used.
+           </para>
++
++          <para>When <varname>ActivationPolicy=</varname> is set to <literal>always-up</literal>, this
++          is forced to <literal>true</literal>.
++          </para>
+         </listitem>
+       </varlistentry>
+       <varlistentry>
+--- a/src/network/networkd-link.c
++++ b/src/network/networkd-link.c
+@@ -2100,17 +2100,38 @@
+         assert(link);
+         assert(link->network);
+ 
+-        if (!hashmap_isempty(link->bound_to_links)) {
++        switch (link->network->activation_policy) {
++        case ACTIVATION_POLICY_BOUND:
+                 r = link_handle_bound_to_list(link);
+                 if (r < 0)
+                         return r;
+-        } else if (!(link->flags & IFF_UP)) {
++                break;
++        case ACTIVATION_POLICY_UP:
++                if (link->activated)
++                        break;
++                _fallthrough_;
++        case ACTIVATION_POLICY_ALWAYS_UP:
+                 r = link_up(link);
+                 if (r < 0) {
+                         link_enter_failed(link);
+                         return r;
+                 }
++                break;
++        case ACTIVATION_POLICY_DOWN:
++                if (link->activated)
++                        break;
++                _fallthrough_;
++        case ACTIVATION_POLICY_ALWAYS_DOWN:
++                r = link_down(link, NULL);
++                if (r < 0) {
++                        link_enter_failed(link);
++                        return r;
++                }
++                break;
++        default:
++                break;
+         }
++        link->activated = true;
+ 
+         if (link->network->bridge) {
+                 r = link_set_bridge(link);
+@@ -3099,6 +3120,7 @@
+                 return r;
+ 
+         link_set_state(link, LINK_STATE_PENDING);
++        link->activated = false;
+         link_dirty(link);
+ 
+         /* link_configure_duid() returns 0 if it requests product UUID. In that case,
+@@ -3680,6 +3702,16 @@
+ static int link_admin_state_up(Link *link) {
+         int r;
+ 
++        assert(link);
++
++        if (!link->network)
++                return 0;
++
++        if (link->network->activation_policy == ACTIVATION_POLICY_ALWAYS_DOWN) {
++                log_link_info(link, "ActivationPolicy is \"always-off\", forcing link down");
++                return link_down(link, NULL);
++        }
++
+         /* We set the ipv6 mtu after the device mtu, but the kernel resets
+          * ipv6 mtu on NETDEV_UP, so we need to reset it.  The check for
+          * ipv6_mtu_set prevents this from trying to set it too early before
+@@ -3694,6 +3726,21 @@
+         return 0;
+ }
+ 
++static int link_admin_state_down(Link *link) {
++
++        assert(link);
++
++        if (!link->network)
++                return 0;
++
++        if (link->network->activation_policy == ACTIVATION_POLICY_ALWAYS_UP) {
++                log_link_info(link, "ActivationPolicy is \"always-on\", forcing link up");
++                return link_up(link);
++        }
++
++        return 0;
++}
++
+ int link_update(Link *link, sd_netlink_message *m) {
+         _cleanup_strv_free_ char **s = NULL;
+         struct ether_addr mac;
+@@ -3846,9 +3893,14 @@
+                 r = link_admin_state_up(link);
+                 if (r < 0)
+                         return r;
+-        } else if (link_was_admin_up && !(link->flags & IFF_UP))
++        } else if (link_was_admin_up && !(link->flags & IFF_UP)) {
+                 log_link_info(link, "Link DOWN");
+ 
++                r = link_admin_state_down(link);
++                if (r < 0)
++                        return r;
++        }
++
+         r = link_update_lldp(link);
+         if (r < 0)
+                 return r;
+--- a/src/network/networkd-link.h
++++ b/src/network/networkd-link.h
+@@ -119,6 +119,7 @@
+         bool setting_mtu:1;
+         bool setting_genmode:1;
+         bool ipv6_mtu_set:1;
++        bool activated:1;
+ 
+         LIST_HEAD(Address, pool_addresses);
+ 
+--- a/src/network/networkd-network-gperf.gperf
++++ b/src/network/networkd-network-gperf.gperf
+@@ -48,6 +48,7 @@
+ Link.Multicast,                              config_parse_tristate,                                    0,                             offsetof(Network, multicast)
+ Link.AllMulticast,                           config_parse_tristate,                                    0,                             offsetof(Network, allmulticast)
+ Link.Unmanaged,                              config_parse_bool,                                        0,                             offsetof(Network, unmanaged)
++Link.ActivationPolicy,                       config_parse_activation_policy,                           0,                             offsetof(Network, activation_policy)
+ Link.RequiredForOnline,                      config_parse_required_for_online,                         0,                             0
+ Network.Description,                         config_parse_string,                                      0,                             offsetof(Network, description)
+ Network.Bridge,                              config_parse_ifname,                                      0,                             offsetof(Network, bridge_name)
+--- a/src/network/networkd-network.c
++++ b/src/network/networkd-network.c
+@@ -268,9 +268,6 @@
+         if (network->dhcp_use_gateway < 0)
+                 network->dhcp_use_gateway = network->dhcp_use_routes;
+ 
+-        if (network->ignore_carrier_loss < 0)
+-                network->ignore_carrier_loss = network->configure_without_carrier;
+-
+         if (network->dhcp_critical >= 0) {
+                 if (network->keep_configuration >= 0)
+                         log_warning("%s: Both KeepConfiguration= and deprecated CriticalConnection= are set. "
+@@ -282,6 +279,30 @@
+                         network->keep_configuration = KEEP_CONFIGURATION_NO;
+         }
+ 
++        if (!strv_isempty(network->bind_carrier)) {
++                if (!IN_SET(network->activation_policy, _ACTIVATION_POLICY_INVALID, ACTIVATION_POLICY_BOUND))
++                        log_warning("%s: ActivationPolicy=bound is required with BindCarrier=. "
++                                    "Setting ActivationPolicy=bound.", network->filename);
++                network->activation_policy = ACTIVATION_POLICY_BOUND;
++        } else if (network->activation_policy == ACTIVATION_POLICY_BOUND) {
++                log_warning("%s: ActivationPolicy=bound requires BindCarrier=. "
++                            "Ignoring ActivationPolicy=bound.", network->filename);
++                network->activation_policy = ACTIVATION_POLICY_UP;
++        }
++
++        if (network->activation_policy == _ACTIVATION_POLICY_INVALID)
++                network->activation_policy = ACTIVATION_POLICY_UP;
++
++        if (network->activation_policy == ACTIVATION_POLICY_ALWAYS_UP) {
++                if (network->ignore_carrier_loss == false)
++                        log_warning("%s: IgnoreCarrierLoss=false conflicts with ActivationPolicy=always-up. "
++                                    "Setting IgnoreCarrierLoss=true.", network->filename);
++                network->ignore_carrier_loss = true;
++        }
++
++        if (network->ignore_carrier_loss < 0)
++                network->ignore_carrier_loss = network->configure_without_carrier;
++
+         if (network->keep_configuration < 0)
+                 network->keep_configuration = KEEP_CONFIGURATION_NO;
+ 
+@@ -451,6 +472,7 @@
+                 .ipv6_proxy_ndp = -1,
+                 .duid.type = _DUID_TYPE_INVALID,
+                 .proxy_arp = -1,
++                .activation_policy = _ACTIVATION_POLICY_INVALID,
+                 .arp = -1,
+                 .multicast = -1,
+                 .allmulticast = -1,
+@@ -1362,3 +1384,15 @@
+ };
+ 
+ DEFINE_STRING_TABLE_LOOKUP_WITH_BOOLEAN(keep_configuration, KeepConfiguration, KEEP_CONFIGURATION_YES);
++
++static const char* const activation_policy_table[_ACTIVATION_POLICY_MAX] = {
++        [ACTIVATION_POLICY_UP] =          "up",
++        [ACTIVATION_POLICY_ALWAYS_UP] =   "always-up",
++        [ACTIVATION_POLICY_MANUAL] =      "manual",
++        [ACTIVATION_POLICY_ALWAYS_DOWN] = "always-down",
++        [ACTIVATION_POLICY_DOWN] =        "down",
++        [ACTIVATION_POLICY_BOUND] =       "bound",
++};
++
++DEFINE_STRING_TABLE_LOOKUP(activation_policy, ActivationPolicy);
++DEFINE_CONFIG_PARSE_ENUM(config_parse_activation_policy, activation_policy, ActivationPolicy, "Failed to parse activation policy");
+--- a/src/network/networkd-network.h
++++ b/src/network/networkd-network.h
+@@ -53,6 +53,17 @@
+         _KEEP_CONFIGURATION_INVALID = -1,
+ } KeepConfiguration;
+ 
++typedef enum ActivationPolicy {
++        ACTIVATION_POLICY_UP,
++        ACTIVATION_POLICY_ALWAYS_UP,
++        ACTIVATION_POLICY_MANUAL,
++        ACTIVATION_POLICY_ALWAYS_DOWN,
++        ACTIVATION_POLICY_DOWN,
++        ACTIVATION_POLICY_BOUND,
++        _ACTIVATION_POLICY_MAX,
++        _ACTIVATION_POLICY_INVALID = -1
++} ActivationPolicy;
++
+ typedef struct Manager Manager;
+ 
+ struct Network {
+@@ -240,6 +251,7 @@
+ 
+         bool required_for_online; /* Is this network required to be considered online? */
+         LinkOperationalStateRange required_operstate_for_online;
++        ActivationPolicy activation_policy;
+ 
+         LLDPMode lldp_mode; /* LLDP reception */
+         LLDPEmit lldp_emit; /* LLDP transmission */
+@@ -325,6 +337,7 @@
+ CONFIG_PARSER_PROTOTYPE(config_parse_ntp);
+ CONFIG_PARSER_PROTOTYPE(config_parse_required_for_online);
+ CONFIG_PARSER_PROTOTYPE(config_parse_keep_configuration);
++CONFIG_PARSER_PROTOTYPE(config_parse_activation_policy);
+ 
+ const struct ConfigPerfItem* network_network_gperf_lookup(const char *key, GPERF_LEN_TYPE length);
+ 
+@@ -333,3 +346,6 @@
+ 
+ const char* keep_configuration_to_string(KeepConfiguration i) _const_;
+ KeepConfiguration keep_configuration_from_string(const char *s) _pure_;
++
++const char* activation_policy_to_string(ActivationPolicy i) _const_;
++ActivationPolicy activation_policy_from_string(const char *s) _pure_;
+--- a/test/fuzz/fuzz-network-parser/directives.network
++++ b/test/fuzz/fuzz-network-parser/directives.network
+@@ -30,6 +30,7 @@
+ MACAddress=
+ PermanentMACAddress=
+ [Link]
++ActivationPolicy=
+ RequiredForOnline=
+ ARP=
+ AllMulticast=
