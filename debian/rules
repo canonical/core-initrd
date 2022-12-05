@@ -233,7 +233,7 @@ override_dh_auto_install:
 	# This hack should be removed with #113
 	sed -i '/^After=/{;s, *plymouth-start[.]service *, ,;/^After= *$$/d;}' debian/tmp/usr/lib/systemd/system/systemd-ask-password-*
 
-	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/*/:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
+	LD_LIBRARY_PATH=`pwd`/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/systemd:`pwd`/debian/tmp/usr/lib/systemd `pwd`/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
 
 	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /usr/lib/initramfs-tools/bin/busybox usr/bin/busybox
@@ -248,7 +248,7 @@ override_dh_auto_install:
 	for lib in libudev.so libnss_systemd.so libsystemd.so; do \
 		cp -a $(CURDIR)/debian/tmp/lib/$(DEB_HOST_MULTIARCH)/$$lib* $(TEMPLIBDIR); \
 	done
-	cp -a $(CURDIR)/debian/tmp/usr/lib/systemd/libsystemd-shared* $(TEMPLIBDIR)
+	cp -a $(CURDIR)/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/systemd/libsystemd-shared* $(TEMPLIBDIR)
 	set -e;									\
 	for f in								\
 		/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*			\
