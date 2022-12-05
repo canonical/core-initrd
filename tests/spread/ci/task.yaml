@@ -17,7 +17,7 @@ execute: |
     gcloud auth activate-service-account --key-file="./sa.json"
 
     # launch the new lxc instance from an ubuntu 22.04 base
-    lxc launch images:ubuntu/jammy $INSTANCE_NAME
+    lxc launch images:ubuntu/kinetic $INSTANCE_NAME
 
     # wait a few seconds before proceeding, otherwise we are going to have issues
     # with the container (systemd) not being ready yet, and then the rest of

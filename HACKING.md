@@ -51,15 +51,15 @@ go install .
 ```
 sudo apt update && sudo apt install -y qemu-kvm autopkgtest
 ```
-2. Create a suitable ubuntu test image (jammy) in the following directory where spread locates images. Note that the location is different when using spread installed through snap.
+2. Create a suitable ubuntu test image (kinetic) in the following directory where spread locates images. Note that the location is different when using spread installed through snap.
 ```
 mkdir -p ~/.spread/qemu # This location is different if you installed spread from snap
 cd ~/.spread/qemu
-autopkgtest-buildvm-ubuntu-cloud -r jammy
+autopkgtest-buildvm-ubuntu-cloud -r kinetic
 ```
 3. Rename the newly built image as the name will not match what spread is expecting
 ```
-mv autopkgtest-jammy-amd64.img ubuntu-22.04-64.img
+mv autopkgtest-kinetic-amd64.img ubuntu-22.10-64.img
 ```
 4. Now you are ready to run spread tests with the qemu backend
 ```

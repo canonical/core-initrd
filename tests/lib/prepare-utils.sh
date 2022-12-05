@@ -153,7 +153,7 @@ download_core_initrd_snaps() {
     snap download pc-kernel --channel=22/${snap_branch} --basename=upstream-pc-kernel
     snap download pc --channel=22/${snap_branch} --basename=upstream-pc-gadget
     snap download snapd --channel=${snap_branch} --basename=upstream-snapd
-    snap download core22 --channel=${snap_branch} --basename=upstream-core22
+    snap download core24 --channel=${snap_branch} --basename=upstream-core24
 }
 
 build_core_initrd() {
@@ -236,6 +236,8 @@ repack_and_sign_gadget() {
 
     sbattach --remove "$gadget_dir/shim.efi.signed"
     sbsign --key "$snakeoil_dir/PkKek-1-snakeoil.key" --cert "$snakeoil_dir/PkKek-1-snakeoil.pem" --output "$gadget_dir/shim.efi.signed" "$gadget_dir/shim.efi.signed"
+
+    sed -i 's/^base: core22$/base: core24/' "${gadget_dir}/meta/snap.yaml"
 
     rm "$gadget_snap"
     snap pack --filename=$gadget_name "$gadget_dir"
@@ -337,10 +339,10 @@ EOF
     rm -r $snapddir
 }
 
-build_core22_image() {
+build_core24_image() {
     ubuntu-image snap \
         -i 8G \
-        --snap upstream-core22.snap \
+        --snap upstream-core24.snap \
         --snap upstream-snapd.snap \
         --snap upstream-pc-kernel.snap \
         --snap upstream-pc-gadget.snap \
