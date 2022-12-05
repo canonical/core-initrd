@@ -80,16 +80,6 @@ override_dh_auto_configure:
 	cd vendor/systemd;					\
 	    QUILT_PATCHES=debian/patches quilt push -a --fuzz=0
 
-	# Quilt import patches after the last applied patch.
-	# Because we will apply the patches after they are all imported,
-	# we need to add them reversed order.
-	cd vendor/systemd;						\
-	find ../systemd-patches/ -name "*.patch" -print0 |		\
-	    sort -rz |							\
-	    QUILT_PATCHES=debian/patches xargs -0 -n1 quilt import
-
-	cd vendor/systemd; QUILT_PATCHES=debian/patches quilt push -a --fuzz=0
-
 	sed -i '/"minix"/s/^/\/\//' vendor/systemd/src/test/test-path-util.c
 
 	dh_auto_configure --buildsystem=meson+ninja --sourcedirectory=vendor/systemd -- \
