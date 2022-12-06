@@ -132,8 +132,13 @@ class ModuleDb:
             old_mode, old_origin, old_source = self._installed[real_mod]
             if old_mode == ModuleDb.Installed.IMPLICIT:
                 print(f"WARNING: Module {mod} installed by {source}, but is dependency of {old_origin} installed by {old_source}", file=sys.stderr)
-            elif old_mode == ModuleDb.IMPLICIT:
+            elif old_mode == ModuleDb.Installed.EXPLICIT:
+                print(f"WARNING: Module {mod} installed by {source}, but it was already installed by {old_source} - you could remove it from one of the sources", file=sys.stderr)
                 return
+            else:
+                print(f"INTERNAL ERROR: unexpected value in ModuleDb: {ModuleDb}",
+                      file=sys.stderr)
+                exit(1)
         self._installed[mod] = (ModuleDb.Installed.EXPLICIT, mod, source)
         for dep in self.all_deps(real_mod):
             if dep in self._installed:
