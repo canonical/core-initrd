@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (51.4) focal; urgency=medium
+
+  * Update systemd to 245.4-4ubuntu3.19
+
+ -- Valentin David <valentin.david@canonical.com>  Thu, 08 Dec 2022 09:29:43 +0100
+
 ubuntu-core-initramfs (51.3) focal; urgency=medium
 
   * No change rebuild to pick up snap-bootstrap from snapd 2.57.2
