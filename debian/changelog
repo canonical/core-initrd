@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (64) jammy; urgency=medium
+
+  * No change rebuild to pick up snapd 2.58.1+22.04
+
+ -- Michael Vogt <michael.vogt@ubuntu.com>  Tue, 24 Jan 2023 17:29:55 +0100
+
 ubuntu-core-initramfs (63) jammy; urgency=medium
 
   * No change rebuild to pick up snapd 2.58~rc2+22.04
