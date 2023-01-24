@@ -1,3 +1,10 @@
+ubuntu-core-initramfs (65) jammy; urgency=medium
+
+  * Build from "main" branch to include fix:
+   - "Wait 10 seconds before emergency reboot"
+
+ -- Michael Vogt <michael.vogt@ubuntu.com>  Tue, 24 Jan 2023 17:39:17 +0100
+
 ubuntu-core-initramfs (64) jammy; urgency=medium
 
   * No change rebuild to pick up snapd 2.58.1+22.04
