@@ -121,12 +121,12 @@ install_core_initrd_deps() {
     # and for the version of snapd here which we want to use to pull snap-bootstrap
     # from when we build the debian package
     sudo add-apt-repository ppa:snappy-dev/image -y
-    sudo apt update -qq
-    sudo apt upgrade -yqq
+    sudo DEBIAN_FRONTEND=noninteractive apt update -yqq
+    sudo DEBIAN_FRONTEND=noninteractive apt upgrade -yqq
 
     # these are already installed in the lxd image which speeds things up, but they
     # are missing in qemu and google images.
-    sudo apt install initramfs-tools-core psmisc fdisk snapd mtools ovmf qemu-system-x86 sshpass whois openssh-server -yqq
+    sudo DEBIAN_FRONTEND=noninteractive apt install initramfs-tools-core psmisc fdisk snapd mtools ovmf qemu-system-x86 sshpass whois openssh-server -yqq
 
     # use the snapd snap explicitly
     # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
