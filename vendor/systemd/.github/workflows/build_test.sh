@@ -75,7 +75,7 @@ if [[ "$COMPILER" == clang ]]; then
     # ATTOW llvm-11 got into focal-updates, which conflicts with llvm-11
     # provided by the apt.llvm.org repositories. Let's use the system
     # llvm package if available in such cases to avoid that.
-    if ! apt install --dry-run "llvm-$COMPILER_VERSION" >/dev/null; then
+    if ! DEBIAN_FRONTEND=noninteractive apt install --dry-run "llvm-$COMPILER_VERSION" >/dev/null; then
         # Latest LLVM stack deb packages provided by https://apt.llvm.org/
         # Following snippet was partly borrowed from https://apt.llvm.org/llvm.sh
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --yes --dearmor --output /usr/share/keyrings/apt-llvm-org.gpg

@@ -30,7 +30,7 @@ if [ ! -f "pc-kernel.artifact" || ! -f "pc-gadget.artifact" ]; then
 
     # install ubuntu-core-initramfs here so the repack-kernel uses the version of
     # ubuntu-core-initramfs we built here
-    apt install -yqq ./ubuntu-core-initramfs*.deb
+    DEBIAN_FRONTEND=noninteractive apt install -yqq ./ubuntu-core-initramfs*.deb
 
     # next repack / modify the snaps we use in the image, we do this for a few 
     # reasons:
