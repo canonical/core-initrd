@@ -3,6 +3,12 @@ export DH_VERBOSE=1
 
 include /usr/share/dpkg/default.mk
 
+ifeq ($(DEB_HOST_ARCH),riscv64)
+	USE_EFI:=false
+else
+	USE_EFI:=true
+endif
+
 %:
 	dh $@ --buildsystem=meson+ninja --sourcedirectory=vendor/systemd --with python3
 
@@ -117,7 +123,7 @@ override_dh_auto_configure:
       -Dhibernate=false \
       -Dldconfig=false \
       -Dresolve=false \
-      -Defi=true \
+      -Defi=$(USE_EFI) \
       -Dtpm=true \
       -Dtpm-pcrindex=12 \
       -Denvironment-d=false \
@@ -193,7 +199,7 @@ override_dh_auto_configure:
       -Dpcre2=true \
       -Dglib=false \
       -Ddbus=false \
-      -Dgnu-efi=true \
+      -Dgnu-efi=$(USE_EFI) \
       -Duserdb=false \
       -Dbashcompletiondir=no \
       -Dzshcompletiondir=no \
