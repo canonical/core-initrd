@@ -71,7 +71,7 @@ Standards-Version: 4.4.1
 Homepage: https://launchpad.net/ubuntu-core-initramfs
 
 Package: ubuntu-core-initramfs
-Architecture: amd64 arm64 armhf
+Architecture: amd64 arm64 armhf riscv64
 Depends: ${python3:Depends}, ${misc:Depends}, dracut-core (>= 051-1), zstd, sbsigntool, linux-firmware, llvm
 Description: standard embedded initrd
  Standard embedded initrd implementation to be used with Ubuntu Core
