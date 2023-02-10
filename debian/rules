@@ -334,6 +334,10 @@ ifeq ($(DEB_HOST_ARCH),amd64)
 	mkdir -p debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/early/
 	debian/generate-x86-microcode debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/early/microcode.cpio
 endif
+ifneq ($(DEB_HOST_ARCH),riscv64)
+	cp -a debian/tmp/usr/lib/systemd/boot/efi/linux*.efi.stub \
+		debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/efi/
+endif
 
 override_dh_clean:
 	# Include ubuntu-core plymouth theme in sources
