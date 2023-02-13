@@ -1,0 +1,33 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Tue, 26 Jul 2022 23:15:01 +0900
+Subject: Revert "core/mount: fail early if directory cannot be created"
+
+Origin: upstream, https://github.com/systemd/systemd/commit/e5e6b7c225987551ebda14d2d7feadb66a64fb3c
+Bug-Ubuntu: https://launchpad.net/bugs/1979952
+
+This reverts commit e4de58c8231e47509ffeb3aa47620ca42f22d7f6.
+
+If mkdir() fails and the path does exist, then the later mount
+command fails anyway. Hence, it is not necessary to fail here.
+
+Fixes #24120.
+---
+ src/core/mount.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/core/mount.c b/src/core/mount.c
+index 673eec3..af39db2 100644
+--- a/src/core/mount.c
++++ b/src/core/mount.c
+@@ -1035,10 +1035,8 @@ static void mount_enter_mounting(Mount *m) {
+                 r = mkdir_p_label(p->what, m->directory_mode);
+                 /* mkdir_p_label() can return -EEXIST if the target path exists and is not a directory - which is
+                  * totally OK, in case the user wants us to overmount a non-directory inode. */
+-                if (r < 0 && r != -EEXIST) {
++                if (r < 0 && r != -EEXIST)
+                         log_unit_error_errno(UNIT(m), r, "Failed to make bind mount source '%s': %m", p->what);
+-                        goto fail;
+-                }
+         }
+ 
+         if (p) {

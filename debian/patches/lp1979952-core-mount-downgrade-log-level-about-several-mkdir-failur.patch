@@ -1,0 +1,31 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Tue, 26 Jul 2022 23:23:01 +0900
+Subject: core/mount: downgrade log level about several mkdir failures
+
+Origin: upstream, https://github.com/systemd/systemd/commit/574febda6b0e00aae164b18b70aa80744d950500
+Bug-Ubuntu: https://launchpad.net/bugs/1979952
+
+---
+ src/core/mount.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/mount.c b/src/core/mount.c
+index af39db2..ca8a6cf 100644
+--- a/src/core/mount.c
++++ b/src/core/mount.c
+@@ -1034,9 +1034,13 @@ static void mount_enter_mounting(Mount *m) {
+         if (p && mount_is_bind(p)) {
+                 r = mkdir_p_label(p->what, m->directory_mode);
+                 /* mkdir_p_label() can return -EEXIST if the target path exists and is not a directory - which is
+-                 * totally OK, in case the user wants us to overmount a non-directory inode. */
++                 * totally OK, in case the user wants us to overmount a non-directory inode. Also -EROFS can be
++                 * returned on read-only filesystem. Moreover, -EACCES (and also maybe -EPERM?) may be returned
++                 * when the path is on NFS. See issue #24120. All such errors will be logged in the debug level. */
+                 if (r < 0 && r != -EEXIST)
+-                        log_unit_error_errno(UNIT(m), r, "Failed to make bind mount source '%s': %m", p->what);
++                        log_unit_full_errno(UNIT(m),
++                                            (r == -EROFS || ERRNO_IS_PRIVILEGE(r)) ? LOG_DEBUG : LOG_WARNING,
++                                            r, "Failed to make bind mount source '%s', ignoring: %m", p->what);
+         }
+ 
+         if (p) {

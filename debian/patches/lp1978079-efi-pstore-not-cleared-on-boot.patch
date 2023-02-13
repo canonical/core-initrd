@@ -1,0 +1,49 @@
+From 4dec0b605b378b1a3d54bd738130cc45ff745673 Mon Sep 17 00:00:00 2001
+From: Alexander Graf <graf@amazon.com>
+Date: Thu, 9 Jun 2022 16:20:43 +0200
+Subject: [PATCH] pstore: Run after modules are loaded
+
+Origin: upstream, https://github.com/systemd/systemd/commit/70e74a5997ae2ce7ba72a74ac949c3b2dad1a1d6
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1978079
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1981622
+Last-Updated: 2022-07-22
+
+The original commit has been modified to not load mtdpstore.
+
+---
+The systemd-pstore service takes pstore files on boot and transfers them
+to disk. It only does it once on boot and only if it finds any. The typical
+location of the pstore on modern systems is the UEFI variable store.
+
+Most distributions ship with CONFIG_EFI_VARS_PSTORE=m. That means, the
+UEFI variable store is only available on boot after the respective module
+is loaded.
+
+In most situations, the pstore service gets loaded before the UEFI pstore,
+so we don't get to transfer logs. Instead, they accumulate, filling up the
+pstore over time, potentially breaking the UEFI variable store.
+
+Let's add a service dependency on any kernel module that can provide a
+pstore to ensure we only scan for pstate after we can actually see pstate.
+
+I have seen live occurences of systems breaking because we did not erase
+the pstates and ran out of UEFI nvram space.
+
+Fixes https://github.com/systemd/systemd/issues/18540
+---
+ units/systemd-pstore.service.in | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/units/systemd-pstore.service.in b/units/systemd-pstore.service.in
+index 848e311e9642..86de30ad4a72 100644
+--- a/units/systemd-pstore.service.in
++++ b/units/systemd-pstore.service.in
+@@ -15,6 +15,8 @@ ConditionVirtualization=!container
+ DefaultDependencies=no
+ Conflicts=shutdown.target
+ Before=sysinit.target shutdown.target
++After=modprobe@efi_pstore.service modprobe@chromeos_pstore.service modprobe@ramoops.service modprobe@pstore_zone.service modprobe@pstore_blk.service
++Wants=modprobe@efi_pstore.service modprobe@chromeos_pstore.service modprobe@ramoops.service modprobe@pstore_zone.service modprobe@pstore_blk.service
+ 
+ [Service]
+ Type=oneshot
