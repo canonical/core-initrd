@@ -1,3 +1,135 @@
+systemd (249.11-0ubuntu3.6) jammy; urgency=medium
+
+  * Deny-list TEST-58-REPART on ppc64el (LP: #1988994)
+    File: debian/patches/lp1988994-Deny-list-TEST-58-REPART-on-ppc64el.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=d2ed3cc1d223bf35015b15ff83b50156b58f0f38
+
+ -- Nick Rosbrook <nick.rosbrook@canonical.com>  Fri, 09 Sep 2022 14:47:16 -0400
+
+systemd (249.11-0ubuntu3.5) jammy; urgency=medium
+
+  [ Nick Rosbrook ]
+  * Ensure dns_search_domain_unlink_marked removes all marked domains (LP: #1975667)
+    File: debian/patches/lp1975667-Ensure-dns_search_domain_unlink_marked-removes-all-marked.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=919d5ddedd5bb8b45ab9437bf42d66c2821bb074
+  * core,firstboot: workaround timezone issues on Ubuntu Core (LP: #1981042)
+    Thanks to Robert Ancell for preparing the patch.
+    File: debian/patches/lp1981042-core-firstboot-workaround-timezone-issues-caused-by-Ubunt.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=b15546361b549217908fb6ca5d473be23d7fa757
+  * network: do not remove localhost address (LP: #1979951)
+    File: debian/patches/lp1979951-network-do-not-remove-localhost-address.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=2cd88391cce9fe95a486ae6dd214c12f236f3881
+  * units: remove the restart limit on the modprobe@.service (LP: #1982462)
+    File: debian/patches/lp1982462-units-remove-the-restart-limit-on-the-modprobe-.service.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=8f0acd1b2fbb8eed1259c34963e5e9b201bef900
+  * pstore: do not try to load mtdpstore (LP: #1981622)
+    File: debian/patches/lp1978079-efi-pstore-not-cleared-on-boot.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=15225032c3657f5906ee49d48929f9295a8664a0
+  * core/mount: downgrade log level about several mkdir failures (LP: #1979952)
+    Files:
+    - debian/patches/lp1979952-Revert-core-mount-fail-early-if-directory-cannot-be-creat.patch
+    - debian/patches/lp1979952-core-mount-downgrade-log-level-about-several-mkdir-failur.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=ee8cfcf500698fab2e990de291ecf4c3ab87a4ae
+  * debian/control: add Recommends: systemd-hwe-hwdb to udev.
+    The systemd-hwe-hwdb brings in additional hwdb rules for HWE, so we want
+    those installed with udev by default.
+    File: debian/control
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=4a7a3258c33201cca305956820fcc6bcd6052d76
+  * hwdb: implement --root option for systemd-hwdb query (LP: #1988078)
+    Files:
+    - debian/libsystemd0.symbols
+    - debian/patches/lp1988078-hwdb-implement-root-option-for-systemd-hwdb-query.patch
+    - debian/patches/lp1988078-sd-hwdb-add-sd_hwdb_new_from_path.patch
+    - debian/patches/lp1988078-sd-hwdb-include-sys-stat.h-in-hwdb-internal.h.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=937fef96c858f2f2042bf71032f315647c14add0
+
+  [ Luca Boccassi ]
+  * Enable systemd-repart and ship it in a new systemd-repart package.
+    (LP: #1897932)
+    Add fdisk as test dependency, needed by test-repart which calls sfdisk.
+    Add libfdisk-dev/libssl-dev as dependencies, needed for systemd-repart.
+    Author: Luca Boccassi
+    Files:
+    - debian/control
+    - debian/rules
+    - debian/systemd-repart.install
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=debbc5e9362522210096ae5fa9da48378791e381
+
+  [ Lukas Märdian ]
+  * Add sd-repart as test depend, to avoid skipping TEST-58-REPART
+    File: debian/tests/control
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=669190653f06a6554ddf9725cbeccac65149df23
+
+ -- Nick Rosbrook <nick.rosbrook@canonical.com>  Thu, 01 Sep 2022 08:44:50 -0400
+
+systemd (249.11-0ubuntu3.4) jammy; urgency=medium
+
+  [ Mustafa Kemal Gilor ]
+  * d/p/lp1978079-efi-pstore-not-cleared-on-boot.patch: pstore: Run after
+    modules are loaded. Thanks to Alexander Graf <graf@amazon.com>.
+    (LP: #1978079)
+    Author: Mustafa Kemal Gilor
+    File: debian/patches/lp1978079-efi-pstore-not-cleared-on-boot.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=d990b13612810a296246011ad66a165b30166702
+
+  [ Nick Rosbrook ]
+  * systemd-oomd: set ManagedOOMSwap=auto on -.slice (LP: #1972159)
+    This has the effect of disabling swap kill by default, so cgroups will
+    only be monitored for memory pressure, and not swap usage.
+    File: debian/extra/systemd-oomd-defaults/-.slice.d/10-oomd-root-slice-defaults.conf
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=e93c944c58ec376454301e9c9b55d35be7c14a89
+
+ -- Nick Rosbrook <nick.rosbrook@canonical.com>  Mon, 27 Jun 2022 14:28:46 -0400
+
+systemd (249.11-0ubuntu3.3) jammy; urgency=medium
+
+  [ Lukas Märdian ]
+  * Build with and suggest fido2 and tpm libraries (LP: #1969375)
+    These are used via dlopen only if available by some tools like
+    systemd-cryptsetup, systemd-cryptenroll and systemd-repart,
+    with graceful fallbacks if they are not found.
+    Build-depend on them so that the features get compiled in
+    (apart from stage1 builds), and add appropriate Suggests.
+    Backport of:
+    https://salsa.debian.org/systemd-team/systemd/-/commit/6b5e99f1d7f63c0c83007de9f98f7745f4a564f8
+    Files:
+    - debian/control
+    - debian/rules
+    - debian/tests/control
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=c3f5affb669794f9ebfea8d81c68b1aacdde0511
+  * Run tests-in-lxd autopkgtest via LXD snap, deb is no more (LP: #1976607)
+    Files:
+    - debian/tests/control
+    - debian/tests/tests-in-lxd
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=eccfd52b275d1b0544dd44f858bcee8508c0957f
+
+  [ Nick Rosbrook ]
+  * d/t/boot-and-services: Ignore failed snap mount units in test_no_failed
+    (LP: #1967576)
+    Author: Nick Rosbrook
+    File: debian/tests/boot-and-services
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=cf823bffe5cb47a6eb531d9869f69a844f356376
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Tue, 07 Jun 2022 12:49:20 +0200
+
+systemd (249.11-0ubuntu3.2) jammy; urgency=medium
+
+  * d/p/lp1964494-network-do-not-enable-IPv4-ACD-for-IPv4-link-local-a.patch:
+    do not enable IPv4 ACD for IPv4 link-local address if ACD is
+    disabled explicitly (LP: #1964494)
+
+ -- Dan Streetman <ddstreet@ieee.org>  Tue, 31 May 2022 08:25:36 -0400
+
+systemd (249.11-0ubuntu3.1) jammy; urgency=medium
+
+  [ Andy Chi ]
+  * Add mic mute key support for HP Elite x360 series (LP: #1967038)
+    Author: Andy Chi
+    File: debian/patches/hwdb-Add-mic-mute-key-mapping-for-HP-Elite-x360.patch
+    https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd/commit/?id=45e809103de9c356c75b692d35089e8770602617
+
+ -- Lukas Märdian <slyon@ubuntu.com>  Thu, 21 Apr 2022 14:14:26 +0200
+
 systemd (249.11-0ubuntu3) jammy; urgency=medium
 
   * oomd: calculate 'used' memory with MemAvailable instead of MemFree (LP: #1966381)

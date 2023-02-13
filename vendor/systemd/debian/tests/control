@@ -112,6 +112,8 @@ Depends: systemd-tests,
   iputils-ping,
   dbus-user-session,
   zstd,
+  libtss2-dev [!i386],
+  libfido2-dev,
 Restrictions: needs-root, isolation-container, breaks-testbed
 
 Tests: tests-in-lxd
@@ -120,7 +122,7 @@ Depends: systemd-tests,
   libpam-systemd,
   autopkgtest,
   lsb-release,
-  lxd
+  snapd,
 Restrictions: needs-root, allow-stderr, isolation-machine, breaks-testbed, skip-not-installable, skippable
 
 Tests: upstream-1, upstream-2
@@ -130,6 +132,7 @@ Depends: systemd-tests,
   systemd-coredump,
   systemd-timesyncd,
   systemd-oomd,
+  systemd-repart,
   attr,
   tree,
   perl,
@@ -166,6 +169,8 @@ Depends: systemd-tests,
   squashfs-tools,
   vim-tiny,
   dosfstools,
+  libtss2-dev [!i386],
+  libfido2-dev,
 Restrictions: needs-root, allow-stderr, isolation-machine
 
 Tests: boot-smoke
