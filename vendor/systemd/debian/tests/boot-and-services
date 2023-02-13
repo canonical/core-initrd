@@ -57,6 +57,9 @@ class ServicesTest(unittest.TestCase):
         failed = [f for f in failed if 'console-setup' not in f]
         # cpi.service fails on s390x
         failed = [f for f in failed if 'cpi.service' not in f]
+        # If snapd is not properly removed/purged, it can leave behind
+        # snap-*.mount units which will always fail.
+        failed = [f for f in failed if not re.match(r'snap-.*\.mount.*', f)]
         # https://bugs.debian.org/926138
         if is_container:
             failed = [f for f in failed if 'e2scrub_reap.service' not in f]

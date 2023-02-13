@@ -4,6 +4,7 @@
 
 set -eu
 
+snap install lxd
 lxd init --auto
 
 IMAGE=autopkgtest/ubuntu/$(lsb_release -cs)/$(dpkg --print-architecture)

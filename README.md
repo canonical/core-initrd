@@ -73,6 +73,25 @@ After this, the initrd changes will be included in future kernel snaps
 releases automatically, following the usual 3 weeks cadence, as the
 snappy-dev PPA is included when these build happen.
 
+# Updating systemd
+
+git-subtree is used to synchronize with Ubuntu systemd. To update it, run
+
+    git subtree pull --prefix vendor/systemd https://git.launchpad.net/ubuntu/+source/systemd ubuntu/<series>-updates --squash
+
+where series is the ubuntu series. Note that we are pulling from the
+updates pocket, that is usually what we want, but it could be
+different depending on the stage of development of the series.
+
+To create the subtree from scratch, which is useful when bumping to a
+new series, run
+
+    git rm -r vendor/systemd
+    git commit -a -m "Remove <old_series> systemd"
+    git subtree add --prefix vendor/systemd https://git.launchpad.net/ubuntu/+source/systemd ubuntu/<series> --squash
+
+where we use the default pocket although again it might vary.
+
 # Bootchart
 
 It is possible to enable bootcharts by adding `core.bootchart` to the

@@ -30,6 +30,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  LIBSYSTEMD_247@LIBSYSTEMD_247 247
  LIBSYSTEMD_248@LIBSYSTEMD_248 248
  LIBSYSTEMD_249@LIBSYSTEMD_249 249
+ LIBSYSTEMD_252@LIBSYSTEMD_252 249.11-0ubuntu3.5~
  sd_booted@LIBSYSTEMD_209 0
  sd_bus_add_fallback@LIBSYSTEMD_221 221
  sd_bus_add_fallback_vtable@LIBSYSTEMD_221 221
@@ -485,6 +486,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_hwdb_enumerate@LIBSYSTEMD_240 240
  sd_hwdb_get@LIBSYSTEMD_240 240
  sd_hwdb_new@LIBSYSTEMD_240 240
+ sd_hwdb_new_from_path@LIBSYSTEMD_252 249.11-0ubuntu3.5~
  sd_hwdb_ref@LIBSYSTEMD_240 240
  sd_hwdb_seek@LIBSYSTEMD_240 240
  sd_hwdb_unref@LIBSYSTEMD_240 240

@@ -45,10 +45,14 @@ Build-Depends: debhelper-compat (= 13),
                libkmod-dev (>= 15),
                libblkid-dev (>= 2.24),
                libmount-dev (>= 2.30),
+               libfdisk-dev (>= 2.33),
                libseccomp-dev (>= 2.3.1) [amd64 arm64 armel armhf i386 mips mipsel mips64 mips64el x32 powerpc ppc64 ppc64el riscv64 s390x],
                libdw-dev (>= 0.158) <!stage1>,
                libpolkit-gobject-1-dev <!stage1>,
                libzstd-dev (>= 1.4.0),
+               libtss2-dev [!i386] <!stage1>,
+               libfido2-dev <!stage1>,
+               libssl-dev <!stage1>,
                linux-base <!nocheck>,
                acl <!nocheck>,
                python3:native,
@@ -61,6 +65,7 @@ Build-Depends: debhelper-compat (= 13),
                iproute2 <!nocheck>,
                zstd <!nocheck>,
                gawk <!nocheck>,
+               fdisk <!nocheck>,
 
 Package: systemd
 Architecture: linux-any
@@ -71,6 +76,10 @@ Recommends: default-dbus-system-bus | dbus-system-bus,
             networkd-dispatcher,
             systemd-timesyncd | time-daemon,
 Suggests: systemd-container,
+          libfido2-1,
+          libtss2-esys-3.0.2-0,
+          libtss2-mu0,
+          libtss2-rc0,
           policykit-1
 Pre-Depends: ${shlibs:Pre-Depends},
              ${misc:Pre-Depends}
@@ -342,6 +351,7 @@ Depends: ${shlibs:Depends},
          util-linux (>= 2.27.1),
          s390-tools (>> 1.6.2) [s390],
 Conflicts: hal
+Recommends: systemd-hwe-hwdb,
 Breaks: systemd (<< ${binary:Version}),
 Description: /dev/ and hotplug management daemon
  udev is a daemon which dynamically creates and removes device nodes from
@@ -442,3 +452,15 @@ Description: Userspace out-of-memory (OOM) killer
  systemd-oomd is a system service that uses cgroups-v2 and
  pressure stall information (PSI) to monitor and take action on
  processes before an OOM occurs in kernel space.
+
+Package: systemd-repart
+Section: admin
+Architecture: linux-any
+Priority: optional
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         systemd (= ${binary:Version}),
+Description: Provides the systemd-repart utility
+ systemd-repart is a configuration-driven system partitioning tool. It follows
+ the Discoverable Partitions Specification and provides support for encryption
+ and dm-verity among other things.
