@@ -1,0 +1,23 @@
+[Unit]
+ConditionKernelCommandLine=snapd_recovery_mode=run
+Description=Reload model
+
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+
+DefaultDependencies=no
+
+Requires=run-mnt-data.mount
+After=run-mnt-data.mount
+Requires=run-mnt-ubuntu\x2dboot.mount
+After=run-mnt-ubuntu\x2dboot.mount
+
+After=run-mnt-ubuntu\x2dseed.mount
+After=sysinit.target
+After=tmp.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStartPre=-systemctl daemon-reload
+ExecStart=-systemctl --no-block start initrd-root-fs.target

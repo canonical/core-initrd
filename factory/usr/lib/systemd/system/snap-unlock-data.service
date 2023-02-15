@@ -1,0 +1,19 @@
+[Unit]
+ConditionKernelCommandLine=snapd_recovery_mode=run
+Description=Unlock data partition
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+DefaultDependencies=no
+
+After=snap-measure-model.service
+Requires=snap-measure-model.service
+RequiresMountsFor=/run/mnt/ubuntu-boot
+BindsTo=dev-ubuntu-data\x2dluks.device
+After=dev-ubuntu-data\x2dluks.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/lib/snapd/snap-bootstrap unlock-data
+StandardOutput=journal+console
+StandardError=journal+console

@@ -1,0 +1,18 @@
+[Unit]
+ConditionKernelCommandLine=snapd_recovery_mode=run
+ConditionPathIsEncrypted=/run/mnt/data
+Description=Compare data and save partitions
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+DefaultDependencies=no
+
+After=reload-model.service
+After=run-mnt-ubuntu\x2dsave.mount
+After=run-mnt-data.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/lib/snapd/snap-bootstrap compare-data-save
+StandardOutput=journal+console
+StandardError=journal+console

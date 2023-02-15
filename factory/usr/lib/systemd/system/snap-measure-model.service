@@ -1,0 +1,18 @@
+[Unit]
+ConditionKernelCommandLine=snapd_recovery_mode=run
+Description=Measure the model
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+DefaultDependencies=no
+
+After=snap-measure-epoch.service
+Requires=snap-measure-epoch.service
+After=run-mnt-ubuntu\x2dboot.mount
+Requires=run-mnt-ubuntu\x2dboot.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/lib/snapd/snap-bootstrap measure-model
+StandardOutput=journal+console
+StandardError=journal+console

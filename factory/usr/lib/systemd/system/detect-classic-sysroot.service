@@ -1,4 +1,5 @@
 [Unit]
+ConditionKernelCommandLine=!snapd_recovery_mode=run
 Description=Detect Ubuntu classic sysroot
 DefaultDependencies=no
 Before=initrd-root-device.target

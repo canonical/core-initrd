@@ -1,0 +1,13 @@
+[Unit]
+ConditionKernelCommandLine=snapd_recovery_mode=run
+Description=Measure the epoch
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/lib/snapd/snap-bootstrap measure-epoch
+StandardOutput=journal+console
+StandardError=journal+console

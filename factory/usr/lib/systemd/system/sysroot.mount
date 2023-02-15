@@ -8,6 +8,9 @@ After=detect-classic-sysroot.service
 Wants=detect-classic-sysroot.service
 After=run-mnt-base.mount
 After=snap-initramfs-mounts.service
+After=reload-model.service
+After=run-mnt-base.mount
+After=run-mnt-data.mount
 
 AssertPathIsSymbolicLink=/run/mnt/sysroot
 
