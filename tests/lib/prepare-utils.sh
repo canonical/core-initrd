@@ -116,6 +116,11 @@ start_snapd_core_vm() {
 
 install_core_initrd_deps() {
     local project_dir="$1"
+    if [ -n "${2-}" ]; then
+        snapd_deb="$(realpath "$2")"
+    else
+        snapd_deb=snapd
+    fi
 
     # needed for dracut which is a build-dep of ubuntu-core-initramfs
     # and for the version of snapd here which we want to use to pull snap-bootstrap
@@ -126,7 +131,9 @@ install_core_initrd_deps() {
 
     # these are already installed in the lxd image which speeds things up, but they
     # are missing in qemu and google images.
-    sudo DEBIAN_FRONTEND=noninteractive apt install initramfs-tools-core psmisc fdisk snapd mtools ovmf qemu-system-x86 sshpass whois openssh-server -yqq
+    sudo DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends initramfs-tools-core psmisc fdisk mtools ovmf qemu-system-x86 sshpass whois openssh-server -yqq
+
+    sudo DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends --allow-downgrades "${snapd_deb}" -yqq
 
     # use the snapd snap explicitly
     # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
