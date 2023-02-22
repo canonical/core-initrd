@@ -112,7 +112,7 @@ jobs:
         with:
           repository: 'valentindavid/snapd'
           path: snapd
-          ref: 'valentindavid/udev-scan-disk'
+          ref: 'valentindavid/split-snap-bootstrap'
       - uses: actions/download-artifact@v2
         with:
           name: snapd
