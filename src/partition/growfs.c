@@ -14,6 +14,7 @@
 #include "btrfs-util.h"
 #include "cryptsetup-util.h"
 #include "device-nodes.h"
+#include "devnum-util.h"
 #include "dissect-image.h"
 #include "escape.h"
 #include "fd-util.h"
@@ -165,7 +166,7 @@ static int parse_argv(int argc, char *argv[]) {
         assert(argv);
 
         while ((c = getopt_long(argc, argv, "hn", options, NULL)) >= 0)
-                switch(c) {
+                switch (c) {
                 case 'h':
                         return help();
 
@@ -180,7 +181,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         if (optind + 1 != argc)
@@ -197,7 +198,6 @@ static int run(int argc, char *argv[]) {
         _cleanup_close_ int mountfd = -1, devfd = -1;
         _cleanup_free_ char *devpath = NULL;
         uint64_t size, newsize;
-        char fb[FORMAT_BYTES_MAX];
         dev_t devno;
         int r;
 
@@ -223,7 +223,7 @@ static int run(int argc, char *argv[]) {
 
         r = maybe_resize_underlying_device(arg_target, devno);
         if (r < 0)
-                return r;
+                log_warning_errno(r, "Unable to resize underlying device of \"%s\", proceeding anyway: %m", arg_target);
 
         mountfd = open(arg_target, O_RDONLY|O_CLOEXEC);
         if (mountfd < 0)
@@ -241,6 +241,10 @@ static int run(int argc, char *argv[]) {
                 return log_error_errno(errno, "Failed to query size of \"%s\": %m", devpath);
 
         log_debug("Resizing \"%s\" to %"PRIu64" bytes...", arg_target, size);
+
+        if (arg_dry_run)
+                return 0;
+
         r = resize_fs(mountfd, size, &newsize);
         if (r < 0)
                 return log_error_errno(r, "Failed to resize \"%s\" to %"PRIu64" bytes: %m",
@@ -248,11 +252,11 @@ static int run(int argc, char *argv[]) {
         if (newsize == size)
                 log_info("Successfully resized \"%s\" to %s bytes.",
                          arg_target,
-                         format_bytes(fb, sizeof fb, newsize));
+                         FORMAT_BYTES(newsize));
         else
                 log_info("Successfully resized \"%s\" to %s bytes (%"PRIu64" bytes lost due to blocksize).",
                          arg_target,
-                         format_bytes(fb, sizeof fb, newsize),
+                         FORMAT_BYTES(newsize),
                          size - newsize);
         return 0;
 }

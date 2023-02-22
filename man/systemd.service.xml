@@ -50,15 +50,11 @@
     which configure resource control settings for the processes of the
     service.</para>
 
-    <para>If a service is requested under a certain name but no unit
-    configuration file is found, systemd looks for a SysV init script
-    by the same name (with the <filename>.service</filename> suffix
-    removed) and dynamically creates a service unit from that script.
-    This is useful for compatibility with SysV. Note that this
-    compatibility is quite comprehensive but not 100%. For details
-    about the incompatibilities, see the <ulink
-    url="https://www.freedesktop.org/wiki/Software/systemd/Incompatibilities">Incompatibilities
-    with SysV</ulink> document.</para>
+    <para>If SysV init compat is enabled, systemd automatically creates service units that wrap SysV init
+    scripts (the service name is the same as the name of the script, with a <literal>.service</literal>
+    suffix added); see
+    <citerefentry><refentrytitle>systemd-sysv-generator</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+    </para>
 
     <para>The <citerefentry><refentrytitle>systemd-run</refentrytitle><manvolnum>1</manvolnum></citerefentry>
     command allows creating <filename>.service</filename> and <filename>.scope</filename> units dynamically
@@ -138,7 +134,11 @@
   <refsect1>
     <title>Options</title>
 
-    <para>Service files must include a [Service]
+    <para>Service unit files may include [Unit] and [Install] sections, which are described in
+    <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>.
+    </para>
+
+    <para>Service unit files must include a [Service]
     section, which carries information about the service and the
     process it supervises. A number of options that may be used in
     this section are shared with other unit types. These options are
@@ -252,6 +252,31 @@
           initialization to complete. It is hence recommended not to needlessly use any types other than
           <option>simple</option>. (Also note it is generally not recommended to use <option>idle</option> or
           <option>oneshot</option> for long-running services.)</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>ExitType=</varname></term>
+
+        <listitem>
+          <para>Specifies when the manager should consider the service to be finished. One of <option>main</option> or
+          <option>cgroup</option>:</para>
+
+          <itemizedlist>
+            <listitem><para>If set to <option>main</option> (the default), the service manager
+            will consider the unit stopped when the main process, which is determined according to the
+            <varname>Type=</varname>, exits. Consequently, it cannot be used with
+            <varname>Type=</varname><option>oneshot</option>.</para></listitem>
+
+            <listitem><para>If set to <option>cgroup</option>, the service will be considered running as long as at
+            least one process in the cgroup has not exited.</para></listitem>
+          </itemizedlist>
+
+          <para>It is generally recommended to use <varname>ExitType=</varname><option>main</option> when a service has
+          a known forking model and a main process can reliably be determined. <varname>ExitType=</varname>
+          <option>cgroup</option> is meant for applications whose forking model is not known ahead of time and which
+          might not have a specific main process. It is well suited for transient or automatically generated services,
+          such as graphical applications inside of a desktop environment.</para>
         </listitem>
       </varlistentry>
 
@@ -696,6 +721,15 @@
       </varlistentry>
 
       <varlistentry>
+        <term><varname>RuntimeRandomizedExtraSec=</varname></term>
+
+        <listitem><para>This option modifies <varname>RuntimeMaxSec=</varname> by increasing the maximum runtime by an
+        evenly distributed duration between 0 and the specified value (in seconds). If <varname>RuntimeMaxSec=</varname> is
+        unspecified, then this feature will be disabled.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><varname>WatchdogSec=</varname></term>
         <listitem><para>Configures the watchdog timeout for a service.
         The watchdog is activated when the start-up is completed. The
@@ -1089,15 +1123,25 @@
       <varlistentry>
         <term><varname>OOMPolicy=</varname></term>
 
-        <listitem><para>Configure the Out-Of-Memory (OOM) killer policy. On Linux, when memory becomes scarce
-        the kernel might decide to kill a running process in order to free up memory and reduce memory
+        <listitem><para>Configure the out-of-memory (OOM) kernel killer policy. Note that the userspace OOM
+        killer
+        <citerefentry><refentrytitle>systemd-oomd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+        is a more flexible solution that aims to prevent out-of-memory situations for the userspace, not just
+        the kernel.</para>
+
+        <para>On Linux, when memory becomes scarce to the point that the kernel has trouble allocating memory
+        for itself, it might decide to kill a running process in order to free up memory and reduce memory
         pressure. This setting takes one of <constant>continue</constant>, <constant>stop</constant> or
         <constant>kill</constant>. If set to <constant>continue</constant> and a process of the service is
         killed by the kernel's OOM killer this is logged but the service continues running. If set to
         <constant>stop</constant> the event is logged but the service is terminated cleanly by the service
         manager. If set to <constant>kill</constant> and one of the service's processes is killed by the OOM
-        killer the kernel is instructed to kill all remaining processes of the service, too. Defaults to the
-        setting <varname>DefaultOOMPolicy=</varname> in
+        killer the kernel is instructed to kill all remaining processes of the service too, by setting the
+        <filename>memory.oom.group</filename> attribute to <constant>1</constant>; also see <ulink
+        url="https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html">kernel documentation</ulink>.
+        </para>
+
+        <para>Defaults to the setting <varname>DefaultOOMPolicy=</varname> in
         <citerefentry><refentrytitle>systemd-system.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>
         is set to, except for services where <varname>Delegate=</varname> is turned on, where it defaults to
         <constant>continue</constant>.</para>
@@ -1106,13 +1150,18 @@
         shall be considered preferred or less preferred candidates for process termination by the Linux OOM
         killer logic. See
         <citerefentry><refentrytitle>systemd.exec</refentrytitle><manvolnum>5</manvolnum></citerefentry> for
-        details.</para></listitem>
+        details.</para>
+
+        <para>This setting also applies to <command>systemd-oomd</command>, similar to the kernel OOM kills
+        this setting determines the state of the service after <command>systemd-oomd</command> kills a cgroup
+        associated with the service.</para></listitem>
       </varlistentry>
 
     </variablelist>
 
-    <para>Check
-    <citerefentry><refentrytitle>systemd.exec</refentrytitle><manvolnum>5</manvolnum></citerefentry> and
+    <para id='shared-unit-options'>Check
+    <citerefentry><refentrytitle>systemd.unit</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
+    <citerefentry><refentrytitle>systemd.exec</refentrytitle><manvolnum>5</manvolnum></citerefentry>, and
     <citerefentry><refentrytitle>systemd.kill</refentrytitle><manvolnum>5</manvolnum></citerefentry> for more
     settings.</para>
   </refsect1>

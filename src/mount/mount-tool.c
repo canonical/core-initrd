@@ -9,6 +9,7 @@
 #include "bus-locator.h"
 #include "bus-unit-util.h"
 #include "bus-wait-for-jobs.h"
+#include "chase-symlinks.h"
 #include "device-util.h"
 #include "dirent-util.h"
 #include "escape.h"
@@ -329,7 +330,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         if (arg_user)
@@ -776,7 +777,6 @@ static int find_mount_points(const char *what, char ***list) {
 
 static int find_loop_device(const char *backing_file, char **loop_dev) {
         _cleanup_closedir_ DIR *d = NULL;
-        struct dirent *de;
         _cleanup_free_ char *l = NULL;
 
         assert(backing_file);
@@ -1431,7 +1431,7 @@ static int list_devices(void) {
                 }
         }
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = table_print(table, NULL);
         if (r < 0)
@@ -1457,7 +1457,7 @@ static int run(int argc, char* argv[]) {
 
         r = bus_connect_transport_systemd(arg_transport, arg_host, arg_user, &bus);
         if (r < 0)
-                return bus_log_connect_error(r);
+                return bus_log_connect_error(r, arg_transport);
 
         if (arg_action == ACTION_UMOUNT)
                 return action_umount(bus, argc, argv);
@@ -1533,7 +1533,7 @@ static int run(int argc, char* argv[]) {
                 break;
 
         default:
-                assert_not_reached("Unexpected action.");
+                assert_not_reached();
         }
 
         return r;

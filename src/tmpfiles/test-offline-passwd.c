@@ -47,11 +47,11 @@ static int parse_argv(int argc, char *argv[]) {
 
         int c;
 
-        assert(argc >= 0);
-        assert(argv);
+        assert_se(argc >= 0);
+        assert_se(argv);
 
         while ((c = getopt_long(argc, argv, "r:", options, NULL)) >= 0)
-                switch(c) {
+                switch (c) {
                 case 'r':
                         arg_root = optarg;
                         break;
@@ -60,7 +60,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         return 0;

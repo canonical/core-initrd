@@ -6,40 +6,41 @@
 
 #include <fcntl.h>
 #include <getopt.h>
-#include <libfdisk.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
-
+#include "sd-device.h"
 #include "sd-id128.h"
 
 #include "alloc-util.h"
 #include "blkid-util.h"
 #include "blockdev-util.h"
 #include "btrfs-util.h"
+#include "chase-symlinks.h"
 #include "conf-files.h"
 #include "conf-parser.h"
 #include "cryptsetup-util.h"
 #include "def.h"
+#include "devnum-util.h"
 #include "dirent-util.h"
 #include "efivars.h"
 #include "errno-util.h"
 #include "fd-util.h"
+#include "fdisk-util.h"
 #include "fileio.h"
 #include "format-table.h"
 #include "format-util.h"
 #include "fs-util.h"
+#include "glyph-util.h"
 #include "gpt.h"
 #include "hexdecoct.h"
+#include "hmac.h"
 #include "id128-util.h"
 #include "json.h"
 #include "list.h"
-#include "locale-util.h"
 #include "loop-util.h"
 #include "main-func.h"
 #include "mkdir.h"
@@ -47,8 +48,7 @@
 #include "mount-util.h"
 #include "mountpoint-util.h"
 #include "parse-argument.h"
-#include "parse-util.h"
-#include "path-util.h"
+#include "parse-helpers.h"
 #include "pretty-print.h"
 #include "proc-cmdline.h"
 #include "process-util.h"
@@ -56,11 +56,11 @@
 #include "resize-fs.h"
 #include "sort-util.h"
 #include "specifier.h"
-#include "stat-util.h"
 #include "stdio-util.h"
 #include "string-table.h"
 #include "string-util.h"
 #include "strv.h"
+#include "sync-util.h"
 #include "terminal-util.h"
 #include "tpm2-util.h"
 #include "user-util.h"
@@ -195,6 +195,8 @@ struct Context {
         uint64_t start, end, total;
 
         struct fdisk_context *fdisk_context;
+        uint64_t sector_size;
+        uint64_t grain_size;
 
         sd_id128_t seed;
 };
@@ -371,7 +373,6 @@ static int context_add_free_area(
 
 static bool context_drop_one_priority(Context *context) {
         int32_t priority = 0;
-        Partition *p;
         bool exists = false;
 
         LIST_FOREACH(partitions, p, context->partitions) {
@@ -407,8 +408,11 @@ static bool context_drop_one_priority(Context *context) {
         return true;
 }
 
-static uint64_t partition_min_size(const Partition *p) {
+static uint64_t partition_min_size(Context *context, const Partition *p) {
         uint64_t sz;
+
+        assert(context);
+        assert(p);
 
         /* Calculate the disk space we really need at minimum for this partition. If the partition already
          * exists the current size is what we really need. If it doesn't exist yet refuse to allocate less
@@ -428,29 +432,34 @@ static uint64_t partition_min_size(const Partition *p) {
                 uint64_t d = 0;
 
                 if (p->encrypt != ENCRYPT_OFF)
-                        d += round_up_size(LUKS2_METADATA_SIZE, 4096);
+                        d += round_up_size(LUKS2_METADATA_SIZE, context->grain_size);
 
                 if (p->copy_blocks_size != UINT64_MAX)
-                        d += round_up_size(p->copy_blocks_size, 4096);
+                        d += round_up_size(p->copy_blocks_size, context->grain_size);
                 else if (p->format || p->encrypt != ENCRYPT_OFF) {
                         uint64_t f;
 
                         /* If we shall synthesize a file system, take minimal fs size into account (assumed to be 4K if not known) */
-                        f = p->format ? minimal_size_by_fs_name(p->format) : UINT64_MAX;
-                        d += f == UINT64_MAX ? 4096 : f;
+                        f = p->format ? round_up_size(minimal_size_by_fs_name(p->format), context->grain_size) : UINT64_MAX;
+                        d += f == UINT64_MAX ? context->grain_size : f;
                 }
 
                 if (d > sz)
                         sz = d;
         }
 
-        return MAX(p->size_min != UINT64_MAX ? p->size_min : DEFAULT_MIN_SIZE, sz);
+        return MAX(round_up_size(p->size_min != UINT64_MAX ? p->size_min : DEFAULT_MIN_SIZE, context->grain_size), sz);
 }
 
-static uint64_t partition_max_size(const Partition *p) {
+static uint64_t partition_max_size(const Context *context, const Partition *p) {
+        uint64_t sm;
+
         /* Calculate how large the partition may become at max. This is generally the configured maximum
          * size, except when it already exists and is larger than that. In that case it's the existing size,
          * since we never want to shrink partitions. */
+
+        assert(context);
+        assert(p);
 
         if (PARTITION_IS_FOREIGN(p)) {
                 /* Don't allow changing size of partitions not managed by us */
@@ -458,20 +467,25 @@ static uint64_t partition_max_size(const Partition *p) {
                 return p->current_size;
         }
 
-        if (p->current_size != UINT64_MAX)
-                return MAX(p->current_size, p->size_max);
+        sm = round_down_size(p->size_max, context->grain_size);
 
-        return p->size_max;
+        if (p->current_size != UINT64_MAX)
+                return MAX(p->current_size, sm);
+
+        return sm;
 }
 
-static uint64_t partition_min_size_with_padding(const Partition *p) {
+static uint64_t partition_min_size_with_padding(Context *context, const Partition *p) {
         uint64_t sz;
 
         /* Calculate the disk space we need for this partition plus any free space coming after it. This
          * takes user configured padding into account as well as any additional whitespace needed to align
          * the next partition to 4K again. */
 
-        sz = partition_min_size(p);
+        assert(context);
+        assert(p);
+
+        sz = partition_min_size(context, p);
 
         if (p->padding_min != UINT64_MAX)
                 sz += p->padding_min;
@@ -479,11 +493,11 @@ static uint64_t partition_min_size_with_padding(const Partition *p) {
         if (PARTITION_EXISTS(p)) {
                 /* If the partition wasn't aligned, add extra space so that any we might add will be aligned */
                 assert(p->offset != UINT64_MAX);
-                return round_up_size(p->offset + sz, 4096) - p->offset;
+                return round_up_size(p->offset + sz, context->grain_size) - p->offset;
         }
 
         /* If this is a new partition we'll place it aligned, hence we just need to round up the required size here */
-        return round_up_size(sz, 4096);
+        return round_up_size(sz, context->grain_size);
 }
 
 static uint64_t free_area_available(const FreeArea *a) {
@@ -495,47 +509,49 @@ static uint64_t free_area_available(const FreeArea *a) {
         return a->size - a->allocated;
 }
 
-static uint64_t free_area_available_for_new_partitions(const FreeArea *a) {
+static uint64_t free_area_available_for_new_partitions(Context *context, const FreeArea *a) {
         uint64_t avail;
+
+        assert(context);
+        assert(a);
 
         /* Similar to free_area_available(), but takes into account that the required size and padding of the
          * preceding partition is honoured. */
 
         avail = free_area_available(a);
         if (a->after) {
-                uint64_t need, space;
+                uint64_t need, space_end, new_end;
 
-                need = partition_min_size_with_padding(a->after);
+                need = partition_min_size_with_padding(context, a->after);
 
                 assert(a->after->offset != UINT64_MAX);
                 assert(a->after->current_size != UINT64_MAX);
 
-                space = round_up_size(a->after->offset + a->after->current_size, 4096) - a->after->offset + avail;
-                if (need >= space)
-                        return 0;
+                /* Calculate where the free area ends, based on the offset of the partition preceding it */
+                space_end = round_up_size(a->after->offset + a->after->current_size, context->grain_size) + avail;
 
-                return space - need;
+                /* Calculate where the partition would end when we give it as much as it needs */
+                new_end = round_up_size(a->after->offset + need, context->grain_size);
+
+                /* Calculate saturated difference of the two: that's how much we have free for other partitions */
+                return LESS_BY(space_end, new_end);
         }
 
         return avail;
 }
 
-static int free_area_compare(FreeArea *const *a, FreeArea *const*b) {
-        return CMP(free_area_available_for_new_partitions(*a),
-                   free_area_available_for_new_partitions(*b));
+static int free_area_compare(FreeArea *const *a, FreeArea *const*b, Context *context) {
+        assert(context);
+
+        return CMP(free_area_available_for_new_partitions(context, *a),
+                   free_area_available_for_new_partitions(context, *b));
 }
 
-static uint64_t charge_size(uint64_t total, uint64_t amount) {
-        uint64_t rounded;
-
-        assert(amount <= total);
-
+static uint64_t charge_size(Context *context, uint64_t total, uint64_t amount) {
+        assert(context);
         /* Subtract the specified amount from total, rounding up to multiple of 4K if there's room */
-        rounded = round_up_size(amount, 4096);
-        if (rounded >= total)
-                return 0;
-
-        return total - rounded;
+        assert(amount <= total);
+        return LESS_BY(total, round_up_size(amount, context->grain_size));
 }
 
 static uint64_t charge_weight(uint64_t total, uint64_t amount) {
@@ -543,14 +559,20 @@ static uint64_t charge_weight(uint64_t total, uint64_t amount) {
         return total - amount;
 }
 
-static bool context_allocate_partitions(Context *context) {
-        Partition *p;
-
+static bool context_allocate_partitions(Context *context, uint64_t *ret_largest_free_area) {
         assert(context);
 
-        /* A simple first-fit algorithm, assuming the array of free areas is sorted by size in decreasing
-         * order. */
+        /* Sort free areas by size, putting smallest first */
+        typesafe_qsort_r(context->free_areas, context->n_free_areas, free_area_compare, context);
 
+        /* In any case return size of the largest free area (i.e. not the size of all free areas
+         * combined!) */
+        if (ret_largest_free_area)
+                *ret_largest_free_area =
+                        context->n_free_areas == 0 ? 0 :
+                        free_area_available_for_new_partitions(context, context->free_areas[context->n_free_areas-1]);
+
+        /* A simple first-fit algorithm. We return true if we can fit the partitions in, otherwise false. */
         LIST_FOREACH(partitions, p, context->partitions) {
                 bool fits = false;
                 uint64_t required;
@@ -560,17 +582,14 @@ static bool context_allocate_partitions(Context *context) {
                 if (p->dropped || PARTITION_EXISTS(p))
                         continue;
 
-                /* Sort by size */
-                typesafe_qsort(context->free_areas, context->n_free_areas, free_area_compare);
-
                 /* How much do we need to fit? */
-                required = partition_min_size_with_padding(p);
-                assert(required % 4096 == 0);
+                required = partition_min_size_with_padding(context, p);
+                assert(required % context->grain_size == 0);
 
                 for (size_t i = 0; i < context->n_free_areas; i++) {
                         a = context->free_areas[i];
 
-                        if (free_area_available_for_new_partitions(a) >= required) {
+                        if (free_area_available_for_new_partitions(context, a) >= required) {
                                 fits = true;
                                 break;
                         }
@@ -591,7 +610,6 @@ static bool context_allocate_partitions(Context *context) {
 
 static int context_sum_weights(Context *context, FreeArea *a, uint64_t *ret) {
         uint64_t weight_sum = 0;
-        Partition *p;
 
         assert(context);
         assert(a);
@@ -644,6 +662,8 @@ typedef enum GrowPartitionPhase {
 
         /* The third phase: we distribute what remains among the remaining partitions, according to the weights */
         PHASE_DISTRIBUTE,
+
+        _GROW_PARTITION_PHASE_MAX,
 } GrowPartitionPhase;
 
 static int context_grow_partitions_phase(
@@ -653,7 +673,6 @@ static int context_grow_partitions_phase(
                 uint64_t *span,
                 uint64_t *weight_sum) {
 
-        Partition *p;
         int r;
 
         assert(context);
@@ -680,8 +699,8 @@ static int context_grow_partitions_phase(
                         if (r < 0)
                                 return r;
 
-                        rsz = partition_min_size(p);
-                        xsz = partition_max_size(p);
+                        rsz = partition_min_size(context, p);
+                        xsz = partition_max_size(context, p);
 
                         if (phase == PHASE_OVERCHARGE && rsz > share) {
                                 /* This partition needs more than its calculated share. Let's assign
@@ -709,13 +728,13 @@ static int context_grow_partitions_phase(
                                         /* Never change of foreign partitions (i.e. those we don't manage) */
                                         p->new_size = p->current_size;
                                 else
-                                        p->new_size = MAX(round_down_size(share, 4096), rsz);
+                                        p->new_size = MAX(round_down_size(share, context->grain_size), rsz);
 
                                 charge = true;
                         }
 
                         if (charge) {
-                                *span = charge_size(*span, p->new_size);
+                                *span = charge_size(context, *span, p->new_size);
                                 *weight_sum = charge_weight(*weight_sum, p->weight);
                         }
 
@@ -739,7 +758,7 @@ static int context_grow_partitions_phase(
                                 charge = try_again = true;
                         } else if (phase == PHASE_DISTRIBUTE) {
 
-                                p->new_padding = round_down_size(share, 4096);
+                                p->new_padding = round_down_size(share, context->grain_size);
                                 if (p->padding_min != UINT64_MAX && p->new_padding < p->padding_min)
                                         p->new_padding = p->padding_min;
 
@@ -747,7 +766,7 @@ static int context_grow_partitions_phase(
                         }
 
                         if (charge) {
-                                *span = charge_size(*span, p->new_padding);
+                                *span = charge_size(context, *span, p->new_padding);
                                 *weight_sum = charge_weight(*weight_sum, p->padding_weight);
                         }
 
@@ -776,23 +795,17 @@ static int context_grow_partitions_on_free_area(Context *context, FreeArea *a) {
                 assert(a->after->offset != UINT64_MAX);
                 assert(a->after->current_size != UINT64_MAX);
 
-                span += round_up_size(a->after->offset + a->after->current_size, 4096) - a->after->offset;
+                span += round_up_size(a->after->offset + a->after->current_size, context->grain_size) - a->after->offset;
         }
 
-        GrowPartitionPhase phase = PHASE_OVERCHARGE;
-        for (;;) {
+        for (GrowPartitionPhase phase = 0; phase < _GROW_PARTITION_PHASE_MAX;) {
                 r = context_grow_partitions_phase(context, a, phase, &span, &weight_sum);
                 if (r < 0)
                         return r;
                 if (r == 0) /* not done yet, re-run this phase */
                         continue;
 
-                if (phase == PHASE_OVERCHARGE)
-                        phase = PHASE_UNDERCHARGE;
-                else if (phase == PHASE_UNDERCHARGE)
-                        phase = PHASE_DISTRIBUTE;
-                else if (phase == PHASE_DISTRIBUTE)
-                        break;
+                phase++; /* got to next phase */
         }
 
         /* We still have space left over? Donate to preceding partition if we have one */
@@ -800,21 +813,21 @@ static int context_grow_partitions_on_free_area(Context *context, FreeArea *a) {
                 uint64_t m, xsz;
 
                 assert(a->after->new_size != UINT64_MAX);
-                m = a->after->new_size + span;
 
-                xsz = partition_max_size(a->after);
+                /* Calculate new size and align (but ensure this doesn't shrink the size) */
+                m = MAX(a->after->new_size, round_down_size(a->after->new_size + span, context->grain_size));
+
+                xsz = partition_max_size(context, a->after);
                 if (xsz != UINT64_MAX && m > xsz)
                         m = xsz;
 
-                span = charge_size(span, m - a->after->new_size);
+                span = charge_size(context, span, m - a->after->new_size);
                 a->after->new_size = m;
         }
 
         /* What? Even still some space left (maybe because there was no preceding partition, or it had a
          * size limit), then let's donate it to whoever wants it. */
-        if (span > 0) {
-                Partition *p;
-
+        if (span > 0)
                 LIST_FOREACH(partitions, p, context->partitions) {
                         uint64_t m, xsz;
 
@@ -825,19 +838,18 @@ static int context_grow_partitions_on_free_area(Context *context, FreeArea *a) {
                                 continue;
 
                         assert(p->new_size != UINT64_MAX);
-                        m = p->new_size + span;
+                        m = MAX(p->new_size, round_down_size(p->new_size + span, context->grain_size));
 
-                        xsz = partition_max_size(p);
+                        xsz = partition_max_size(context, p);
                         if (xsz != UINT64_MAX && m > xsz)
                                 m = xsz;
 
-                        span = charge_size(span, m - p->new_size);
+                        span = charge_size(context, span, m - p->new_size);
                         p->new_size = m;
 
                         if (span == 0)
                                 break;
                 }
-        }
 
         /* Yuck, still no one? Then make it padding */
         if (span > 0 && a->after) {
@@ -849,7 +861,6 @@ static int context_grow_partitions_on_free_area(Context *context, FreeArea *a) {
 }
 
 static int context_grow_partitions(Context *context) {
-        Partition *p;
         int r;
 
         assert(context);
@@ -883,7 +894,6 @@ static int context_grow_partitions(Context *context) {
 
 static void context_place_partitions(Context *context) {
         uint64_t partno = 0;
-        Partition *p;
 
         assert(context);
 
@@ -899,7 +909,8 @@ static void context_place_partitions(Context *context) {
 
         for (size_t i = 0; i < context->n_free_areas; i++) {
                 FreeArea *a = context->free_areas[i];
-                uint64_t start, left;
+                _unused_ uint64_t left;
+                uint64_t start;
 
                 if (a->after) {
                         assert(a->after->offset != UINT64_MAX);
@@ -910,7 +921,7 @@ static void context_place_partitions(Context *context) {
                 } else
                         start = context->start;
 
-                start = round_up_size(start, 4096);
+                start = round_up_size(start, context->grain_size);
                 left = a->size;
 
                 LIST_FOREACH(partitions, p, context->partitions) {
@@ -1383,7 +1394,6 @@ static int context_read_definitions(
 
         _cleanup_strv_free_ char **files = NULL;
         Partition *last = NULL;
-        char **f;
         int r;
 
         assert(context);
@@ -1418,15 +1428,12 @@ static int context_read_definitions(
         return 0;
 }
 
-DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct fdisk_context*, fdisk_unref_context, NULL);
-DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct fdisk_partition*, fdisk_unref_partition, NULL);
-DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct fdisk_parttype*, fdisk_unref_parttype, NULL);
-DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct fdisk_table*, fdisk_unref_table, NULL);
-
 static int determine_current_padding(
                 struct fdisk_context *c,
                 struct fdisk_table *t,
                 struct fdisk_partition *p,
+                uint64_t secsz,
+                uint64_t grainsz,
                 uint64_t *ret) {
 
         size_t n_partitions;
@@ -1440,8 +1447,8 @@ static int determine_current_padding(
                 return log_error_errno(SYNTHETIC_ERRNO(EIO), "Partition has no end!");
 
         offset = fdisk_partition_get_end(p);
-        assert(offset < UINT64_MAX / 512);
-        offset *= 512;
+        assert(offset < UINT64_MAX / secsz);
+        offset *= secsz;
 
         n_partitions = fdisk_table_get_nents(t);
         for (size_t i = 0; i < n_partitions; i++)  {
@@ -1459,8 +1466,8 @@ static int determine_current_padding(
                         continue;
 
                 start = fdisk_partition_get_start(q);
-                assert(start < UINT64_MAX / 512);
-                start *= 512;
+                assert(start < UINT64_MAX / secsz);
+                start *= secsz;
 
                 if (start >= offset && (next == UINT64_MAX || next > start))
                         next = start;
@@ -1472,22 +1479,18 @@ static int determine_current_padding(
                 assert(next < UINT64_MAX);
                 next++; /* The last LBA is one sector before the end */
 
-                assert(next < UINT64_MAX / 512);
-                next *= 512;
+                assert(next < UINT64_MAX / secsz);
+                next *= secsz;
 
                 if (offset > next)
                         return log_error_errno(SYNTHETIC_ERRNO(EIO), "Partition end beyond disk end.");
         }
 
         assert(next >= offset);
-        offset = round_up_size(offset, 4096);
-        next = round_down_size(next, 4096);
+        offset = round_up_size(offset, grainsz);
+        next = round_down_size(next, grainsz);
 
-        if (next >= offset) /* Check again, rounding might have fucked things up */
-                *ret = next - offset;
-        else
-                *ret = 0;
-
+        *ret = LESS_BY(next, offset); /* Saturated subtraction, rounding might have fucked things up */
         return 0;
 }
 
@@ -1498,11 +1501,11 @@ static int fdisk_ask_cb(struct fdisk_context *c, struct fdisk_ask *ask, void *da
         if (fdisk_ask_get_type(ask) != FDISK_ASKTYPE_STRING)
                 return -EINVAL;
 
-        ids = new(char, ID128_UUID_STRING_MAX);
+        ids = new(char, SD_ID128_UUID_STRING_MAX);
         if (!ids)
                 return -ENOMEM;
 
-        r = fdisk_ask_string_set_result(ask, id128_to_uuid_string(*(sd_id128_t*) data, ids));
+        r = fdisk_ask_string_set_result(ask, sd_id128_to_uuid_string(*(sd_id128_t*) data, ids));
         if (r < 0)
                 return r;
 
@@ -1526,7 +1529,7 @@ static int fdisk_set_disklabel_id_by_uuid(struct fdisk_context *c, sd_id128_t id
 
 static int derive_uuid(sd_id128_t base, const char *token, sd_id128_t *ret) {
         union {
-                unsigned char md[SHA256_DIGEST_LENGTH];
+                uint8_t md[SHA256_DIGEST_SIZE];
                 sd_id128_t id;
         } result;
 
@@ -1538,11 +1541,7 @@ static int derive_uuid(sd_id128_t base, const char *token, sd_id128_t *ret) {
          * machine ID). We use the machine ID as key (and not as cleartext!) of the HMAC operation since it's
          * the machine ID we don't want to leak. */
 
-        if (!HMAC(EVP_sha256(),
-                  &base, sizeof(base),
-                  (const unsigned char*) token, strlen(token),
-                  result.md, NULL))
-                return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE), "HMAC-SHA256 calculation failed.");
+        hmac_sha256(base.bytes, sizeof(base.bytes), token, strlen(token), result.md);
 
         /* Take the first half, mark it as v4 UUID */
         assert_cc(sizeof(result.md) == sizeof(result.id) * 2);
@@ -1562,6 +1561,8 @@ static int context_load_partition_table(
         bool from_scratch = false;
         sd_id128_t disk_uuid;
         size_t n_partitions;
+        unsigned long secsz;
+        uint64_t grainsz;
         int r;
 
         assert(context);
@@ -1581,12 +1582,8 @@ static int context_load_partition_table(
          * /proc/self/fd/ magic path if we have an existing fd. Open the original file otherwise. */
         if (*backing_fd < 0)
                 r = fdisk_assign_device(c, node, arg_dry_run);
-        else {
-                char procfs_path[STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(int)];
-                xsprintf(procfs_path, "/proc/self/fd/%i", *backing_fd);
-
-                r = fdisk_assign_device(c, procfs_path, arg_dry_run);
-        }
+        else
+                r = fdisk_assign_device(c, FORMAT_PROC_FD_PATH(*backing_fd), arg_dry_run);
         if (r == -EINVAL && arg_size_auto) {
                 struct stat st;
 
@@ -1600,8 +1597,12 @@ static int context_load_partition_table(
                 if (r < 0)
                         return log_error_errno(errno, "Failed to stat block device '%s': %m", node);
 
-                if (S_ISREG(st.st_mode) && st.st_size == 0)
+                if (S_ISREG(st.st_mode) && st.st_size == 0) {
+                        /* User the fallback values if we have no better idea */
+                        context->sector_size = 512;
+                        context->grain_size = 4096;
                         return /* from_scratch = */ true;
+                }
 
                 r = -EINVAL;
         }
@@ -1610,14 +1611,31 @@ static int context_load_partition_table(
 
         if (*backing_fd < 0) {
                 /* If we have no fd referencing the device yet, make a copy of the fd now, so that we have one */
-                *backing_fd = fcntl(fdisk_get_devfd(c), F_DUPFD_CLOEXEC, 3);
+                *backing_fd = fd_reopen(fdisk_get_devfd(c), O_RDONLY|O_CLOEXEC);
                 if (*backing_fd < 0)
-                        return log_error_errno(errno, "Failed to duplicate fdisk fd: %m");
+                        return log_error_errno(*backing_fd, "Failed to duplicate fdisk fd: %m");
         }
 
         /* Tell udev not to interfere while we are processing the device */
         if (flock(fdisk_get_devfd(c), arg_dry_run ? LOCK_SH : LOCK_EX) < 0)
                 return log_error_errno(errno, "Failed to lock block device: %m");
+
+        /* The offsets/sizes libfdisk returns to us will be in multiple of the sector size of the
+         * device. This is typically 512, and sometimes 4096. Let's query libfdisk once for it, and then use
+         * it for all our needs. Note that the values we use ourselves always are in bytes though, thus mean
+         * the same thing universally. Also note that regardless what kind of sector size is in use we'll
+         * place partitions at multiples of 4K. */
+        secsz = fdisk_get_sector_size(c);
+
+        /* Insist on a power of two, and that it's a multiple of 512, i.e. the traditional sector size. */
+        if (secsz < 512 || secsz != 1UL << log2u64(secsz))
+                return log_error_errno(errno, "Sector size %lu is not a power of two larger than 512? Refusing.", secsz);
+
+        /* Use at least 4K, and ensure it's a multiple of the sector size, regardless if that is smaller or
+         * larger */
+        grainsz = secsz < 4096 ? 4096 : secsz;
+
+        log_debug("Sector size of device is %lu bytes. Using grain size of %" PRIu64 ".", secsz, grainsz);
 
         switch (arg_empty) {
 
@@ -1700,7 +1718,7 @@ static int context_load_partition_table(
         n_partitions = fdisk_table_get_nents(t);
         for (size_t i = 0; i < n_partitions; i++)  {
                 _cleanup_free_ char *label_copy = NULL;
-                Partition *pp, *last = NULL;
+                Partition *last = NULL;
                 struct fdisk_partition *p;
                 struct fdisk_parttype *pt;
                 const char *pts, *ids, *label;
@@ -1749,12 +1767,12 @@ static int context_load_partition_table(
                 }
 
                 sz = fdisk_partition_get_size(p);
-                assert_se(sz <= UINT64_MAX/512);
-                sz *= 512;
+                assert(sz <= UINT64_MAX/secsz);
+                sz *= secsz;
 
                 start = fdisk_partition_get_start(p);
-                assert_se(start <= UINT64_MAX/512);
-                start *= 512;
+                assert(start <= UINT64_MAX/secsz);
+                start *= secsz;
 
                 partno = fdisk_partition_get_partno(p);
 
@@ -1779,7 +1797,7 @@ static int context_load_partition_table(
                                 pp->current_partition = p;
                                 fdisk_ref_partition(p);
 
-                                r = determine_current_padding(c, t, p, &pp->current_padding);
+                                r = determine_current_padding(c, t, p, secsz, grainsz, &pp->current_padding);
                                 if (r < 0)
                                         return r;
 
@@ -1812,7 +1830,7 @@ static int context_load_partition_table(
                         np->current_partition = p;
                         fdisk_ref_partition(p);
 
-                        r = determine_current_padding(c, t, p, &np->current_padding);
+                        r = determine_current_padding(c, t, p, secsz, grainsz, &np->current_padding);
                         if (r < 0)
                                 return r;
 
@@ -1829,26 +1847,26 @@ static int context_load_partition_table(
 
 add_initial_free_area:
         nsectors = fdisk_get_nsectors(c);
-        assert(nsectors <= UINT64_MAX/512);
-        nsectors *= 512;
+        assert(nsectors <= UINT64_MAX/secsz);
+        nsectors *= secsz;
 
         first_lba = fdisk_get_first_lba(c);
-        assert(first_lba <= UINT64_MAX/512);
-        first_lba *= 512;
+        assert(first_lba <= UINT64_MAX/secsz);
+        first_lba *= secsz;
 
         last_lba = fdisk_get_last_lba(c);
         assert(last_lba < UINT64_MAX);
         last_lba++;
-        assert(last_lba <= UINT64_MAX/512);
-        last_lba *= 512;
+        assert(last_lba <= UINT64_MAX/secsz);
+        last_lba *= secsz;
 
         assert(last_lba >= first_lba);
 
         if (left_boundary == UINT64_MAX) {
                 /* No partitions at all? Then the whole disk is up for grabs. */
 
-                first_lba = round_up_size(first_lba, 4096);
-                last_lba = round_down_size(last_lba, 4096);
+                first_lba = round_up_size(first_lba, grainsz);
+                last_lba = round_down_size(last_lba, grainsz);
 
                 if (last_lba > first_lba) {
                         r = context_add_free_area(context, last_lba - first_lba, NULL);
@@ -1859,9 +1877,9 @@ add_initial_free_area:
                 /* Add space left of first partition */
                 assert(left_boundary >= first_lba);
 
-                first_lba = round_up_size(first_lba, 4096);
-                left_boundary = round_down_size(left_boundary, 4096);
-                last_lba = round_down_size(last_lba, 4096);
+                first_lba = round_up_size(first_lba, grainsz);
+                left_boundary = round_down_size(left_boundary, grainsz);
+                last_lba = round_down_size(last_lba, grainsz);
 
                 if (left_boundary > first_lba) {
                         r = context_add_free_area(context, left_boundary - first_lba, NULL);
@@ -1873,17 +1891,17 @@ add_initial_free_area:
         context->start = first_lba;
         context->end = last_lba;
         context->total = nsectors;
+        context->sector_size = secsz;
+        context->grain_size = grainsz;
         context->fdisk_context = TAKE_PTR(c);
 
         return from_scratch;
 }
 
 static void context_unload_partition_table(Context *context) {
-        Partition *p, *next;
-
         assert(context);
 
-        LIST_FOREACH_SAFE(partitions, p, next, context->partitions) {
+        LIST_FOREACH(partitions, p, context->partitions) {
 
                 /* Entirely remove partitions that have no configuration */
                 if (PARTITION_IS_FOREIGN(p)) {
@@ -1932,29 +1950,24 @@ static void context_unload_partition_table(Context *context) {
 }
 
 static int format_size_change(uint64_t from, uint64_t to, char **ret) {
-        char format_buffer1[FORMAT_BYTES_MAX], format_buffer2[FORMAT_BYTES_MAX], *buf;
-
-        if (from != UINT64_MAX)
-                format_bytes(format_buffer1, sizeof(format_buffer1), from);
-        if (to != UINT64_MAX)
-                format_bytes(format_buffer2, sizeof(format_buffer2), to);
+        char *t;
 
         if (from != UINT64_MAX) {
                 if (from == to || to == UINT64_MAX)
-                        buf = strdup(format_buffer1);
+                        t = strdup(FORMAT_BYTES(from));
                 else
-                        buf = strjoin(format_buffer1, " ", special_glyph(SPECIAL_GLYPH_ARROW), " ", format_buffer2);
+                        t = strjoin(FORMAT_BYTES(from), " ", special_glyph(SPECIAL_GLYPH_ARROW_RIGHT), " ", FORMAT_BYTES(to));
         } else if (to != UINT64_MAX)
-                buf = strjoin(special_glyph(SPECIAL_GLYPH_ARROW), " ", format_buffer2);
+                t = strjoin(special_glyph(SPECIAL_GLYPH_ARROW_RIGHT), " ", FORMAT_BYTES(to));
         else {
                 *ret = NULL;
                 return 0;
         }
 
-        if (!buf)
+        if (!t)
                 return log_oom();
 
-        *ret = TAKE_PTR(buf);
+        *ret = t;
         return 1;
 }
 
@@ -1973,7 +1986,6 @@ static const char *partition_label(const Partition *p) {
 static int context_dump_partitions(Context *context, const char *node) {
         _cleanup_(table_unrefp) Table *t = NULL;
         uint64_t sum_padding = 0, sum_size = 0;
-        Partition *p;
         int r;
 
         if ((arg_json_format_flags & JSON_FORMAT_OFF) && context->n_partitions == 0) {
@@ -2004,7 +2016,7 @@ static int context_dump_partitions(Context *context, const char *node) {
 
         LIST_FOREACH(partitions, p, context->partitions) {
                 _cleanup_free_ char *size_change = NULL, *padding_change = NULL, *partname = NULL;
-                char uuid_buffer[ID128_UUID_STRING_MAX];
+                char uuid_buffer[SD_ID128_UUID_STRING_MAX];
                 const char *label, *activity = NULL;
 
                 if (p->dropped)
@@ -2051,11 +2063,10 @@ static int context_dump_partitions(Context *context, const char *node) {
         }
 
         if ((arg_json_format_flags & JSON_FORMAT_OFF) && (sum_padding > 0 || sum_size > 0)) {
-                char s[FORMAT_BYTES_MAX];
                 const char *a, *b;
 
-                a = strjoina(special_glyph(SPECIAL_GLYPH_SIGMA), " = ", format_bytes(s, sizeof(s), sum_size));
-                b = strjoina(special_glyph(SPECIAL_GLYPH_SIGMA), " = ", format_bytes(s, sizeof(s), sum_padding));
+                a = strjoina(special_glyph(SPECIAL_GLYPH_SIGMA), " = ", FORMAT_BYTES(sum_size));
+                b = strjoina(special_glyph(SPECIAL_GLYPH_SIGMA), " = ", FORMAT_BYTES(sum_padding));
 
                 r = table_add_many(
                                 t,
@@ -2123,7 +2134,6 @@ static void context_bar_char_process_partition(
 
 static int partition_hint(const Partition *p, const char *node, char **ret) {
         _cleanup_free_ char *buf = NULL;
-        char ids[ID128_UUID_STRING_MAX];
         const char *label;
         sd_id128_t id;
 
@@ -2152,7 +2162,7 @@ static int partition_hint(const Partition *p, const char *node, char **ret) {
         else
                 id = p->type_uuid;
 
-        buf = strdup(id128_to_uuid_string(id, ids));
+        buf = strdup(SD_ID128_TO_UUID_STRING(id));
 
 done:
         if (!buf)
@@ -2165,7 +2175,7 @@ done:
 static int context_dump_partition_bar(Context *context, const char *node) {
         _cleanup_free_ Partition **bar = NULL;
         _cleanup_free_ size_t *start_array = NULL;
-        Partition *p, *last = NULL;
+        Partition *last = NULL;
         bool z = false;
         size_t c, j = 0;
 
@@ -2276,7 +2286,7 @@ static int context_dump_partition_bar(Context *context, const char *node) {
 }
 
 static bool context_changed(const Context *context) {
-        Partition *p;
+        assert(context);
 
         LIST_FOREACH(partitions, p, context->partitions) {
                 if (p->dropped)
@@ -2384,7 +2394,7 @@ static int context_discard_range(
         if (S_ISBLK(st.st_mode)) {
                 uint64_t range[2], end;
 
-                range[0] = round_up_size(offset, 512);
+                range[0] = round_up_size(offset, context->sector_size);
 
                 if (offset > UINT64_MAX - size)
                         return -ERANGE;
@@ -2393,7 +2403,7 @@ static int context_discard_range(
                 if (end <= range[0])
                         return 0;
 
-                range[1] = round_down_size(end - range[0], 512);
+                range[1] = round_down_size(end - range[0], context->sector_size);
                 if (range[1] <= 0)
                         return 0;
 
@@ -2446,7 +2456,6 @@ static int context_discard_partition(Context *context, Partition *p) {
 
 static int context_discard_gap_after(Context *context, Partition *p) {
         uint64_t gap, next = UINT64_MAX;
-        Partition *q;
         int r;
 
         assert(context);
@@ -2504,7 +2513,6 @@ static int context_discard_gap_after(Context *context, Partition *p) {
 }
 
 static int context_wipe_and_discard(Context *context, bool from_scratch) {
-        Partition *p;
         int r;
 
         assert(context);
@@ -2543,6 +2551,7 @@ static int context_wipe_and_discard(Context *context, bool from_scratch) {
 }
 
 static int partition_encrypt(
+                Context *context,
                 Partition *p,
                 const char *node,
                 struct crypt_device **ret_cd,
@@ -2552,11 +2561,11 @@ static int partition_encrypt(
         _cleanup_(sym_crypt_freep) struct crypt_device *cd = NULL;
         _cleanup_(erase_and_freep) void *volume_key = NULL;
         _cleanup_free_ char *dm_name = NULL, *vol = NULL;
-        char suuid[ID128_UUID_STRING_MAX];
         size_t volume_key_size = 256 / 8;
         sd_id128_t uuid;
         int r;
 
+        assert(context);
         assert(p);
         assert(p->encrypt != ENCRYPT_OFF);
 
@@ -2599,12 +2608,12 @@ static int partition_encrypt(
                          CRYPT_LUKS2,
                          "aes",
                          "xts-plain64",
-                         id128_to_uuid_string(uuid, suuid),
+                         SD_ID128_TO_UUID_STRING(uuid),
                          volume_key,
                          volume_key_size,
                          &(struct crypt_params_luks2) {
                                  .label = strempty(p->new_label),
-                                 .sector_size = 512U,
+                                 .sector_size = context->sector_size,
                          });
         if (r < 0)
                 return log_error_errno(r, "Failed to LUKS2 format future partition: %m");
@@ -2628,9 +2637,10 @@ static int partition_encrypt(
                 _cleanup_(erase_and_freep) void *secret = NULL;
                 _cleanup_free_ void *blob = NULL, *hash = NULL;
                 size_t secret_size, blob_size, hash_size;
+                uint16_t pcr_bank, primary_alg;
                 int keyslot;
 
-                r = tpm2_seal(arg_tpm2_device, arg_tpm2_pcr_mask, &secret, &secret_size, &blob, &blob_size, &hash, &hash_size);
+                r = tpm2_seal(arg_tpm2_device, arg_tpm2_pcr_mask, NULL, &secret, &secret_size, &blob, &blob_size, &hash, &hash_size, &pcr_bank, &primary_alg);
                 if (r < 0)
                         return log_error_errno(r, "Failed to seal to TPM2: %m");
 
@@ -2652,7 +2662,7 @@ static int partition_encrypt(
                 if (keyslot < 0)
                         return log_error_errno(keyslot, "Failed to add new TPM2 key to %s: %m", node);
 
-                r = tpm2_make_luks2_json(keyslot, arg_tpm2_pcr_mask, blob, blob_size, hash, hash_size, &v);
+                r = tpm2_make_luks2_json(keyslot, arg_tpm2_pcr_mask, pcr_bank, primary_alg, blob, blob_size, hash, hash_size, 0, &v);
                 if (r < 0)
                         return log_error_errno(r, "Failed to prepare TPM2 JSON token object: %m");
 
@@ -2720,7 +2730,6 @@ static int deactivate_luks(struct crypt_device *cd, const char *node) {
 }
 
 static int context_copy_blocks(Context *context) {
-        Partition *p;
         int whole_fd = -1, r;
 
         assert(context);
@@ -2732,7 +2741,6 @@ static int context_copy_blocks(Context *context) {
                 _cleanup_(loop_device_unrefp) LoopDevice *d = NULL;
                 _cleanup_free_ char *encrypted = NULL;
                 _cleanup_close_ int encrypted_dev_fd = -1;
-                char buf[FORMAT_BYTES_MAX];
                 int target_fd;
 
                 if (p->copy_blocks_fd < 0)
@@ -2760,7 +2768,7 @@ static int context_copy_blocks(Context *context) {
                         if (r < 0)
                                 return log_error_errno(r, "Failed to lock loopback device: %m");
 
-                        r = partition_encrypt(p, d->node, &cd, &encrypted, &encrypted_dev_fd);
+                        r = partition_encrypt(context, p, d->node, &cd, &encrypted, &encrypted_dev_fd);
                         if (r < 0)
                                 return log_error_errno(r, "Failed to encrypt device: %m");
 
@@ -2775,7 +2783,8 @@ static int context_copy_blocks(Context *context) {
                         target_fd = whole_fd;
                 }
 
-                log_info("Copying in '%s' (%s) on block level into future partition %" PRIu64 ".", p->copy_blocks_path, format_bytes(buf, sizeof(buf), p->copy_blocks_size), p->partno);
+                log_info("Copying in '%s' (%s) on block level into future partition %" PRIu64 ".",
+                         p->copy_blocks_path, FORMAT_BYTES(p->copy_blocks_size), p->partno);
 
                 r = copy_bytes_full(p->copy_blocks_fd, target_fd, p->copy_blocks_size, 0, NULL, NULL, NULL, NULL);
                 if (r < 0)
@@ -2806,7 +2815,6 @@ static int context_copy_blocks(Context *context) {
 }
 
 static int do_copy_files(Partition *p, const char *fs) {
-        char **source, **target;
         int r;
 
         assert(p);
@@ -2852,13 +2860,13 @@ static int do_copy_files(Partition *p, const char *fs) {
                                                 sfd, ".",
                                                 pfd, fn,
                                                 UID_INVALID, GID_INVALID,
-                                                COPY_REFLINK|COPY_MERGE|COPY_REPLACE|COPY_SIGINT|COPY_HARDLINKS);
+                                                COPY_REFLINK|COPY_MERGE|COPY_REPLACE|COPY_SIGINT|COPY_HARDLINKS|COPY_ALL_XATTRS);
                         } else
                                 r = copy_tree_at(
                                                 sfd, ".",
                                                 tfd, ".",
                                                 UID_INVALID, GID_INVALID,
-                                                COPY_REFLINK|COPY_MERGE|COPY_REPLACE|COPY_SIGINT|COPY_HARDLINKS);
+                                                COPY_REFLINK|COPY_MERGE|COPY_REPLACE|COPY_SIGINT|COPY_HARDLINKS|COPY_ALL_XATTRS);
                         if (r < 0)
                                 return log_error_errno(r, "Failed to copy '%s' to '%s%s': %m", *source, strempty(arg_root), *target);
                 } else {
@@ -2893,7 +2901,7 @@ static int do_copy_files(Partition *p, const char *fs) {
                         if (r < 0)
                                 return log_error_errno(r, "Failed to copy '%s' to '%s%s': %m", *source, strempty(arg_root), *target);
 
-                        (void) copy_xattr(sfd, tfd);
+                        (void) copy_xattr(sfd, tfd, COPY_ALL_XATTRS);
                         (void) copy_access(sfd, tfd);
                         (void) copy_times(sfd, tfd, 0);
                 }
@@ -2903,7 +2911,6 @@ static int do_copy_files(Partition *p, const char *fs) {
 }
 
 static int do_make_directories(Partition *p, const char *fs) {
-        char **d;
         int r;
 
         assert(p);
@@ -2970,7 +2977,6 @@ static int partition_populate(Partition *p, const char *node) {
 }
 
 static int context_mkfs(Context *context) {
-        Partition *p;
         int fd = -1, r;
 
         assert(context);
@@ -3012,7 +3018,7 @@ static int context_mkfs(Context *context) {
                         return log_error_errno(r, "Failed to lock loopback device: %m");
 
                 if (p->encrypt != ENCRYPT_OFF) {
-                        r = partition_encrypt(p, d->node, &cd, &encrypted, &encrypted_dev_fd);
+                        r = partition_encrypt(context, p, d->node, &cd, &encrypted, &encrypted_dev_fd);
                         if (r < 0)
                                 return log_error_errno(r, "Failed to encrypt device: %m");
 
@@ -3083,12 +3089,11 @@ static int partition_acquire_uuid(Context *context, Partition *p, sd_id128_t *re
                 uint64_t counter;
         } _packed_  plaintext = {};
         union {
-                unsigned char md[SHA256_DIGEST_LENGTH];
+                uint8_t md[SHA256_DIGEST_SIZE];
                 sd_id128_t id;
         } result;
 
         uint64_t k = 0;
-        Partition *q;
         int r;
 
         assert(context);
@@ -3127,11 +3132,10 @@ static int partition_acquire_uuid(Context *context, Partition *p, sd_id128_t *re
         plaintext.type_uuid = p->type_uuid;
         plaintext.counter = htole64(k);
 
-        if (!HMAC(EVP_sha256(),
-                  &context->seed, sizeof(context->seed),
-                  (const unsigned char*) &plaintext, k == 0 ? sizeof(sd_id128_t) : sizeof(plaintext),
-                  result.md, NULL))
-                return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE), "SHA256 calculation failed.");
+        hmac_sha256(context->seed.bytes, sizeof(context->seed.bytes),
+                    &plaintext,
+                    k == 0 ? sizeof(sd_id128_t) : sizeof(plaintext),
+                    result.md);
 
         /* Take the first half, mark it as v4 UUID */
         assert_cc(sizeof(result.md) == sizeof(result.id) * 2);
@@ -3173,7 +3177,6 @@ static int partition_acquire_label(Context *context, Partition *p, char **ret) {
         for (;;) {
                 const char *ll = label ?: prefix;
                 bool retry = false;
-                Partition *q;
 
                 LIST_FOREACH(partitions, q, context->partitions) {
                         if (p == q)
@@ -3205,7 +3208,6 @@ static int partition_acquire_label(Context *context, Partition *p, char **ret) {
 }
 
 static int context_acquire_partition_uuids_and_labels(Context *context) {
-        Partition *p;
         int r;
 
         assert(context);
@@ -3279,7 +3281,7 @@ static uint64_t partition_merge_flags(Partition *p) {
                 if (gpt_partition_type_knows_no_auto(p->type_uuid))
                         SET_FLAG(f, GPT_FLAG_NO_AUTO, p->no_auto);
                 else {
-                        char buffer[ID128_UUID_STRING_MAX];
+                        char buffer[SD_ID128_UUID_STRING_MAX];
                         log_warning("Configured NoAuto=%s for partition type '%s' that doesn't support it, ignoring.",
                                     yes_no(p->no_auto),
                                     gpt_partition_type_uuid_to_string_harder(p->type_uuid, buffer));
@@ -3290,7 +3292,7 @@ static uint64_t partition_merge_flags(Partition *p) {
                 if (gpt_partition_type_knows_read_only(p->type_uuid))
                         SET_FLAG(f, GPT_FLAG_READ_ONLY, p->read_only);
                 else {
-                        char buffer[ID128_UUID_STRING_MAX];
+                        char buffer[SD_ID128_UUID_STRING_MAX];
                         log_warning("Configured ReadOnly=%s for partition type '%s' that doesn't support it, ignoring.",
                                     yes_no(p->read_only),
                                     gpt_partition_type_uuid_to_string_harder(p->type_uuid, buffer));
@@ -3301,7 +3303,7 @@ static uint64_t partition_merge_flags(Partition *p) {
                 if (gpt_partition_type_knows_growfs(p->type_uuid))
                         SET_FLAG(f, GPT_FLAG_GROWFS, p->growfs);
                 else {
-                        char buffer[ID128_UUID_STRING_MAX];
+                        char buffer[SD_ID128_UUID_STRING_MAX];
                         log_warning("Configured GrowFileSystem=%s for partition type '%s' that doesn't support it, ignoring.",
                                     yes_no(p->growfs),
                                     gpt_partition_type_uuid_to_string_harder(p->type_uuid, buffer));
@@ -3312,7 +3314,6 @@ static uint64_t partition_merge_flags(Partition *p) {
 }
 
 static int context_mangle_partitions(Context *context) {
-        Partition *p;
         int r;
 
         assert(context);
@@ -3332,13 +3333,13 @@ static int context_mangle_partitions(Context *context) {
 
                         if (p->new_size != p->current_size) {
                                 assert(p->new_size >= p->current_size);
-                                assert(p->new_size % 512 == 0);
+                                assert(p->new_size % context->sector_size == 0);
 
                                 r = fdisk_partition_size_explicit(p->current_partition, true);
                                 if (r < 0)
                                         return log_error_errno(r, "Failed to enable explicit sizing: %m");
 
-                                r = fdisk_partition_set_size(p->current_partition, p->new_size / 512);
+                                r = fdisk_partition_set_size(p->current_partition, p->new_size / context->sector_size);
                                 if (r < 0)
                                         return log_error_errno(r, "Failed to grow partition: %m");
 
@@ -3347,11 +3348,9 @@ static int context_mangle_partitions(Context *context) {
                         }
 
                         if (!sd_id128_equal(p->new_uuid, p->current_uuid)) {
-                                char buf[ID128_UUID_STRING_MAX];
-
                                 assert(!sd_id128_is_null(p->new_uuid));
 
-                                r = fdisk_partition_set_uuid(p->current_partition, id128_to_uuid_string(p->new_uuid, buf));
+                                r = fdisk_partition_set_uuid(p->current_partition, SD_ID128_TO_UUID_STRING(p->new_uuid));
                                 if (r < 0)
                                         return log_error_errno(r, "Failed to set partition UUID: %m");
 
@@ -3378,11 +3377,10 @@ static int context_mangle_partitions(Context *context) {
                 } else {
                         _cleanup_(fdisk_unref_partitionp) struct fdisk_partition *q = NULL;
                         _cleanup_(fdisk_unref_parttypep) struct fdisk_parttype *t = NULL;
-                        char ids[ID128_UUID_STRING_MAX];
 
                         assert(!p->new_partition);
-                        assert(p->offset % 512 == 0);
-                        assert(p->new_size % 512 == 0);
+                        assert(p->offset % context->sector_size == 0);
+                        assert(p->new_size % context->sector_size == 0);
                         assert(!sd_id128_is_null(p->new_uuid));
                         assert(p->new_label);
 
@@ -3390,7 +3388,7 @@ static int context_mangle_partitions(Context *context) {
                         if (!t)
                                 return log_oom();
 
-                        r = fdisk_parttype_set_typestr(t, id128_to_uuid_string(p->type_uuid, ids));
+                        r = fdisk_parttype_set_typestr(t, SD_ID128_TO_UUID_STRING(p->type_uuid));
                         if (r < 0)
                                 return log_error_errno(r, "Failed to initialize partition type: %m");
 
@@ -3406,11 +3404,11 @@ static int context_mangle_partitions(Context *context) {
                         if (r < 0)
                                 return log_error_errno(r, "Failed to enable explicit sizing: %m");
 
-                        r = fdisk_partition_set_start(q, p->offset / 512);
+                        r = fdisk_partition_set_start(q, p->offset / context->sector_size);
                         if (r < 0)
                                 return log_error_errno(r, "Failed to position partition: %m");
 
-                        r = fdisk_partition_set_size(q, p->new_size / 512);
+                        r = fdisk_partition_set_size(q, p->new_size / context->sector_size);
                         if (r < 0)
                                 return log_error_errno(r, "Failed to grow partition: %m");
 
@@ -3418,7 +3416,7 @@ static int context_mangle_partitions(Context *context) {
                         if (r < 0)
                                 return log_error_errno(r, "Failed to set partition number: %m");
 
-                        r = fdisk_partition_set_uuid(q, id128_to_uuid_string(p->new_uuid, ids));
+                        r = fdisk_partition_set_uuid(q, SD_ID128_TO_UUID_STRING(p->new_uuid));
                         if (r < 0)
                                 return log_error_errno(r, "Failed to set partition UUID: %m");
 
@@ -3582,7 +3580,6 @@ static int context_read_seed(Context *context, const char *root) {
 }
 
 static int context_factory_reset(Context *context, bool from_scratch) {
-        Partition *p;
         size_t n = 0;
         int r;
 
@@ -3631,8 +3628,6 @@ static int context_factory_reset(Context *context, bool from_scratch) {
 }
 
 static int context_can_factory_reset(Context *context) {
-        Partition *p;
-
         assert(context);
 
         LIST_FOREACH(partitions, p, context->partitions)
@@ -3649,14 +3644,13 @@ static int resolve_copy_blocks_auto_candidate(
                 sd_id128_t *ret_uuid) {
 
         _cleanup_(blkid_free_probep) blkid_probe b = NULL;
-        _cleanup_free_ char *p = NULL;
+        _cleanup_(sd_device_unrefp) sd_device *dev = NULL;
         _cleanup_close_ int fd = -1;
-        const char *pttype, *t;
+        const char *pttype, *t, *p;
         sd_id128_t pt_parsed, u;
         blkid_partition pp;
         dev_t whole_devno;
         blkid_partlist pl;
-        struct stat st;
         int r;
 
         /* Checks if the specified partition has the specified GPT type UUID, and is located on the specified
@@ -3679,21 +3673,19 @@ static int resolve_copy_blocks_auto_candidate(
                                 major(partition_devno), minor(partition_devno),
                                 major(restrict_devno), minor(restrict_devno));
 
-        r = device_path_make_major_minor(S_IFBLK, whole_devno, &p);
+        r = sd_device_new_from_devnum(&dev, 'b', whole_devno);
         if (r < 0)
-                return log_error_errno(r, "Failed to convert block device to device node path: %m");
+                return log_error_errno(r, "Failed to create sd-device for block device %u:%u: %m",
+                                       major(whole_devno), minor(whole_devno));
 
-        fd = open(p, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
+        r = sd_device_get_devname(dev, &p);
+        if (r < 0)
+                return log_error_errno(r, "Failed to get name of block device %u:%u: %m",
+                                       major(whole_devno), minor(whole_devno));
+
+        fd = sd_device_open(dev, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
         if (fd < 0)
-                return log_error_errno(r, "Failed to open '%s': %m", p);
-
-        if (fstat(fd, &st) < 0)
-                return log_error_errno(r, "Failed to stat '%s': %m", p);
-
-        if (!S_ISBLK(st.st_mode) || st.st_rdev != whole_devno)
-                return log_error_errno(
-                                SYNTHETIC_ERRNO(EPERM),
-                                "Opened and determined block device don't match, refusing.");
+                return log_error_errno(fd, "Failed to open block device %s: %m", p);
 
         b = blkid_new_probe();
         if (!b)
@@ -3811,7 +3803,7 @@ static int resolve_copy_blocks_auto(
                 sd_id128_t type_uuid,
                 const char *root,
                 dev_t restrict_devno,
-                char **ret_path,
+                dev_t *ret_devno,
                 sd_id128_t *ret_uuid) {
 
         const char *try1 = NULL, *try2 = NULL;
@@ -3820,8 +3812,6 @@ static int resolve_copy_blocks_auto(
         sd_id128_t found_uuid = SD_ID128_NULL;
         dev_t devno, found = 0;
         int r;
-
-        assert(ret_path);
 
         /* Enforce some security restrictions: CopyBlocks=auto should not be an avenue to get outside of the
          * --root=/--image= confinement. Specifically, refuse CopyBlocks= in combination with --root= at all,
@@ -3895,7 +3885,7 @@ static int resolve_copy_blocks_auto(
                         if (r < 0)
                                 return log_error_errno(r, "Failed to read %s: %m", q);
 
-                        r = parse_dev(t, &sl);
+                        r = parse_devnum(t, &sl);
                         if (r < 0) {
                                 log_debug_errno(r, "Failed to parse %s, ignoring: %m", q);
                                 continue;
@@ -3932,9 +3922,8 @@ static int resolve_copy_blocks_auto(
                 return log_error_errno(SYNTHETIC_ERRNO(ENXIO),
                                        "Unable to automatically discover suitable partition to copy blocks from.");
 
-        r = device_path_make_major_minor(S_IFBLK, found, ret_path);
-        if (r < 0)
-                return log_error_errno(r, "Failed to convert dev_t to device node path: %m");
+        if (ret_devno)
+                *ret_devno = found;
 
         if (ret_uuid)
                 *ret_uuid = found_uuid;
@@ -3947,7 +3936,6 @@ static int context_open_copy_block_paths(
                 const char *root,
                 dev_t restrict_devno) {
 
-        Partition *p;
         int r;
 
         assert(context);
@@ -3979,32 +3967,43 @@ static int context_open_copy_block_paths(
                                                        "Copying from block device node is not permitted in --image=/--root= mode, refusing.");
 
                 } else if (p->copy_blocks_auto) {
+                        _cleanup_(sd_device_unrefp) sd_device *dev = NULL;
+                        const char *devname;
+                        dev_t devno;
 
-                        r = resolve_copy_blocks_auto(p->type_uuid, root, restrict_devno, &opened, &uuid);
+                        r = resolve_copy_blocks_auto(p->type_uuid, root, restrict_devno, &devno, &uuid);
                         if (r < 0)
                                 return r;
 
-                        source_fd = open(opened, O_RDONLY|O_CLOEXEC|O_NOCTTY);
+                        r = sd_device_new_from_devnum(&dev, 'b', devno);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to create sd-device object for device %u:%u: %m", major(devno), minor(devno));
+
+                        r = sd_device_get_devname(dev, &devname);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to get device name of %u:%u: %m", major(devno), minor(devno));
+
+                        opened = strdup(devname);
+                        if (!opened)
+                                return log_oom();
+
+                        source_fd = sd_device_open(dev, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
                         if (source_fd < 0)
-                                return log_error_errno(errno, "Failed to open automatically determined source block copy device '%s': %m", opened);
+                                return log_error_errno(source_fd, "Failed to open automatically determined source block copy device '%s': %m", opened);
 
                         if (fstat(source_fd, &st) < 0)
                                 return log_error_errno(errno, "Failed to stat block copy file '%s': %m", opened);
-
-                        /* If we found it automatically, it must be a block device, let's enforce that */
-                        if (!S_ISBLK(st.st_mode))
-                                return log_error_errno(SYNTHETIC_ERRNO(EBADF),
-                                                       "Automatically detected source block copy device '%s' is not a block device, refusing: %m", opened);
-                }  else
+                } else
                         continue;
 
                 if (S_ISDIR(st.st_mode)) {
-                        _cleanup_free_ char *bdev = NULL;
+                        _cleanup_(sd_device_unrefp) sd_device *dev = NULL;
+                        const char *bdev;
 
                         /* If the file is a directory, automatically find the backing block device */
 
                         if (major(st.st_dev) != 0)
-                                r = device_path_make_major_minor(S_IFBLK, st.st_dev, &bdev);
+                                r = sd_device_new_from_devnum(&dev, 'b', st.st_dev);
                         else {
                                 dev_t devt;
 
@@ -4016,22 +4015,23 @@ static int context_open_copy_block_paths(
                                 if (r < 0)
                                         return log_error_errno(r, "Unable to determine backing block device of '%s': %m", opened);
 
-                                r = device_path_make_major_minor(S_IFBLK, devt, &bdev);
+                                r = sd_device_new_from_devnum(&dev, 'b', devt);
                         }
                         if (r < 0)
-                                return log_error_errno(r, "Failed to determine block device path for block device backing '%s': %m", opened);
+                                return log_error_errno(r, "Failed to create sd-device object for block device backing '%s': %m", opened);
+
+                        r = sd_device_get_devpath(dev, &bdev);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to get device name for block device backing '%s': %m", opened);
 
                         safe_close(source_fd);
 
-                        source_fd = open(bdev, O_RDONLY|O_CLOEXEC|O_NOCTTY);
+                        source_fd = sd_device_open(dev, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
                         if (source_fd < 0)
-                                return log_error_errno(errno, "Failed to open block device '%s': %m", bdev);
+                                return log_error_errno(source_fd, "Failed to open block device '%s': %m", bdev);
 
                         if (fstat(source_fd, &st) < 0)
                                 return log_error_errno(errno, "Failed to stat block device '%s': %m", bdev);
-
-                        if (!S_ISBLK(st.st_mode))
-                                return log_error_errno(SYNTHETIC_ERRNO(ENOTBLK), "Block device '%s' is not actually a block device, refusing.", bdev);
                 }
 
                 if (S_ISREG(st.st_mode))
@@ -4350,7 +4350,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         if (argc - optind > 1)
@@ -4532,49 +4532,14 @@ static int acquire_root_devno(
         if (r < 0)
                 return log_debug_errno(r, "Failed to determine canonical path for '%s': %m", p);
 
-        /* Only if we still lock at the same block device we can reuse the fd. Otherwise return an
+        /* Only if we still look at the same block device we can reuse the fd. Otherwise return an
          * invalidated fd. */
         *ret_fd = fd_devno != MODE_INVALID && fd_devno == devno ? TAKE_FD(fd) : -1;
         return 0;
 }
 
-static int find_os_prefix(const char **ret) {
-        int r;
-
-        assert(ret);
-
-        /* Searches for the right place to look for the OS root. This is relevant in the initrd: in the
-         * initrd the host OS is typically mounted to /sysroot/ — except in setups where /usr/ is a separate
-         * partition, in which case it is mounted to /sysusr/usr/ before being moved to /sysroot/usr/. */
-
-        if (!in_initrd()) {
-                *ret = NULL; /* no prefix */
-                return 0;
-        }
-
-        r = path_is_mount_point("/sysroot", NULL, 0);
-        if (r < 0 && r != -ENOENT)
-                log_debug_errno(r, "Failed to determine whether /sysroot/ is a mount point, assuming it is not: %m");
-        else if (r > 0) {
-                log_debug("/sysroot/ is a mount point, assuming it's the prefix.");
-                *ret = "/sysroot";
-                return 0;
-        }
-
-        r = path_is_mount_point("/sysusr/usr", NULL, 0);
-        if (r < 0 && r != -ENOENT)
-                log_debug_errno(r, "Failed to determine whether /sysusr/usr is a mount point, assuming it is not: %m");
-        else if (r > 0) {
-                log_debug("/sysusr/usr/ is a mount point, assuming /sysusr/ is the prefix.");
-                *ret = "/sysusr";
-                return 0;
-        }
-
-        return -ENOENT;
-}
-
 static int find_root(char **ret, int *ret_fd) {
-        const char *t, *prefix;
+        _cleanup_free_ char *device = NULL;
         int r;
 
         assert(ret);
@@ -4611,42 +4576,42 @@ static int find_root(char **ret, int *ret_fd) {
 
         assert(IN_SET(arg_empty, EMPTY_REFUSE, EMPTY_ALLOW));
 
-        /* Let's search for the root device. We look for two cases here: first in /, and then in /usr. The
-         * latter we check for cases where / is a tmpfs and only /usr is an actual persistent block device
-         * (think: volatile setups) */
+        /* If the root mount has been replaced by some form of volatile file system (overlayfs), the
+         * original root block device node is symlinked in /run/systemd/volatile-root. Let's read that
+         * here. */
+        r = readlink_malloc("/run/systemd/volatile-root", &device);
+        if (r == -ENOENT) { /* volatile-root not found */
+                /* Let's search for the root device. We look for two cases here: first in /, and then in /usr. The
+                * latter we check for cases where / is a tmpfs and only /usr is an actual persistent block device
+                * (think: volatile setups) */
 
-        r = find_os_prefix(&prefix);
-        if (r < 0)
-                return log_error_errno(r, "Failed to determine OS prefix: %m");
+                FOREACH_STRING(p, "/", "/usr") {
 
-        FOREACH_STRING(t, "/", "/usr") {
-                _cleanup_free_ char *j = NULL;
-                const char *p;
+                        r = acquire_root_devno(p, arg_root, O_RDONLY|O_DIRECTORY|O_CLOEXEC, ret, ret_fd);
+                        if (r < 0) {
+                                if (r == -EUCLEAN)
+                                        return btrfs_log_dev_root(LOG_ERR, r, p);
+                                if (r != -ENODEV)
+                                        return log_error_errno(r, "Failed to determine backing device of %s: %m", p);
+                        } else
+                                return 0;
+                }
+        } else if (r < 0)
+                return log_error_errno(r, "Failed to read symlink /run/systemd/volatile-root: %m");
+        else {
+                r = acquire_root_devno(device, NULL, O_RDONLY|O_CLOEXEC, ret, ret_fd);
+                if (r == -EUCLEAN)
+                        return btrfs_log_dev_root(LOG_ERR, r, device);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to open file or determine backing device of %s: %m", device);
 
-                if (prefix) {
-                        j = path_join(prefix, t);
-                        if (!j)
-                                return log_oom();
-
-                        p = j;
-                } else
-                        p = t;
-
-                r = acquire_root_devno(p, arg_root, O_RDONLY|O_DIRECTORY|O_CLOEXEC, ret, ret_fd);
-                if (r < 0) {
-                        if (r == -EUCLEAN)
-                                return btrfs_log_dev_root(LOG_ERR, r, p);
-                        if (r != -ENODEV)
-                                return log_error_errno(r, "Failed to determine backing device of %s: %m", p);
-                } else
-                        return 0;
+                return 0;
         }
 
         return log_error_errno(SYNTHETIC_ERRNO(ENODEV), "Failed to discover root block device.");
 }
 
 static int resize_pt(int fd) {
-        char procfs_path[STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(int)];
         _cleanup_(fdisk_unref_contextp) struct fdisk_context *c = NULL;
         int r;
 
@@ -4658,14 +4623,13 @@ static int resize_pt(int fd) {
         if (!c)
                 return log_oom();
 
-        xsprintf(procfs_path, "/proc/self/fd/%i", fd);
-        r = fdisk_assign_device(c, procfs_path, 0);
+        r = fdisk_assign_device(c, FORMAT_PROC_FD_PATH(fd), 0);
         if (r < 0)
-                return log_error_errno(r, "Failed to open device '%s': %m", procfs_path);
+                return log_error_errno(r, "Failed to open device '%s': %m", FORMAT_PROC_FD_PATH(fd));
 
         r = fdisk_has_label(c);
         if (r < 0)
-                return log_error_errno(r, "Failed to determine whether disk '%s' has a disk label: %m", procfs_path);
+                return log_error_errno(r, "Failed to determine whether disk '%s' has a disk label: %m", FORMAT_PROC_FD_PATH(fd));
         if (r == 0) {
                 log_debug("Not resizing partition table, as there currently is none.");
                 return 0;
@@ -4685,7 +4649,6 @@ static int resize_backing_fd(
                 const char *backing_file,   /* If the above refers to a loopback device, the backing regular file for that, which we can grow */
                 LoopDevice *loop_device) {
 
-        char buf1[FORMAT_BYTES_MAX], buf2[FORMAT_BYTES_MAX];
         _cleanup_close_ int writable_fd = -1;
         uint64_t current_size;
         struct stat st;
@@ -4726,11 +4689,9 @@ static int resize_backing_fd(
                 current_size = st.st_size;
         }
 
-        assert_se(format_bytes(buf1, sizeof(buf1), current_size));
-        assert_se(format_bytes(buf2, sizeof(buf2), arg_size));
-
         if (current_size >= arg_size) {
-                log_info("File '%s' already is of requested size or larger, not growing. (%s >= %s)", node, buf1, buf2);
+                log_info("File '%s' already is of requested size or larger, not growing. (%s >= %s)",
+                         node, FORMAT_BYTES(current_size), FORMAT_BYTES(arg_size));
                 return 0;
         }
 
@@ -4753,7 +4714,8 @@ static int resize_backing_fd(
 
                 if ((uint64_t) st.st_size != current_size)
                         return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
-                                               "Size of backing file '%s' of loopback block device '%s' don't match, refusing.", node, backing_file);
+                                               "Size of backing file '%s' of loopback block device '%s' don't match, refusing.",
+                                               node, backing_file);
         } else {
                 assert(S_ISREG(st.st_mode));
                 assert(!backing_file);
@@ -4771,15 +4733,16 @@ static int resize_backing_fd(
                 if (fallocate(writable_fd, 0, 0, arg_size) < 0) {
                         if (!ERRNO_IS_NOT_SUPPORTED(errno))
                                 return log_error_errno(errno, "Failed to grow '%s' from %s to %s by allocation: %m",
-                                                       node, buf1, buf2);
+                                                       node, FORMAT_BYTES(current_size), FORMAT_BYTES(arg_size));
 
                         /* Fallback to truncation, if fallocate() is not supported. */
                         log_debug("Backing file system does not support fallocate(), falling back to ftruncate().");
                 } else {
                         if (current_size == 0) /* Likely regular file just created by us */
-                                log_info("Allocated %s for '%s'.", buf2, node);
+                                log_info("Allocated %s for '%s'.", FORMAT_BYTES(arg_size), node);
                         else
-                                log_info("File '%s' grown from %s to %s by allocation.", node, buf1, buf2);
+                                log_info("File '%s' grown from %s to %s by allocation.",
+                                         node, FORMAT_BYTES(current_size), FORMAT_BYTES(arg_size));
 
                         goto done;
                 }
@@ -4787,12 +4750,13 @@ static int resize_backing_fd(
 
         if (ftruncate(writable_fd, arg_size) < 0)
                 return log_error_errno(errno, "Failed to grow '%s' from %s to %s by truncation: %m",
-                                       node, buf1, buf2);
+                                       node, FORMAT_BYTES(current_size), FORMAT_BYTES(arg_size));
 
         if (current_size == 0) /* Likely regular file just created by us */
-                log_info("Sized '%s' to %s.", node, buf2);
+                log_info("Sized '%s' to %s.", node, FORMAT_BYTES(arg_size));
         else
-                log_info("File '%s' grown from %s to %s by truncation.", node, buf1, buf2);
+                log_info("File '%s' grown from %s to %s by truncation.",
+                         node, FORMAT_BYTES(current_size), FORMAT_BYTES(arg_size));
 
 done:
         r = resize_pt(writable_fd);
@@ -4809,11 +4773,11 @@ done:
 }
 
 static int determine_auto_size(Context *c) {
-        uint64_t sum = round_up_size(GPT_METADATA_SIZE, 4096);
-        char buf[FORMAT_BYTES_MAX];
-        Partition *p;
+        uint64_t sum;
 
-        assert_se(c);
+        assert(c);
+
+        sum = round_up_size(GPT_METADATA_SIZE, 4096);
 
         LIST_FOREACH(partitions, p, c->partitions) {
                 uint64_t m;
@@ -4821,15 +4785,21 @@ static int determine_auto_size(Context *c) {
                 if (p->dropped)
                         continue;
 
-                m = partition_min_size_with_padding(p);
+                m = partition_min_size_with_padding(c, p);
                 if (m > UINT64_MAX - sum)
                         return log_error_errno(SYNTHETIC_ERRNO(EOVERFLOW), "Image would grow too large, refusing.");
 
                 sum += m;
         }
 
-        assert_se(format_bytes(buf, sizeof(buf), sum));
-        log_info("Automatically determined minimal disk image size as %s.", buf);
+        if (c->total != UINT64_MAX)
+                /* Image already allocated? Then show its size. */
+                log_info("Automatically determined minimal disk image size as %s, current image size is %s.",
+                         FORMAT_BYTES(sum), FORMAT_BYTES(c->total));
+        else
+                /* If the image is being created right now, then it has no previous size, suppress any comment about it hence. */
+                log_info("Automatically determined minimal disk image size as %s.",
+                         FORMAT_BYTES(sum));
 
         arg_size = sum;
         return 0;
@@ -4987,7 +4957,7 @@ static int run(int argc, char *argv[]) {
                 /* Flush out everything again, and let's grow the file first, then start fresh */
                 context_unload_partition_table(context);
 
-                assert_se(arg_size != UINT64_MAX);
+                assert(arg_size != UINT64_MAX);
                 r = resize_backing_fd(
                                 node,
                                 &backing_fd,
@@ -5003,13 +4973,15 @@ static int run(int argc, char *argv[]) {
 
         /* First try to fit new partitions in, dropping by priority until it fits */
         for (;;) {
-                if (context_allocate_partitions(context))
+                uint64_t largest_free_area;
+
+                if (context_allocate_partitions(context, &largest_free_area))
                         break; /* Success! */
 
                 if (!context_drop_one_priority(context)) {
                         r = log_error_errno(SYNTHETIC_ERRNO(ENOSPC),
-                                            "Can't fit requested partitions into free space, refusing.");
-
+                                            "Can't fit requested partitions into available free space (%s), refusing.",
+                                            FORMAT_BYTES(largest_free_area));
                         determine_auto_size(context);
                         return r;
                 }
@@ -5020,7 +4992,7 @@ static int run(int argc, char *argv[]) {
         if (r < 0)
                 return r;
 
-        /* Now calculate where each partition gets placed */
+        /* Now calculate where each new partition gets placed */
         context_place_partitions(context);
 
         /* Make sure each partition has a unique UUID and unique label */

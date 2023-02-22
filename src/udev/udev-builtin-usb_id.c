@@ -224,7 +224,7 @@ static int dev_if_packed_info(sd_device *dev, char *ifs_str, size_t len) {
  * 6.) If the device supplies a serial number, this number
  *     is concatenated with the identification with an underscore '_'.
  */
-static int builtin_usb_id(sd_device *dev, int argc, char *argv[], bool test) {
+static int builtin_usb_id(sd_device *dev, sd_netlink **rtnl, int argc, char *argv[], bool test) {
         char vendor_str[64] = "";
         char vendor_str_enc[256];
         const char *vendor_id;
@@ -405,10 +405,8 @@ fallback:
                 const char *usb_serial;
 
                 if (sd_device_get_sysattr_value(dev_usb, "serial", &usb_serial) >= 0) {
-                        const unsigned char *p;
-
                         /* http://msdn.microsoft.com/en-us/library/windows/hardware/gg487321.aspx */
-                        for (p = (unsigned char *) usb_serial; *p != '\0'; p++)
+                        for (const unsigned char *p = (unsigned char*) usb_serial; *p != '\0'; p++)
                                 if (*p < 0x20 || *p > 0x7f || *p == ',') {
                                         usb_serial = NULL;
                                         break;

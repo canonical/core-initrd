@@ -1,0 +1,18 @@
+From: Nick Rosbrook <nick.rosbrook@canonical.com>
+Date: Fri, 16 Sep 2022 10:05:38 -0400
+Subject: test: deny-list TEST-36-NUMAPOLICY on ppc64el
+
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1989969
+
+---
+ test/TEST-36-NUMAPOLICY/deny-list-upstream-ci-ppc64el | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 test/TEST-36-NUMAPOLICY/deny-list-upstream-ci-ppc64el
+
+diff --git a/test/TEST-36-NUMAPOLICY/deny-list-upstream-ci-ppc64el b/test/TEST-36-NUMAPOLICY/deny-list-upstream-ci-ppc64el
+new file mode 100644
+index 0000000..0febce5
+--- /dev/null
++++ b/test/TEST-36-NUMAPOLICY/deny-list-upstream-ci-ppc64el
+@@ -0,0 +1 @@
++# https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/1989969

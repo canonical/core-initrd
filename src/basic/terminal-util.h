@@ -100,16 +100,19 @@ typedef enum AcquireTerminalFlags {
 /* Limits the use of ANSI colors to a subset. */
 typedef enum ColorMode {
         /* No colors, monochrome output. */
-        COLOR_OFF = 0,
+        COLOR_OFF,
 
         /* All colors, no restrictions. */
-        COLOR_ON  = 1,
+        COLOR_ON,
 
         /* Only the base 16 colors. */
-        COLOR_16  = 16,
+        COLOR_16,
 
         /* Only 256 colors. */
-        COLOR_256 = 256,
+        COLOR_256,
+
+        /* For truecolor or 24bit color support.*/
+        COLOR_24BIT,
 
         _COLOR_INVALID = -EINVAL,
 } ColorMode;
@@ -119,6 +122,8 @@ int release_terminal(void);
 
 int terminal_vhangup_fd(int fd);
 int terminal_vhangup(const char *name);
+
+int terminal_set_size_fd(int fd, const char *ident, unsigned rows, unsigned cols);
 
 int chvt(int vt);
 

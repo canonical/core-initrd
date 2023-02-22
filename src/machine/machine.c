@@ -19,7 +19,7 @@
 #include "hashmap.h"
 #include "machine-dbus.h"
 #include "machine.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "process-util.h"
@@ -265,12 +265,10 @@ int machine_load(Machine *m) {
                            "REALTIME",  &realtime,
                            "MONOTONIC", &monotonic,
                            "NETIF",     &netif);
-        if (r < 0) {
-                if (r == -ENOENT)
-                        return 0;
-
+        if (r == -ENOENT)
+                return 0;
+        if (r < 0)
                 return log_error_errno(r, "Failed to read %s: %m", m->state_file);
-        }
 
         if (id)
                 sd_id128_from_string(id, &m->id);
@@ -575,14 +573,8 @@ int machine_kill(Machine *m, KillWho who, int signo) {
         if (!m->unit)
                 return -ESRCH;
 
-        if (who == KILL_LEADER) {
-                /* If we shall simply kill the leader, do so directly */
-
-                if (kill(m->leader, signo) < 0)
-                        return -errno;
-
-                return 0;
-        }
+        if (who == KILL_LEADER) /* If we shall simply kill the leader, do so directly */
+                return RET_NERRNO(kill(m->leader, signo));
 
         /* Otherwise, make PID 1 do it for us, for the entire cgroup */
         return manager_kill_unit(m->manager, m->unit, signo, NULL);

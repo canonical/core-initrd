@@ -5,15 +5,19 @@
 
 #include "alloc-util.h"
 #include "bootspec.h"
+#include "devnum-util.h"
+#include "efi-api.h"
 #include "efi-loader.h"
 #include "efivars.h"
 #include "fd-util.h"
+#include "find-esp.h"
 #include "fs-util.h"
 #include "log.h"
 #include "main-func.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "pretty-print.h"
+#include "sync-util.h"
 #include "terminal-util.h"
 #include "util.h"
 #include "verbs.h"
@@ -89,7 +93,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unknown option");
+                        assert_not_reached();
                 }
 
         return 1;
@@ -97,17 +101,18 @@ static int parse_argv(int argc, char *argv[]) {
 
 static int acquire_path(void) {
         _cleanup_free_ char *esp_path = NULL, *xbootldr_path = NULL;
+        dev_t esp_devid = 0, xbootldr_devid = 0;
         char **a;
         int r;
 
         if (!strv_isempty(arg_path))
                 return 0;
 
-        r = find_esp_and_warn(NULL, false, &esp_path, NULL, NULL, NULL, NULL);
+        r = find_esp_and_warn(NULL, /* unprivileged_mode= */ false, &esp_path, NULL, NULL, NULL, NULL, &esp_devid);
         if (r < 0 && r != -ENOKEY) /* ENOKEY means not found, and is the only error the function won't log about on its own */
                 return r;
 
-        r = find_xbootldr_and_warn(NULL, false, &xbootldr_path, NULL);
+        r = find_xbootldr_and_warn(NULL, /* unprivileged_mode= */ false, &xbootldr_path, NULL, &xbootldr_devid);
         if (r < 0 && r != -ENOKEY)
                 return r;
 
@@ -116,8 +121,10 @@ static int acquire_path(void) {
                                        "Couldn't find $BOOT partition. It is recommended to mount it to /boot.\n"
                                        "Alternatively, use --path= to specify path to mount point.");
 
-        if (esp_path)
+        if (esp_path && xbootldr_path && !devnum_set_and_equal(esp_devid, xbootldr_devid)) /* in case the two paths refer to the same inode, suppress one */
                 a = strv_new(esp_path, xbootldr_path);
+        else if (esp_path)
+                a = strv_new(esp_path);
         else
                 a = strv_new(xbootldr_path);
         if (!a)
@@ -129,7 +136,7 @@ static int acquire_path(void) {
                 _cleanup_free_ char *j = NULL;
 
                 j = strv_join(arg_path, ":");
-                log_debug("Using %s as boot loader drop-in search path.", j);
+                log_debug("Using %s as boot loader drop-in search path.", strna(j));
         }
 
         return 0;
@@ -161,7 +168,7 @@ static int parse_counter(
                                        "Can't parse empty 'tries left' counter from LoaderBootCountPath: %s",
                                        path);
 
-        z = strndupa(e, k);
+        z = strndupa_safe(e, k);
         r = safe_atou64(z, &left);
         if (r < 0)
                 return log_error_errno(r, "Failed to parse 'tries left' counter from LoaderBootCountPath: %s", path);
@@ -177,7 +184,7 @@ static int parse_counter(
                                                "Can't parse empty 'tries done' counter from LoaderBootCountPath: %s",
                                                path);
 
-                z = strndupa(e, k);
+                z = strndupa_safe(e, k);
                 r = safe_atou64(z, &done);
                 if (r < 0)
                         return log_error_errno(r, "Failed to parse 'tries done' counter from LoaderBootCountPath: %s", path);
@@ -319,7 +326,6 @@ static const char *skip_slash(const char *path) {
 static int verb_status(int argc, char *argv[], void *userdata) {
         _cleanup_free_ char *path = NULL, *prefix = NULL, *suffix = NULL, *good = NULL, *bad = NULL;
         uint64_t left, done;
-        char **p;
         int r;
 
         r = acquire_boot_count_path(&path, &prefix, &left, &done, &suffix);
@@ -396,7 +402,6 @@ static int verb_set(int argc, char *argv[], void *userdata) {
         _cleanup_free_ char *path = NULL, *prefix = NULL, *suffix = NULL, *good = NULL, *bad = NULL, *parent = NULL;
         const char *target, *source1, *source2;
         uint64_t done;
-        char **p;
         int r;
 
         r = acquire_boot_count_path(&path, &prefix, NULL, &done, &suffix);

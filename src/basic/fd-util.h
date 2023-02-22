@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 
 #include "macro.h"
+#include "stdio-util.h"
 
 /* maximum length of fdname */
 #define FDNAME_MAX 255
@@ -56,7 +57,10 @@ DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(DIR*, closedir, NULL);
 int fd_nonblock(int fd, bool nonblock);
 int fd_cloexec(int fd, bool cloexec);
 
+int get_max_fd(void);
+
 int close_all_fds(const int except[], size_t n_except);
+int close_all_fds_without_malloc(const int except[], size_t n_except);
 
 int same_fd(int a, int b);
 
@@ -87,9 +91,10 @@ static inline int make_null_stdio(void) {
 /* Like TAKE_PTR() but for file descriptors, resetting them to -1 */
 #define TAKE_FD(fd)                             \
         ({                                      \
-                int _fd_ = (fd);                \
-                (fd) = -1;                      \
-                _fd_;                           \
+                int *_fd_ = &(fd);              \
+                int _ret_ = *_fd_;              \
+                *_fd_ = -1;                     \
+                _ret_;                          \
         })
 
 /* Like free_and_replace(), but for file descriptors */
@@ -101,7 +106,21 @@ static inline int make_null_stdio(void) {
                 0;                              \
         })
 
-
 int fd_reopen(int fd, int flags);
 int read_nr_open(void);
 int btrfs_defrag_fd(int fd);
+int fd_get_diskseq(int fd, uint64_t *ret);
+
+/* The maximum length a buffer for a /proc/self/fd/<fd> path needs */
+#define PROC_FD_PATH_MAX \
+        (STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(int))
+
+static inline char *format_proc_fd_path(char buf[static PROC_FD_PATH_MAX], int fd) {
+        assert(buf);
+        assert(fd >= 0);
+        assert_se(snprintf_ok(buf, PROC_FD_PATH_MAX, "/proc/self/fd/%i", fd));
+        return buf;
+}
+
+#define FORMAT_PROC_FD_PATH(fd) \
+        format_proc_fd_path((char[PROC_FD_PATH_MAX]) {}, (fd))

@@ -9,15 +9,18 @@ void initialize_libgcrypt(bool secmem) {
         if (gcry_control(GCRYCTL_INITIALIZATION_FINISHED_P))
                 return;
 
+        gcry_control(GCRYCTL_SET_PREFERRED_RNG_TYPE, GCRY_RNG_TYPE_SYSTEM);
         assert_se(gcry_check_version("1.4.5"));
 
         /* Turn off "secmem". Clients which wish to make use of this
          * feature should initialize the library manually */
         if (!secmem)
                 gcry_control(GCRYCTL_DISABLE_SECMEM);
+
         gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
 }
 
+#  if !PREFER_OPENSSL
 int string_hashsum(const char *s, size_t len, int md_algorithm, char **out) {
         _cleanup_(gcry_md_closep) gcry_md_hd_t md = NULL;
         gcry_error_t err;
@@ -47,4 +50,5 @@ int string_hashsum(const char *s, size_t len, int md_algorithm, char **out) {
         *out = enc;
         return 0;
 }
+#  endif
 #endif

@@ -11,10 +11,10 @@
 #include "dbus-unit.h"
 #include "escape.h"
 #include "fd-util.h"
-#include "fs-util.h"
 #include "glob-util.h"
+#include "inotify-util.h"
 #include "macro.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "path.h"
 #include "path-util.h"
 #include "serialize.h"
@@ -173,7 +173,6 @@ void path_spec_unwatch(PathSpec *s) {
 
 int path_spec_fd_event(PathSpec *s, uint32_t revents) {
         union inotify_event_buffer buffer;
-        struct inotify_event *e;
         ssize_t l;
 
         assert(s);
@@ -184,14 +183,14 @@ int path_spec_fd_event(PathSpec *s, uint32_t revents) {
 
         l = read(s->inotify_fd, &buffer, sizeof(buffer));
         if (l < 0) {
-                if (IN_SET(errno, EAGAIN, EINTR))
+                if (ERRNO_IS_TRANSIENT(errno))
                         return 0;
 
                 return log_error_errno(errno, "Failed to read inotify event: %m");
         }
 
         if (IN_SET(s->type, PATH_CHANGED, PATH_MODIFIED))
-                FOREACH_INOTIFY_EVENT(e, buffer, l)
+                FOREACH_INOTIFY_EVENT_WARN(e, buffer, l)
                         if (s->primary_wd == e->wd)
                                 return 1;
 
@@ -214,7 +213,7 @@ static bool path_spec_check_good(PathSpec *s, bool initial, bool from_trigger_no
         case PATH_DIRECTORY_NOT_EMPTY: {
                 int k;
 
-                k = dir_is_empty(s->path);
+                k = dir_is_empty(s->path, /* ignore_hidden_or_backup= */ true);
                 good = !(IN_SET(k, -ENOENT, -ENOTDIR) || k > 0);
                 break;
         }
@@ -265,6 +264,9 @@ static void path_init(Unit *u) {
         assert(u->load_state == UNIT_STUB);
 
         p->directory_mode = 0755;
+
+        p->trigger_limit.interval = USEC_INFINITY;
+        p->trigger_limit.burst = UINT_MAX;
 }
 
 void path_free_specs(Path *p) {
@@ -289,7 +291,6 @@ static void path_done(Unit *u) {
 }
 
 static int path_add_mount_dependencies(Path *p) {
-        PathSpec *s;
         int r;
 
         assert(p);
@@ -353,6 +354,16 @@ static int path_add_trigger_dependencies(Path *p) {
 static int path_add_extras(Path *p) {
         int r;
 
+        assert(p);
+
+        /* To avoid getting pid1 in a busy-loop state (eg: failed condition on associated service),
+         * set a default trigger limit if the user didn't specify any. */
+        if (p->trigger_limit.interval == USEC_INFINITY)
+                p->trigger_limit.interval = 2 * USEC_PER_SEC;
+
+        if (p->trigger_limit.burst == UINT_MAX)
+                p->trigger_limit.burst = 200;
+
         r = path_add_trigger_dependencies(p);
         if (r < 0)
                 return r;
@@ -388,7 +399,6 @@ static int path_load(Unit *u) {
 static void path_dump(Unit *u, FILE *f, const char *prefix) {
         Path *p = PATH(u);
         Unit *trigger;
-        PathSpec *s;
 
         assert(p);
         assert(f);
@@ -400,20 +410,22 @@ static void path_dump(Unit *u, FILE *f, const char *prefix) {
                 "%sResult: %s\n"
                 "%sUnit: %s\n"
                 "%sMakeDirectory: %s\n"
-                "%sDirectoryMode: %04o\n",
+                "%sDirectoryMode: %04o\n"
+                "%sTriggerLimitIntervalSec: %s\n"
+                "%sTriggerLimitBurst: %u\n",
                 prefix, path_state_to_string(p->state),
                 prefix, path_result_to_string(p->result),
                 prefix, trigger ? trigger->id : "n/a",
                 prefix, yes_no(p->make_directory),
-                prefix, p->directory_mode);
+                prefix, p->directory_mode,
+                prefix, FORMAT_TIMESPAN(p->trigger_limit.interval, USEC_PER_SEC),
+                prefix, p->trigger_limit.burst);
 
         LIST_FOREACH(spec, s, p->specs)
                 path_spec_dump(s, f, prefix);
 }
 
 static void path_unwatch(Path *p) {
-        PathSpec *s;
-
         assert(p);
 
         LIST_FOREACH(spec, s, p->specs)
@@ -422,7 +434,6 @@ static void path_unwatch(Path *p) {
 
 static int path_watch(Path *p) {
         int r;
-        PathSpec *s;
 
         assert(p);
 
@@ -494,6 +505,12 @@ static void path_enter_running(Path *p) {
         if (unit_stop_pending(UNIT(p)))
                 return;
 
+        if (!ratelimit_below(&p->trigger_limit)) {
+                log_unit_warning(UNIT(p), "Trigger limit hit, refusing further activation.");
+                path_enter_dead(p, PATH_FAILURE_TRIGGER_LIMIT_HIT);
+                return;
+        }
+
         trigger = UNIT_TRIGGER(UNIT(p));
         if (!trigger) {
                 log_unit_error(UNIT(p), "Unit to trigger vanished.");
@@ -516,8 +533,6 @@ fail:
 }
 
 static bool path_check_good(Path *p, bool initial, bool from_trigger_notify) {
-        PathSpec *s;
-
         assert(p);
 
         LIST_FOREACH(spec, s, p->specs)
@@ -568,8 +583,6 @@ fail:
 }
 
 static void path_mkdir(Path *p) {
-        PathSpec *s;
-
         assert(p);
 
         if (!p->make_directory)
@@ -589,12 +602,6 @@ static int path_start(Unit *u) {
         r = unit_test_trigger_loaded(u);
         if (r < 0)
                 return r;
-
-        r = unit_test_start_limit(u);
-        if (r < 0) {
-                path_enter_dead(p, PATH_FAILURE_START_LIMIT_HIT);
-                return r;
-        }
 
         r = unit_acquire_invocation_id(u);
         if (r < 0)
@@ -620,7 +627,6 @@ static int path_stop(Unit *u) {
 
 static int path_serialize(Unit *u, FILE *f, FDSet *fds) {
         Path *p = PATH(u);
-        PathSpec *s;
 
         assert(u);
         assert(f);
@@ -674,15 +680,15 @@ static int path_deserialize_item(Unit *u, const char *key, const char *value, FD
                         p->result = f;
 
         } else if (streq(key, "path-spec")) {
-                int previous_exists, skip = 0, r;
+                int previous_exists, skip = 0;
                 _cleanup_free_ char *type_str = NULL;
 
                 if (sscanf(value, "%ms %i %n", &type_str, &previous_exists, &skip) < 2)
                         log_unit_debug(u, "Failed to parse path-spec value: %s", value);
                 else {
                         _cleanup_free_ char *unescaped = NULL;
+                        ssize_t l;
                         PathType type;
-                        PathSpec *s;
 
                         type = path_type_from_string(type_str);
                         if (type < 0) {
@@ -690,9 +696,9 @@ static int path_deserialize_item(Unit *u, const char *key, const char *value, FD
                                 return 0;
                         }
 
-                        r = cunescape(value+skip, 0, &unescaped);
-                        if (r < 0) {
-                                log_unit_warning_errno(u, r, "Failed to unescape serialize path: %m");
+                        l = cunescape(value+skip, 0, &unescaped);
+                        if (l < 0) {
+                                log_unit_warning_errno(u, l, "Failed to unescape serialize path: %m");
                                 return 0;
                         }
 
@@ -724,7 +730,7 @@ _pure_ static const char *path_sub_state_to_string(Unit *u) {
 }
 
 static int path_dispatch_io(sd_event_source *source, int fd, uint32_t revents, void *userdata) {
-        PathSpec *s = userdata;
+        PathSpec *s = userdata, *found = NULL;
         Path *p;
         int changed;
 
@@ -737,18 +743,18 @@ static int path_dispatch_io(sd_event_source *source, int fd, uint32_t revents, v
         if (!IN_SET(p->state, PATH_WAITING, PATH_RUNNING))
                 return 0;
 
-        /* log_debug("inotify wakeup on %s.", UNIT(p)->id); */
-
-        LIST_FOREACH(spec, s, p->specs)
-                if (path_spec_owns_inotify_fd(s, fd))
+        LIST_FOREACH(spec, i, p->specs)
+                if (path_spec_owns_inotify_fd(i, fd)) {
+                        found = i;
                         break;
+                }
 
-        if (!s) {
+        if (!found) {
                 log_error("Got event on unknown fd.");
                 goto fail;
         }
 
-        changed = path_spec_fd_event(s, revents);
+        changed = path_spec_fd_event(found, revents);
         if (changed < 0)
                 goto fail;
 
@@ -811,21 +817,37 @@ static void path_reset_failed(Unit *u) {
         p->result = PATH_SUCCESS;
 }
 
+static int path_can_start(Unit *u) {
+        Path *p = PATH(u);
+        int r;
+
+        assert(p);
+
+        r = unit_test_start_limit(u);
+        if (r < 0) {
+                path_enter_dead(p, PATH_FAILURE_START_LIMIT_HIT);
+                return r;
+        }
+
+        return 1;
+}
+
 static const char* const path_type_table[_PATH_TYPE_MAX] = {
-        [PATH_EXISTS] = "PathExists",
-        [PATH_EXISTS_GLOB] = "PathExistsGlob",
+        [PATH_EXISTS]              = "PathExists",
+        [PATH_EXISTS_GLOB]         = "PathExistsGlob",
         [PATH_DIRECTORY_NOT_EMPTY] = "DirectoryNotEmpty",
-        [PATH_CHANGED] = "PathChanged",
-        [PATH_MODIFIED] = "PathModified",
+        [PATH_CHANGED]             = "PathChanged",
+        [PATH_MODIFIED]            = "PathModified",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(path_type, PathType);
 
 static const char* const path_result_table[_PATH_RESULT_MAX] = {
-        [PATH_SUCCESS] = "success",
-        [PATH_FAILURE_RESOURCES] = "resources",
-        [PATH_FAILURE_START_LIMIT_HIT] = "start-limit-hit",
+        [PATH_SUCCESS]                      = "success",
+        [PATH_FAILURE_RESOURCES]            = "resources",
+        [PATH_FAILURE_START_LIMIT_HIT]      = "start-limit-hit",
         [PATH_FAILURE_UNIT_START_LIMIT_HIT] = "unit-start-limit-hit",
+        [PATH_FAILURE_TRIGGER_LIMIT_HIT]    = "trigger-limit-hit",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(path_result, PathResult);
@@ -865,4 +887,6 @@ const UnitVTable path_vtable = {
         .reset_failed = path_reset_failed,
 
         .bus_set_property = bus_path_set_property,
+
+        .can_start = path_can_start,
 };

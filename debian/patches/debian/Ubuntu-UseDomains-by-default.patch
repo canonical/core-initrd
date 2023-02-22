@@ -22,42 +22,40 @@ Users may override this setting in the .network files by specifying
  src/network/networkd-network.c | 2 ++
  2 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/man/systemd.network.xml b/man/systemd.network.xml
-index 9de9816..1d1c0b7 100644
 --- a/man/systemd.network.xml
 +++ b/man/systemd.network.xml
-@@ -400,7 +400,7 @@
-             <literal>IPv6AcceptRA=</literal>.</para>
+@@ -333,8 +333,8 @@
+           setting in the [DHCPv6] section, regardless of the presence of routers on the link, or
+           what flags the routers pass. See <literal>IPv6AcceptRA=</literal>.</para>
  
-             <para>Furthermore, note that by default the domain name
--            specified through DHCP is not used for name resolution.
-+            specified through DHCP, on Ubuntu, are used for name resolution.
-             See option <option>UseDomains=</option> below.</para>
+-          <para>Furthermore, note that by default the domain name specified through DHCP is not used
+-          for name resolution. See option <option>UseDomains=</option> below.</para>
++          <para>Furthermore, note that by default the domain name specified through DHCP, on Ubuntu,
++          are used for name resolution. See option <option>UseDomains=</option> below.</para>
  
-             <para>See the [DHCPv4] or [DHCPv6] sections below for further configuration options for the DHCP
-@@ -1842,7 +1842,7 @@ IPv6Token=prefixstable:2002:da8:1::</programlisting></para>
-             effect of the <option>Domains=</option> setting. If set to <option>route</option>, the domain
-             name received from the DHCP server will be used for routing DNS queries only, but not for
-             searching, similar to the effect of the <option>Domains=</option> setting when the argument is
--            prefixed with <literal>~</literal>. Defaults to false.</para>
-+            prefixed with <literal>~</literal>. Defaults to true on Ubuntu.</para>
+           <para>See the [DHCPv4] or [DHCPv6] sections below for further configuration options for the
+           DHCP client support.</para>
+@@ -1893,7 +1893,7 @@
+           to the effect of the <option>Domains=</option> setting. If set to <option>route</option>, the
+           domain name received from the DHCP server will be used for routing DNS queries only, but not
+           for searching, similar to the effect of the <option>Domains=</option> setting when the
+-          argument is prefixed with <literal>~</literal>. Defaults to false.</para>
++          argument is prefixed with <literal>~</literal>. Defaults to true on Ubuntu.</para>
  
-             <para>It is recommended to enable this option only on trusted networks, as setting this affects
-             resolution of all hostnames, in particular of single-label names. It is generally safer to use
-@@ -2222,7 +2222,7 @@ IPv6Token=prefixstable:2002:da8:1::</programlisting></para>
-             the effect of the <option>Domains=</option> setting. If set to <literal>route</literal>, the domain name
-             received via IPv6 RA will be used for routing DNS queries only, but not for searching, similar to the
-             effect of the <option>Domains=</option> setting when the argument is prefixed with
--            <literal>~</literal>. Defaults to false.</para>
-+            <literal>~</literal>. Defaults to true on Ubuntu.</para>
+           <para>It is recommended to enable this option only on trusted networks, as setting this
+           affects resolution of all hostnames, in particular of single-label names. It is generally
+@@ -2378,7 +2378,7 @@
+           the effect of the <option>Domains=</option> setting. If set to <literal>route</literal>, the domain name
+           received via IPv6 RA will be used for routing DNS queries only, but not for searching, similar to the
+           effect of the <option>Domains=</option> setting when the argument is prefixed with
+-          <literal>~</literal>. Defaults to false.</para>
++          <literal>~</literal>. Defaults to true on Ubuntu.</para>
  
-             <para>It is recommended to enable this option only on trusted networks, as setting this affects resolution
-             of all hostnames, in particular of single-label names. It is generally safer to use the supplied domain
-diff --git a/src/network/networkd-network.c b/src/network/networkd-network.c
-index 850b4f4..10f4909 100644
+           <para>It is recommended to enable this option only on trusted networks, as setting this affects resolution
+           of all hostnames, in particular of single-label names. It is generally safer to use the supplied domain
 --- a/src/network/networkd-network.c
 +++ b/src/network/networkd-network.c
-@@ -341,6 +341,7 @@ int network_load_one(Manager *manager, OrderedHashmap **networks, const char *fi
+@@ -403,6 +403,7 @@
                  .dhcp_use_gateway = -1,
                  .dhcp_send_hostname = true,
                  .dhcp_send_release = true,
@@ -65,11 +63,11 @@ index 850b4f4..10f4909 100644
                  .dhcp_route_metric = DHCP_ROUTE_METRIC,
                  .dhcp_client_identifier = _DHCP_CLIENT_ID_INVALID,
                  .dhcp_route_table = RT_TABLE_MAIN,
-@@ -407,6 +408,7 @@ int network_load_one(Manager *manager, OrderedHashmap **networks, const char *fi
-                 .proxy_arp = -1,
+@@ -474,6 +475,7 @@
  
+                 .ipv6_accept_ra = -1,
                  .ipv6_accept_ra_use_dns = true,
 +                .ipv6_accept_ra_use_domains = DHCP_USE_DOMAINS_YES,
+                 .ipv6_accept_ra_use_gateway = true,
+                 .ipv6_accept_ra_use_route_prefix = true,
                  .ipv6_accept_ra_use_autonomous_prefix = true,
-                 .ipv6_accept_ra_use_onlink_prefix = true,
-                 .ipv6_accept_ra_route_table = RT_TABLE_MAIN,

@@ -168,24 +168,18 @@ int dns_label_unescape_suffix(const char *name, const char **label_terminal, cha
 
         /* Skip current terminal character (and accept domain names ending it ".") */
         if (*terminal == 0)
-                terminal--;
+                terminal = PTR_SUB1(terminal, name);
         if (terminal >= name && *terminal == '.')
-                terminal--;
+                terminal = PTR_SUB1(terminal, name);
 
         /* Point name to the last label, and terminal to the preceding terminal symbol (or make it a NULL pointer) */
-        for (;;) {
-                if (terminal < name) {
-                        /* Reached the first label, so indicate that there are no more */
-                        terminal = NULL;
-                        break;
-                }
-
+        while (terminal) {
                 /* Find the start of the last label */
                 if (*terminal == '.') {
                         const char *y;
                         unsigned slashes = 0;
 
-                        for (y = terminal - 1; y >= name && *y == '\\'; y--)
+                        for (y = PTR_SUB1(terminal, name); y && *y == '\\'; y = PTR_SUB1(y, name))
                                 slashes++;
 
                         if (slashes % 2 == 0) {
@@ -198,7 +192,7 @@ int dns_label_unescape_suffix(const char *name, const char **label_terminal, cha
                         }
                 }
 
-                terminal--;
+                terminal = PTR_SUB1(terminal, name);
         }
 
         r = dns_label_unescape(&name, dest, sz, 0);
@@ -680,7 +674,7 @@ int dns_name_change_suffix(const char *name, const char *old_suffix, const char 
         }
 
         /* Found it! Now generate the new name */
-        prefix = strndupa(name, saved_before - name);
+        prefix = strndupa_safe(name, saved_before - name);
 
         r = dns_name_concat(prefix, new_suffix, 0, ret);
         if (r < 0)
@@ -1028,14 +1022,14 @@ static bool dns_service_name_label_is_valid(const char *label, size_t n) {
         if (memchr(label, 0, n))
                 return false;
 
-        s = strndupa(label, n);
+        s = strndupa_safe(label, n);
         return dns_service_name_is_valid(s);
 }
 
 int dns_service_split(const char *joined, char **_name, char **_type, char **_domain) {
         _cleanup_free_ char *name = NULL, *type = NULL, *domain = NULL;
         const char *p = joined, *q = NULL, *d = NULL;
-        char a[DNS_LABEL_MAX], b[DNS_LABEL_MAX], c[DNS_LABEL_MAX];
+        char a[DNS_LABEL_MAX+1], b[DNS_LABEL_MAX+1], c[DNS_LABEL_MAX+1];
         int an, bn, cn, r;
         unsigned x = 0;
 
@@ -1414,4 +1408,19 @@ int dns_name_dot_suffixed(const char *name) {
                 if (r == 0)
                         return false;
         }
+}
+
+bool dns_name_dont_resolve(const char *name) {
+
+        /* Never respond to some of the domains listed in RFC6303 */
+        if (dns_name_endswith(name, "0.in-addr.arpa") > 0 ||
+            dns_name_equal(name, "255.255.255.255.in-addr.arpa") > 0 ||
+            dns_name_equal(name, "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa") > 0)
+                return true;
+
+        /* Never respond to some of the domains listed in RFC6761 */
+        if (dns_name_endswith(name, "invalid") > 0)
+                return true;
+
+        return false;
 }

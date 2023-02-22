@@ -1,6 +1,8 @@
 <?xml version='1.0'?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+
 <refentry id="repart.d" conditional='ENABLE_REPART'
           xmlns:xi="http://www.w3.org/2001/XInclude">
 
@@ -201,6 +203,16 @@
               </row>
 
               <row>
+                <entry><constant>root-loongarch64</constant></entry>
+                <entry>Root file system partition for the LoongArch 64-bit architecture</entry>
+              </row>
+
+              <row>
+                <entry><constant>root-loongarch64-verity</constant></entry>
+                <entry>Verity data for the LoongArch 64-bit root file system partition</entry>
+              </row>
+
+              <row>
                 <entry><constant>root-riscv32</constant></entry>
                 <entry>Root file system partition for the RISC-V 32-bit architecture</entry>
               </row>
@@ -291,6 +303,16 @@
               </row>
 
               <row>
+                <entry><constant>usr-loongarch64</constant></entry>
+                <entry><filename>/usr/</filename> file system partition for the LoongArch 64-bit architecture</entry>
+              </row>
+
+              <row>
+                <entry><constant>usr-loongarch64-verity</constant></entry>
+                <entry>Verity data for the LoongArch 64-bit <filename>/usr/</filename> file system partition</entry>
+              </row>
+
+              <row>
                 <entry><constant>usr-riscv32</constant></entry>
                 <entry><filename>/usr/</filename> file system partition for the RISC-V 32-bit architecture</entry>
               </row>
@@ -309,8 +331,6 @@
                 <entry><constant>usr-riscv64-verity</constant></entry>
                 <entry>Verity data for the RISC-V 64-bit <filename>/usr/</filename> file system partition</entry>
               </row>
-
-
             </tbody>
           </tgroup>
         </table>
@@ -396,7 +416,7 @@
         …  suffixes (to the base of 1024). If <varname>SizeMinBytes=</varname> is specified the partition is
         created at or grown to at least the specified size. If <varname>SizeMaxBytes=</varname> is specified
         the partition is created at or grown to at most the specified size. The precise size is determined
-        through the weight value value configured with <varname>Weight=</varname>, see above. When
+        through the weight value configured with <varname>Weight=</varname>, see above. When
         <varname>SizeMinBytes=</varname> is set equal to <varname>SizeMaxBytes=</varname> the configured
         weight has no effect as the partition is explicitly sized to the specified fixed value. Note that
         partitions are never created smaller than 4096 bytes, and since partitions are never shrunk the

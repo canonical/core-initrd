@@ -27,12 +27,6 @@ usr/share/dbus-1/system.d/org.freedesktop.portable1.conf
 usr/share/dbus-1/system-services/org.freedesktop.import1.service
 usr/share/dbus-1/system-services/org.freedesktop.machine1.service
 usr/share/dbus-1/system-services/org.freedesktop.portable1.service
-usr/share/man/man*/*nspawn*
-usr/share/man/man*/machinectl*
-usr/share/man/man*/portablectl*
-usr/share/man/man*/systemd-dissect*
-usr/share/man/man*/systemd-machined*
-usr/share/man/man*/systemd-portabled*
 usr/share/polkit-1/actions/org.freedesktop.import1.policy
 usr/share/polkit-1/actions/org.freedesktop.machine1.policy
 usr/share/polkit-1/actions/org.freedesktop.portable1.policy

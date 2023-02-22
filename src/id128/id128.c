@@ -102,7 +102,6 @@ static int show_one(Table **table, const char *name, sd_id128_t uuid, bool first
 
 static int verb_show(int argc, char **argv, void *userdata) {
         _cleanup_(table_unrefp) Table *table = NULL;
-        char **p;
         int r;
 
         argv = strv_skip(argv, 1);
@@ -160,7 +159,7 @@ static int help(void) {
                "  machine-id              Print the ID of current machine\n"
                "  boot-id                 Print the ID of current boot\n"
                "  invocation-id           Print the ID of current invocation\n"
-               "  show [NAME]             Print one or more well-known IDs\n"
+               "  show [NAME]             Print one or more well-known GPT partition type IDs\n"
                "  help                    Show this help\n"
                "\nOptions:\n"
                "  -h --help               Show this help\n"
@@ -226,7 +225,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         return 1;

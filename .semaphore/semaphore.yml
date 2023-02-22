@@ -1,4 +1,5 @@
 ---
+# SPDX-License-Identifier: LGPL-2.1-or-later
 # vi: ts=2 sw=2 et:
 
 version: v1.0
@@ -6,7 +7,7 @@ name: Debian autopkgtest (LXC)
 agent:
   machine:
     type: e1-standard-2
-    os_image: ubuntu1804
+    os_image: ubuntu2004
 
 # Cancel any running or queued job for the same ref
 auto_cancel:
@@ -25,8 +26,3 @@ blocks:
             - checkout --use-cache
             - .semaphore/semaphore-runner.sh SETUP
             - .semaphore/semaphore-runner.sh RUN
-          env_vars:
-            # Pin the debian systemd repo to a specific revision, to work around
-            # missing systemd/systemd#20056 in pre-v250 stable branches
-            - name: BRANCH
-              value: e138f8573a14f8f094bd6c9582bc26ed62c1347f

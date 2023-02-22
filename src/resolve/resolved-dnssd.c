@@ -135,15 +135,13 @@ static int dnssd_service_load(Manager *manager, const char *filename) {
         return 0;
 }
 
-static int specifier_dnssd_host_name(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
-        DnssdService *s  = (DnssdService *) userdata;
+static int specifier_dnssd_hostname(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
+        const Manager *m = ASSERT_PTR(userdata);
         char *n;
 
-        assert(s);
-        assert(s->manager);
-        assert(s->manager->llmnr_hostname);
+        assert(m->llmnr_hostname);
 
-        n = strdup(s->manager->llmnr_hostname);
+        n = strdup(m->llmnr_hostname);
         if (!n)
                 return -ENOMEM;
 
@@ -151,26 +149,27 @@ static int specifier_dnssd_host_name(char specifier, const void *data, const cha
         return 0;
 }
 
-int dnssd_render_instance_name(DnssdService *s, char **ret_name) {
+int dnssd_render_instance_name(Manager *m, DnssdService *s, char **ret) {
         static const Specifier specifier_table[] = {
-                { 'a', specifier_architecture,    NULL },
-                { 'b', specifier_boot_id,         NULL },
-                { 'B', specifier_os_build_id,     NULL },
-                { 'H', specifier_dnssd_host_name, NULL },
-                { 'm', specifier_machine_id,      NULL },
-                { 'o', specifier_os_id,           NULL },
-                { 'v', specifier_kernel_release,  NULL },
-                { 'w', specifier_os_version_id,   NULL },
-                { 'W', specifier_os_variant_id,   NULL },
+                { 'a', specifier_architecture,   NULL },
+                { 'b', specifier_boot_id,        NULL },
+                { 'B', specifier_os_build_id,    NULL },
+                { 'H', specifier_dnssd_hostname, NULL },
+                { 'm', specifier_machine_id,     NULL },
+                { 'o', specifier_os_id,          NULL },
+                { 'v', specifier_kernel_release, NULL },
+                { 'w', specifier_os_version_id,  NULL },
+                { 'W', specifier_os_variant_id,  NULL },
                 {}
         };
         _cleanup_free_ char *name = NULL;
         int r;
 
+        assert(m);
         assert(s);
         assert(s->name_template);
 
-        r = specifier_printf(s->name_template, DNS_LABEL_MAX, specifier_table, NULL, s, &name);
+        r = specifier_printf(s->name_template, DNS_LABEL_MAX, specifier_table, NULL, m, &name);
         if (r < 0)
                 return log_debug_errno(r, "Failed to replace specifiers: %m");
 
@@ -179,14 +178,14 @@ int dnssd_render_instance_name(DnssdService *s, char **ret_name) {
                                        "Service instance name '%s' is invalid.",
                                        name);
 
-        *ret_name = TAKE_PTR(name);
+        if (ret)
+                *ret = TAKE_PTR(name);
 
         return 0;
 }
 
 int dnssd_load(Manager *manager) {
         _cleanup_strv_free_ char **files = NULL;
-        char **f;
         int r;
 
         assert(manager);
@@ -208,10 +207,7 @@ int dnssd_load(Manager *manager) {
 }
 
 int dnssd_update_rrs(DnssdService *s) {
-        _cleanup_free_ char *n = NULL;
-        _cleanup_free_ char *service_name = NULL;
-        _cleanup_free_ char *full_name = NULL;
-        DnssdTxtData *txt_data;
+        _cleanup_free_ char *n = NULL, *service_name = NULL, *full_name = NULL;
         int r;
 
         assert(s);
@@ -223,7 +219,7 @@ int dnssd_update_rrs(DnssdService *s) {
         LIST_FOREACH(items, txt_data, s->txt_data_items)
                 txt_data->rr = dns_resource_record_unref(txt_data->rr);
 
-        r = dnssd_render_instance_name(s, &n);
+        r = dnssd_render_instance_name(s->manager, s, &n);
         if (r < 0)
                 return r;
 

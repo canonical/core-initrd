@@ -183,7 +183,7 @@ static void dmi_memory_device_string(
                 const struct dmi_header *h, uint8_t s) {
         char *str;
 
-        str = strdupa(dmi_string(h, s));
+        str = strdupa_safe(dmi_string(h, s));
         str = strstrip(str);
         if (!isempty(str))
                 printf("MEMORY_DEVICE_%u_%s=%s\n", slot_num, attr_suffix, str);
@@ -667,7 +667,7 @@ static int parse_argv(int argc, char * const *argv) {
                 case '?':
                         return -EINVAL;
                 default:
-                        assert_not_reached("Unknown option");
+                        assert_not_reached();
                 }
 
         return 1;

@@ -1,7 +1,4 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
-/***
-  Copyright © 2013 Jan Janssen
-***/
 
 #include "list.h"
 #include "util.h"
@@ -14,7 +11,6 @@ int main(int argc, const char *argv[]) {
         LIST_HEAD(list_item, head);
         LIST_HEAD(list_item, head2);
         list_item items[4];
-        list_item *cursor;
 
         LIST_HEAD_INIT(head);
         LIST_HEAD_INIT(head2);
@@ -60,6 +56,7 @@ int main(int argc, const char *argv[]) {
         assert_se(items[2].item_prev == &items[3]);
         assert_se(items[3].item_prev == NULL);
 
+        list_item *cursor;
         LIST_FIND_HEAD(item, &items[0], cursor);
         assert_se(cursor == &items[3]);
 
@@ -249,6 +246,15 @@ int main(int argc, const char *argv[]) {
                 LIST_REMOVE(item, head, &items[i]);
 
         assert_se(head == NULL);
+
+        LIST_PREPEND(item, head, items + 0);
+        LIST_PREPEND(item, head, items + 1);
+        LIST_PREPEND(item, head, items + 2);
+
+        assert_se(LIST_POP(item, head) == items + 2);
+        assert_se(LIST_POP(item, head) == items + 1);
+        assert_se(LIST_POP(item, head) == items + 0);
+        assert_se(LIST_POP(item, head) == NULL);
 
         return 0;
 }

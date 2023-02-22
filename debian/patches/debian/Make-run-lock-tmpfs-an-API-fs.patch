@@ -11,12 +11,12 @@ Drop it from tmpfiles.d/legacy.conf to not clobber the permissions.
 
 Closes: #751392
 ---
- src/shared/mount-setup.c | 2 ++
- tmpfiles.d/legacy.conf   | 1 -
+ src/shared/mount-setup.c  | 2 ++
+ tmpfiles.d/legacy.conf.in | 1 -
  2 files changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/src/shared/mount-setup.c b/src/shared/mount-setup.c
-index ef3527e..ebea7a2 100644
+index 975c027..cb975e3 100644
 --- a/src/shared/mount-setup.c
 +++ b/src/shared/mount-setup.c
 @@ -86,6 +86,8 @@ static const MountPoint mount_table[] = {
@@ -28,15 +28,15 @@ index ef3527e..ebea7a2 100644
          { "cgroup2",     "/sys/fs/cgroup",            "cgroup2",    "nsdelegate,memory_recursiveprot",         MS_NOSUID|MS_NOEXEC|MS_NODEV,
            cg_is_unified_wanted, MNT_IN_CONTAINER|MNT_CHECK_WRITABLE },
          { "cgroup2",     "/sys/fs/cgroup",            "cgroup2",    "nsdelegate",                              MS_NOSUID|MS_NOEXEC|MS_NODEV,
-diff --git a/tmpfiles.d/legacy.conf b/tmpfiles.d/legacy.conf
-index 62e2ae0..ea5e735 100644
---- a/tmpfiles.d/legacy.conf
-+++ b/tmpfiles.d/legacy.conf
+diff --git a/tmpfiles.d/legacy.conf.in b/tmpfiles.d/legacy.conf.in
+index 4f2c0d7..fb1d6bf 100644
+--- a/tmpfiles.d/legacy.conf.in
++++ b/tmpfiles.d/legacy.conf.in
 @@ -10,7 +10,6 @@
  # These files are considered legacy and are unnecessary on legacy-free
  # systems.
  
 -d /run/lock 0755 root root -
  L /var/lock - - - - ../run/lock
- 
- # /run/lock/subsys is used for serializing SysV service execution, and
+ {% if CREATE_LOG_DIRS %}
+ L /var/log/README - - - - ../..{{DOC_DIR}}/README.logs

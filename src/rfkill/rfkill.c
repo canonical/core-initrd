@@ -80,7 +80,7 @@ static int find_device(
 
         r = sd_device_new_from_subsystem_sysname(&device, "rfkill", sysname);
         if (r < 0)
-                return log_full_errno(IN_SET(r, -ENOENT, -ENXIO, -ENODEV) ? LOG_DEBUG : LOG_ERR, r,
+                return log_full_errno(ERRNO_IS_DEVICE_ABSENT(r) ? LOG_DEBUG : LOG_ERR, r,
                                       "Failed to open device '%s': %m", sysname);
 
         r = sd_device_get_sysattr_value(device, "name", &name);
@@ -188,17 +188,14 @@ static int load_state(Context *c, const struct rfkill_event *event) {
 }
 
 static void save_state_queue_remove(Context *c, int idx, const char *state_file) {
-        struct write_queue_item *item, *tmp;
-
         assert(c);
 
-        LIST_FOREACH_SAFE(queue, item, tmp, c->write_queue) {
+        LIST_FOREACH(queue, item, c->write_queue)
                 if ((state_file && streq(item->file, state_file)) || idx == item->rfkill_idx) {
                         log_debug("Canceled previous save state of '%s' to %s.", one_zero(item->state), item->file);
                         LIST_REMOVE(queue, c->write_queue, item);
                         write_queue_item_free(item);
                 }
-        }
 }
 
 static int save_state_queue(Context *c, const struct rfkill_event *event) {
@@ -317,7 +314,10 @@ static int run(int argc, char *argv[]) {
                         if (!ready) {
                                 /* Notify manager that we are now finished with processing whatever was
                                  * queued */
-                                (void) sd_notify(false, "READY=1");
+                                r = sd_notify(false, "READY=1");
+                                if (r < 0)
+                                        log_warning_errno(r, "Failed to send readiness notification, ignoring: %m");
+
                                 ready = true;
                         }
 

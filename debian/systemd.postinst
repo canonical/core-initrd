@@ -12,9 +12,30 @@ _update_catalog() {
     journalctl --update-catalog || true
 }
 
-# Update Message Catalogs database in response to dpkg trigger
+_update_binfmt() {
+    # If binfmt-support is installed and active do not restart
+    # systemd-binfmt.service. It will unregister all currently registered
+    # binary formats in ExecStop and not all packages with a binfmt-support
+    # configuration ship a corresponding binfmt.d snippet yet.
+    # Once this is the case, this additional safety check can be removed.
+    if ! _systemctl -q is-active binfmt-support.service; then
+        _systemctl try-restart systemd-binfmt.service || true
+    fi
+}
+
+# Update Message Catalogs database and binfmt registrations in response to dpkg triggers
 if [ "$1" = "triggered" ]; then
-    _update_catalog
+    shift
+    for trigger in $@; do
+        case $trigger in
+            /usr/lib/systemd/catalog)
+                _update_catalog
+                ;;
+            /usr/lib/binfmt.d)
+                _update_binfmt
+                ;;
+        esac
+    done
     exit 0
 fi
 
@@ -39,17 +60,6 @@ if dpkg --compare-versions "$2" lt "234-2ubuntu11~"; then
         fi
 fi
 
-# Use stub resolve.conf by default on new installs
-if [ -z "$2" ]; then
-    mkdir -p /run/systemd/resolve
-    if [ -e /etc/resolv.conf ]; then
-            cp /etc/resolv.conf /run/systemd/resolve/stub-resolv.conf
-    fi
-    # If /etc/resolv.conf is a bind-mount, moving or replacing
-    # /etc/resolv.conf may fail
-    ln -snf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
-fi
-
 # Enable systemd-pstore by default on new installs and upgrades, see #952767
 if dpkg --compare-versions "$2" lt "245.4-4~"; then
     systemctl enable systemd-pstore.service || true
@@ -63,8 +73,6 @@ addgroup --quiet --system systemd-journal
 
 adduser --quiet --system --group --no-create-home --home /run/systemd \
     --gecos "systemd Network Management" systemd-network
-adduser --quiet --system --group --no-create-home --home /run/systemd \
-    --gecos "systemd Resolver" systemd-resolve
 
 # Enable persistent journal, in auto-mode, by default on new installs installs and upgrades
 if dpkg --compare-versions "$2" lt "235-3ubuntu3~"; then
@@ -88,14 +96,13 @@ fi
 # skip daemon-reexec and try-restarts during shutdown to avoid hitting LP: #1803391
 if [ -n "$2" ] && [ "$(systemctl is-system-running)" != "stopping" ]; then
     _systemctl daemon-reexec || true
-    # don't restart logind; this can be done again once this gets implemented:
+    # do not restart logind; this can be done again once this gets implemented:
     # https://github.com/systemd/systemd/issues/1163
     if dpkg --compare-versions "$2" lt-nl "246.2-2~"; then
         # the socket configuration changed
         _systemctl stop systemd-networkd.socket || true
     fi
     _systemctl try-restart systemd-networkd.service || true
-    _systemctl try-restart systemd-resolved.service || true
     _systemctl try-restart systemd-journald.service || true
 fi
 

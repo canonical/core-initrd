@@ -13,7 +13,7 @@
 #include "generator.h"
 #include "log.h"
 #include "macro.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "path-util.h"
 #include "special.h"
 #include "specifier.h"
@@ -63,7 +63,7 @@ int generator_add_symlink(const char *dir, const char *dst, const char *dep_type
         from = path_is_absolute(src) ? src : strjoina("../", src);
         to = strjoina(dir, "/", dst, ".", dep_type, "/", basename(src));
 
-        mkdir_parents_label(to, 0755);
+        (void) mkdir_parents_label(to, 0755);
         if (symlink(from, to) < 0)
                 if (errno != EEXIST)
                         return log_error_errno(errno, "Failed to create symlink \"%s\": %m", to);
@@ -616,10 +616,10 @@ int generator_write_cryptsetup_service_section(
                 FILE *f,
                 const char *name,
                 const char *what,
-                const char *password,
+                const char *key_file,
                 const char *options) {
 
-        _cleanup_free_ char *name_escaped = NULL, *what_escaped = NULL, *password_escaped = NULL, *options_escaped = NULL;
+        _cleanup_free_ char *name_escaped = NULL, *what_escaped = NULL, *key_file_escaped = NULL, *options_escaped = NULL;
 
         assert(f);
         assert(name);
@@ -633,9 +633,9 @@ int generator_write_cryptsetup_service_section(
         if (!what_escaped)
                 return log_oom();
 
-        if (password) {
-                password_escaped = specifier_escape(password);
-                if (!password_escaped)
+        if (key_file) {
+                key_file_escaped = specifier_escape(key_file);
+                if (!key_file_escaped)
                         return log_oom();
         }
 
@@ -655,7 +655,7 @@ int generator_write_cryptsetup_service_section(
                 "OOMScoreAdjust=500\n"    /* Unlocking can allocate a lot of memory if Argon2 is used */
                 "ExecStart=" SYSTEMD_CRYPTSETUP_PATH " attach '%s' '%s' '%s' '%s'\n"
                 "ExecStop=" SYSTEMD_CRYPTSETUP_PATH " detach '%s'\n",
-                name_escaped, what_escaped, strempty(password_escaped), strempty(options_escaped),
+                name_escaped, what_escaped, strempty(key_file_escaped), strempty(options_escaped),
                 name_escaped);
 
         return 0;

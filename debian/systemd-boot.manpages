@@ -1,0 +1,8 @@
+usr/share/man/man1/bootctl.1
+usr/share/man/man5/loader.conf.5
+usr/share/man/man7/sd-boot.7
+usr/share/man/man7/systemd-boot.7
+usr/share/man/man8/systemd-bless-boot.8
+usr/share/man/man8/systemd-bless-boot-generator.8
+usr/share/man/man8/systemd-bless-boot.service.8
+usr/share/man/man8/systemd-boot-system-token.service.8

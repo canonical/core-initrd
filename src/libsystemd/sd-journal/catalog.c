@@ -125,15 +125,12 @@ static char *combine_entries(const char *one, const char *two) {
 
         /* Body from @one */
         n = l1 - (b1 - one);
-        if (n > 0) {
-                memcpy(p, b1, n);
-                p += n;
-
+        if (n > 0)
+                p = mempcpy(p, b1, n);
         /* Body from @two */
-        } else {
+        else {
                 n = l2 - (b2 - two);
-                memcpy(p, b2, n);
-                p += n;
+                p = mempcpy(p, b2, n);
         }
 
         assert(p - dest <= (ptrdiff_t)(l1 + l2));
@@ -395,7 +392,7 @@ static int64_t write_catalog(
 
         header = (CatalogHeader) {
                 .signature = CATALOG_SIGNATURE,
-                .header_size = htole64(ALIGN_TO(sizeof(CatalogHeader), 8)),
+                .header_size = htole64(CONST_ALIGN_TO(sizeof(CatalogHeader), 8)),
                 .catalog_item_size = htole64(sizeof(CatalogItem)),
                 .n_items = htole64(n),
         };
@@ -442,7 +439,6 @@ error:
 
 int catalog_update(const char* database, const char* root, const char* const* dirs) {
         _cleanup_strv_free_ char **files = NULL;
-        char **f;
         _cleanup_(strbuf_freep) struct strbuf *sb = NULL;
         _cleanup_ordered_hashmap_free_free_free_ OrderedHashmap *h = NULL;
         _cleanup_free_ CatalogItem *items = NULL;
@@ -709,7 +705,6 @@ int catalog_list(FILE *f, const char *database, bool oneline) {
 }
 
 int catalog_list_items(FILE *f, const char *database, bool oneline, char **items) {
-        char **item;
         int r = 0;
 
         STRV_FOREACH(item, items) {

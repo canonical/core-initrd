@@ -16,10 +16,10 @@ Closes: #981407
  3 files changed, 7 insertions(+), 3 deletions(-)
 
 diff --git a/src/core/load-fragment.c b/src/core/load-fragment.c
-index 399a759..132ad88 100644
+index 11991ec..76893db 100644
 --- a/src/core/load-fragment.c
 +++ b/src/core/load-fragment.c
-@@ -371,6 +371,7 @@ static int patch_var_run(
+@@ -522,6 +522,7 @@ static int patch_var_run(
  
          const char *e;
          char *z;
@@ -27,7 +27,7 @@ index 399a759..132ad88 100644
  
          e = path_startswith(*path, "/var/run/");
          if (!e)
-@@ -380,7 +381,8 @@ static int patch_var_run(
+@@ -531,7 +532,8 @@ static int patch_var_run(
          if (!z)
                  return log_oom();
  
@@ -38,10 +38,10 @@ index 399a759..132ad88 100644
                     "please update the unit file accordingly.", lvalue, *path, z);
  
 diff --git a/src/sysv-generator/sysv-generator.c b/src/sysv-generator/sysv-generator.c
-index bf23c48..7aa406c 100644
+index 14ae873..aa9e94b 100644
 --- a/src/sysv-generator/sysv-generator.c
 +++ b/src/sysv-generator/sysv-generator.c
-@@ -763,7 +763,7 @@ static int enumerate_sysv(const LookupPaths *lp, Hashmap *all_services) {
+@@ -760,7 +760,7 @@ static int enumerate_sysv(const LookupPaths *lp, Hashmap *all_services) {
                          if (!fpath)
                                  return log_oom();
  
@@ -51,10 +51,10 @@ index bf23c48..7aa406c 100644
                                      "Please update package to include a native systemd unit file, in order to make it more safe and robust.", fpath);
  
 diff --git a/src/tmpfiles/tmpfiles.c b/src/tmpfiles/tmpfiles.c
-index 7e85c50..e94959b 100644
+index 53cd570..7d71edd 100644
 --- a/src/tmpfiles/tmpfiles.c
 +++ b/src/tmpfiles/tmpfiles.c
-@@ -2821,6 +2821,7 @@ static int specifier_expansion_from_arg(Item *i) {
+@@ -2757,6 +2757,7 @@ static int specifier_expansion_from_arg(const Specifier *specifier_table, Item *
  static int patch_var_run(const char *fname, unsigned line, char **path) {
          const char *k;
          char *n;
@@ -62,7 +62,7 @@ index 7e85c50..e94959b 100644
  
          assert(path);
          assert(*path);
-@@ -2846,7 +2847,8 @@ static int patch_var_run(const char *fname, unsigned line, char **path) {
+@@ -2782,7 +2783,8 @@ static int patch_var_run(const char *fname, unsigned line, char **path) {
          /* Also log about this briefly. We do so at LOG_NOTICE level, as we fixed up the situation automatically, hence
           * there's no immediate need for action by the user. However, in the interest of making things less confusing
           * to the user, let's still inform the user that these snippets should really be updated. */

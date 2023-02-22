@@ -7,8 +7,6 @@ LP: #1878051
  src/test/test-mount-util.c | 11 +++++++++++
  1 file changed, 11 insertions(+)
 
-diff --git a/src/test/test-mount-util.c b/src/test/test-mount-util.c
-index d3d0040..3038b03 100644
 --- a/src/test/test-mount-util.c
 +++ b/src/test/test-mount-util.c
 @@ -19,6 +19,7 @@
@@ -17,21 +15,21 @@ index d3d0040..3038b03 100644
  #include "tmpfile-util.h"
 +#include "virt.h"
  
- static void test_mount_option_mangle(void) {
+ TEST(mount_option_mangle) {
          char *opts = NULL;
-@@ -134,6 +135,11 @@ static void test_bind_remount_recursive(void) {
+@@ -129,6 +130,11 @@
+         _cleanup_(rm_rf_physical_and_freep) char *tmp = NULL;
          _cleanup_free_ char *subdir = NULL;
-         const char *p;
  
 +        if (detect_container() == VIRTUALIZATION_LXC) {
 +                log_notice("Testing in LXC, skipping %s due to LP: #1878051", __func__);
 +                return;
 +        }
 +
-         log_info("/* %s */", __func__);
- 
          if (geteuid() != 0 || have_effective_cap(CAP_SYS_ADMIN) <= 0) {
-@@ -196,6 +202,11 @@ static void test_bind_remount_one(void) {
+                 (void) log_tests_skipped("not running privileged");
+                 return;
+@@ -187,6 +193,11 @@
                  return;
          }
  

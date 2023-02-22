@@ -51,8 +51,6 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(Option*, option_free);
 DEFINE_HASH_OPS_WITH_VALUE_DESTRUCTOR(option_hash_ops, char, string_hash_func, string_compare_func, Option, option_free);
 
 static bool test_prefix(const char *p) {
-        char **i;
-
         if (strv_isempty(arg_prefixes))
                 return true;
 
@@ -131,7 +129,6 @@ static int apply_all(OrderedHashmap *sysctl_options) {
                 if (string_is_glob(option->key)) {
                         _cleanup_strv_free_ char **paths = NULL;
                         _cleanup_free_ char *pattern = NULL;
-                        char **s;
 
                         pattern = path_join("/proc/sys", option->key);
                         if (!pattern)
@@ -369,7 +366,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         if (arg_cat_config && argc > optind)
@@ -403,14 +400,13 @@ static int run(int argc, char *argv[]) {
                 }
         } else {
                 _cleanup_strv_free_ char **files = NULL;
-                char **f;
 
                 r = conf_files_list_strv(&files, ".conf", NULL, 0, (const char**) CONF_PATHS_STRV("sysctl.d"));
                 if (r < 0)
                         return log_error_errno(r, "Failed to enumerate sysctl.d files: %m");
 
                 if (arg_cat_config) {
-                        (void) pager_open(arg_pager_flags);
+                        pager_open(arg_pager_flags);
 
                         return cat_files(NULL, files, 0);
                 }

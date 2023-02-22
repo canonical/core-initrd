@@ -107,7 +107,8 @@ static int proposed_rrs_cmp(DnsResourceRecord **x, unsigned x_size, DnsResourceR
 
 static int mdns_packet_extract_matching_rrs(DnsPacket *p, DnsResourceKey *key, DnsResourceRecord ***ret_rrs) {
         _cleanup_free_ DnsResourceRecord **list = NULL;
-        unsigned n = 0, size = 0;
+        size_t i, n = 0, size = 0;
+        DnsResourceRecord *rr;
         int r;
 
         assert(p);
@@ -115,28 +116,39 @@ static int mdns_packet_extract_matching_rrs(DnsPacket *p, DnsResourceKey *key, D
         assert(ret_rrs);
         assert_return(DNS_PACKET_NSCOUNT(p) > 0, -EINVAL);
 
-        for (size_t i = DNS_PACKET_ANCOUNT(p); i < (DNS_PACKET_ANCOUNT(p) + DNS_PACKET_NSCOUNT(p)); i++) {
-                r = dns_resource_key_match_rr(key, p->answer->items[i].rr, NULL);
-                if (r < 0)
-                        return r;
-                if (r > 0)
-                        size++;
+        i = 0;
+        DNS_ANSWER_FOREACH(rr, p->answer) {
+                if (i >= DNS_PACKET_ANCOUNT(p) && i < DNS_PACKET_ANCOUNT(p) + DNS_PACKET_NSCOUNT(p)) {
+                        r = dns_resource_key_match_rr(key, rr, NULL);
+                        if (r < 0)
+                                return r;
+                        if (r > 0)
+                                size++;
+                }
+                i++;
         }
 
-        if (size == 0)
+        if (size == 0) {
+                *ret_rrs = NULL;
                 return 0;
+        }
 
         list = new(DnsResourceRecord *, size);
         if (!list)
                 return -ENOMEM;
 
-        for (size_t i = DNS_PACKET_ANCOUNT(p); i < (DNS_PACKET_ANCOUNT(p) + DNS_PACKET_NSCOUNT(p)); i++) {
-                r = dns_resource_key_match_rr(key, p->answer->items[i].rr, NULL);
-                if (r < 0)
-                        return r;
-                if (r > 0)
-                        list[n++] = p->answer->items[i].rr;
+        i = 0;
+        DNS_ANSWER_FOREACH(rr, p->answer) {
+                if (i >= DNS_PACKET_ANCOUNT(p) && i < DNS_PACKET_ANCOUNT(p) + DNS_PACKET_NSCOUNT(p)) {
+                        r = dns_resource_key_match_rr(key, rr, NULL);
+                        if (r < 0)
+                                return r;
+                        if (r > 0)
+                                list[n++] = rr;
+                }
+                i++;
         }
+
         assert(n == size);
         typesafe_qsort(list, size, mdns_rr_compare);
 
@@ -164,8 +176,6 @@ static int mdns_do_tiebreak(DnsResourceKey *key, DnsAnswer *answer, DnsPacket *p
         r = mdns_packet_extract_matching_rrs(p, key, &remote);
         if (r < 0)
                 return r;
-
-        assert(r > 0);
 
         if (proposed_rrs_cmp(remote, r, our, size) > 0)
                 return 1;
@@ -195,15 +205,14 @@ static bool mdns_should_reply_using_unicast(DnsPacket *p) {
         }
 
         /* All the questions in the query had a QU bit set, RFC 6762, section 5.4 */
-        DNS_QUESTION_FOREACH_ITEM(item, p->question) {
+        DNS_QUESTION_FOREACH_ITEM(item, p->question)
                 if (!FLAGS_SET(item->flags, DNS_QUESTION_WANTS_UNICAST_REPLY))
                         return false;
-        }
+
         return true;
 }
 
 static bool sender_on_local_subnet(DnsScope *s, DnsPacket *p) {
-        LinkAddress *a;
         int r;
 
         /* Check whether the sender is on a local subnet. */
@@ -245,7 +254,8 @@ static int mdns_scope_process_query(DnsScope *s, DnsPacket *p) {
         if (r < 0)
                 return log_debug_errno(r, "Failed to extract resource records from incoming packet: %m");
 
-        assert_return((dns_question_size(p->question) > 0), -EINVAL);
+        if (dns_question_size(p->question) <= 0)
+                return log_debug_errno(SYNTHETIC_ERRNO(EBADMSG), "Received mDNS query without question, ignoring.");
 
         unicast_reply = mdns_should_reply_using_unicast(p);
         if (unicast_reply && !sender_on_local_subnet(s, p)) {
@@ -359,7 +369,6 @@ static int on_mdns_packet(sd_event_source *s, int fd, uint32_t revents, void *us
 
         if (dns_packet_validate_reply(p) > 0) {
                 DnsResourceRecord *rr;
-                DnsTransaction *t;
 
                 log_debug("Got mDNS reply packet");
 
@@ -400,12 +409,28 @@ static int on_mdns_packet(sd_event_source *s, int fd, uint32_t revents, void *us
                         }
                 }
 
-                LIST_FOREACH(transactions_by_scope, t, scope->transactions) {
-                        r = dns_answer_match_key(p->answer, t->key, NULL);
-                        if (r < 0)
-                                log_debug_errno(r, "Failed to match resource key, ignoring: %m");
-                        else if (r > 0) /* This packet matches the transaction, let's pass it on as reply */
+                for (bool match = true; match;) {
+                        match = false;
+                        LIST_FOREACH(transactions_by_scope, t, scope->transactions) {
+                                if (t->state != DNS_TRANSACTION_PENDING)
+                                        continue;
+
+                                r = dns_answer_match_key(p->answer, dns_transaction_key(t), NULL);
+                                if (r <= 0) {
+                                        if (r < 0)
+                                                log_debug_errno(r, "Failed to match resource key, ignoring: %m");
+                                        continue;
+                                }
+
+                                /* This packet matches the transaction, let's pass it on as reply */
                                 dns_transaction_process_reply(t, p, false);
+
+                                /* The dns_transaction_process_reply() -> dns_transaction_complete() ->
+                                 * dns_query_candidate_stop() may free multiple transactions. Hence, restart
+                                 * the loop. */
+                                match = true;
+                                break;
+                        }
                 }
 
                 dns_cache_put(&scope->cache, scope->manager->enable_cache, NULL, DNS_PACKET_RCODE(p), p->answer, NULL, false, _DNSSEC_RESULT_INVALID, UINT32_MAX, p->family, &p->sender);
@@ -494,6 +519,8 @@ int manager_mdns_ipv4_fd(Manager *m) {
         if (r < 0)
                 return log_error_errno(r, "mDNS-IPv4: Failed to create event source: %m");
 
+        (void) sd_event_source_set_description(m->mdns_ipv4_event_source, "mdns-ipv4");
+
         return m->mdns_ipv4_fd = TAKE_FD(s);
 }
 
@@ -518,7 +545,7 @@ int manager_mdns_ipv6_fd(Manager *m) {
         if (r < 0)
                 return log_error_errno(r, "mDNS-IPv6: Failed to set IPV6_UNICAST_HOPS: %m");
 
-        /* RFC 4795, section 2.5 recommends setting the TTL of UDP packets to 255. */
+        /* RFC 6762, section 11 recommends setting the TTL of UDP packets to 255. */
         r = setsockopt_int(s, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
         if (r < 0)
                 return log_error_errno(r, "mDNS-IPv6: Failed to set IPV6_MULTICAST_HOPS: %m");
@@ -566,6 +593,8 @@ int manager_mdns_ipv6_fd(Manager *m) {
         r = sd_event_add_io(m->event, &m->mdns_ipv6_event_source, s, EPOLLIN, on_mdns_packet, m);
         if (r < 0)
                 return log_error_errno(r, "mDNS-IPv6: Failed to create event source: %m");
+
+        (void) sd_event_source_set_description(m->mdns_ipv6_event_source, "mdns-ipv6");
 
         return m->mdns_ipv6_fd = TAKE_FD(s);
 }

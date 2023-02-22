@@ -63,7 +63,6 @@ static int list_dependencies_one(
                 unsigned branches) {
 
         _cleanup_strv_free_ char **deps = NULL;
-        char **c;
         int r;
 
         assert(bus);
@@ -136,9 +135,9 @@ static int list_dependencies_one(
         return 0;
 }
 
-int list_dependencies(int argc, char *argv[], void *userdata) {
+int verb_list_dependencies(int argc, char *argv[], void *userdata) {
         _cleanup_strv_free_ char **units = NULL, **done = NULL;
-        char **u, **patterns;
+        char **patterns;
         sd_bus *bus;
         int r;
 
@@ -157,7 +156,7 @@ int list_dependencies(int argc, char *argv[], void *userdata) {
                         return log_error_errno(r, "Failed to expand names: %m");
         }
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         STRV_FOREACH(u, units) {
                 if (u != units)

@@ -1,0 +1,44 @@
+From: Victor Westerhuis <victor@westerhu.is>
+Date: Sun, 14 Nov 2021 16:26:03 +0100
+Subject: Do not require a valid version when parsing sd-boot loader entries
+
+This fixes #20820
+
+(cherry picked from commit 87c7779599ade84df7934c563adb7fe550c871f7)
+---
+ src/fundamental/bootspec-fundamental.c | 2 +-
+ src/shared/bootspec.c                  | 8 +++++---
+ 2 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/fundamental/bootspec-fundamental.c b/src/fundamental/bootspec-fundamental.c
+index 89e29f5..c013892 100644
+--- a/src/fundamental/bootspec-fundamental.c
++++ b/src/fundamental/bootspec-fundamental.c
+@@ -46,7 +46,7 @@ sd_bool bootspec_pick_name_version_sort_key(
+         good_version = os_image_version ?: (os_version ?: (os_version_id ? : os_build_id));
+         good_sort_key = os_image_id ?: os_id;
+ 
+-        if (!good_name || !good_version)
++        if (!good_name)
+                 return sd_false;
+ 
+         if (ret_name)
+diff --git a/src/shared/bootspec.c b/src/shared/bootspec.c
+index 09eb36e..123db59 100644
+--- a/src/shared/bootspec.c
++++ b/src/shared/bootspec.c
+@@ -530,9 +530,11 @@ static int boot_entry_load_unified(
+         if (!tmp.sort_key)
+                 return log_oom();
+ 
+-        tmp.version = strdup(good_version);
+-        if (!tmp.version)
+-                return log_oom();
++        if (good_version) {
++                tmp.version = strdup(good_version);
++                if (!tmp.version)
++                        return log_oom();
++        }
+ 
+         *ret = tmp;
+         tmp = (BootEntry) {};

@@ -14,11 +14,14 @@ typedef struct Specifier {
 int specifier_printf(const char *text, size_t max_length, const Specifier table[], const char *root, const void *userdata, char **ret);
 
 int specifier_string(char specifier, const void *data, const char *root, const void *userdata, char **ret);
+int specifier_real_path(char specifier, const void *data, const char *root, const void *userdata, char **ret);
+int specifier_real_directory(char specifier, const void *data, const char *root, const void *userdata, char **ret);
 
 int specifier_machine_id(char specifier, const void *data, const char *root, const void *userdata, char **ret);
 int specifier_boot_id(char specifier, const void *data, const char *root, const void *userdata, char **ret);
-int specifier_host_name(char specifier, const void *data, const char *root, const void *userdata, char **ret);
-int specifier_short_host_name(char specifier, const void *data, const char *root, const void *userdata, char **ret);
+int specifier_hostname(char specifier, const void *data, const char *root, const void *userdata, char **ret);
+int specifier_short_hostname(char specifier, const void *data, const char *root, const void *userdata, char **ret);
+int specifier_pretty_hostname(char specifier, const void *data, const char *root, const void *userdata, char **ret);
 int specifier_kernel_release(char specifier, const void *data, const char *root, const void *userdata, char **ret);
 int specifier_architecture(char specifier, const void *data, const char *root, const void *userdata, char **ret);
 int specifier_os_id(char specifier, const void *data, const char *root, const void *userdata, char **ret);
@@ -48,6 +51,7 @@ int specifier_var_tmp_dir(char specifier, const void *data, const char *root, co
  * %B: the OS build ID, according to /etc/os-release
  * %H: the hostname of the running system
  * %l: the short hostname of the running system
+ * %q: the 'pretty' hostname as per /etc/machine-info
  * %m: the machine ID of the running system
  * %M: the OS image ID, according to /etc/os-release
  * %o: the OS ID according to /etc/os-release
@@ -66,29 +70,30 @@ int specifier_var_tmp_dir(char specifier, const void *data, const char *root, co
  * %V: the temporary directory for large, persistent stuff (e.g. /var/tmp, or $TMPDIR, $TEMP, $TMP)
  */
 
-#define COMMON_SYSTEM_SPECIFIERS                  \
-        { 'a', specifier_architecture,    NULL }, \
-        { 'A', specifier_os_image_version,NULL }, \
-        { 'b', specifier_boot_id,         NULL }, \
-        { 'B', specifier_os_build_id,     NULL }, \
-        { 'H', specifier_host_name,       NULL }, \
-        { 'l', specifier_short_host_name, NULL }, \
-        { 'm', specifier_machine_id,      NULL }, \
-        { 'M', specifier_os_image_id,     NULL }, \
-        { 'o', specifier_os_id,           NULL }, \
-        { 'v', specifier_kernel_release,  NULL }, \
-        { 'w', specifier_os_version_id,   NULL }, \
-        { 'W', specifier_os_variant_id,   NULL }
+#define COMMON_SYSTEM_SPECIFIERS                   \
+        { 'a', specifier_architecture,     NULL }, \
+        { 'A', specifier_os_image_version, NULL }, \
+        { 'b', specifier_boot_id,          NULL }, \
+        { 'B', specifier_os_build_id,      NULL }, \
+        { 'H', specifier_hostname,         NULL }, \
+        { 'l', specifier_short_hostname,   NULL }, \
+        { 'q', specifier_pretty_hostname,  NULL }, \
+        { 'm', specifier_machine_id,       NULL }, \
+        { 'M', specifier_os_image_id,      NULL }, \
+        { 'o', specifier_os_id,            NULL }, \
+        { 'v', specifier_kernel_release,   NULL }, \
+        { 'w', specifier_os_version_id,    NULL }, \
+        { 'W', specifier_os_variant_id,    NULL }
 
-#define COMMON_CREDS_SPECIFIERS                   \
-        { 'g', specifier_group_name,      NULL }, \
-        { 'G', specifier_group_id,        NULL }, \
-        { 'u', specifier_user_name,       NULL }, \
-        { 'U', specifier_user_id,         NULL }
+#define COMMON_CREDS_SPECIFIERS(scope)                           \
+        { 'g', specifier_group_name,       INT_TO_PTR(scope) },  \
+        { 'G', specifier_group_id,         INT_TO_PTR(scope) },  \
+        { 'u', specifier_user_name,        INT_TO_PTR(scope) },  \
+        { 'U', specifier_user_id,          INT_TO_PTR(scope) }
 
-#define COMMON_TMP_SPECIFIERS                     \
-        { 'T', specifier_tmp_dir,         NULL }, \
-        { 'V', specifier_var_tmp_dir,     NULL }
+#define COMMON_TMP_SPECIFIERS                      \
+        { 'T', specifier_tmp_dir,          NULL }, \
+        { 'V', specifier_var_tmp_dir,      NULL }
 
 static inline char* specifier_escape(const char *string) {
         return strreplace(string, "%", "%%");

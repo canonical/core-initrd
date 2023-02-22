@@ -5,7 +5,7 @@
 #include "fd-util.h"
 #include "fileio.h"
 #include "fs-util.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "pager.h"
 #include "path-util.h"
 #include "pretty-print.h"
@@ -22,11 +22,10 @@
 #define EDIT_MARKER_START "### Anything between here and the comment below will become the new contents of the file"
 #define EDIT_MARKER_END "### Lines below this comment will be discarded"
 
-int cat(int argc, char *argv[], void *userdata) {
+int verb_cat(int argc, char *argv[], void *userdata) {
         _cleanup_(hashmap_freep) Hashmap *cached_name_map = NULL, *cached_id_map = NULL;
         _cleanup_(lookup_paths_free) LookupPaths lp = {};
         _cleanup_strv_free_ char **names = NULL;
-        char **name;
         sd_bus *bus;
         bool first = true;
         int r, rc = 0;
@@ -38,9 +37,9 @@ int cat(int argc, char *argv[], void *userdata) {
         if (arg_transport != BUS_TRANSPORT_LOCAL)
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Cannot remotely cat units.");
 
-        r = lookup_paths_init(&lp, arg_scope, 0, arg_root);
+        r = lookup_paths_init_or_warn(&lp, arg_scope, 0, arg_root);
         if (r < 0)
-                return log_error_errno(r, "Failed to determine unit paths: %m");
+                return r;
 
         r = acquire_bus(BUS_MANAGER, &bus);
         if (r < 0)
@@ -54,7 +53,7 @@ int cat(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return r;
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         STRV_FOREACH(name, names) {
                 _cleanup_free_ char *fragment_path = NULL;
@@ -100,7 +99,7 @@ int cat(int argc, char *argv[], void *userdata) {
                                 ansi_highlight_red(),
                                 ansi_highlight_red(),
                                 ansi_highlight_red(),
-                                arg_scope == UNIT_FILE_SYSTEM ? "" : " --user",
+                                arg_scope == LOOKUP_SCOPE_SYSTEM ? "" : " --user",
                                 ansi_normal());
 
                 r = cat_files(fragment_path, dropin_paths, 0);
@@ -145,7 +144,6 @@ static int create_edit_temp_file(const char *new_path, const char *original_path
         } else if (original_unit_paths) {
                 _cleanup_free_ char *new_contents = NULL;
                 _cleanup_fclose_ FILE *f = NULL;
-                char **path;
 
                 r = mac_selinux_create_file_prepare(new_path, S_IFREG);
                 if (r < 0)
@@ -318,9 +316,9 @@ static int run_editor(char **paths) {
         if (r < 0)
                 return r;
         if (r == 0) {
-                char **editor_args = NULL, **tmp_path, **original_path;
+                char **editor_args = NULL;
                 size_t n_editor_args = 0, i = 1, argc;
-                const char **args, *editor, *p;
+                const char **args, *editor;
 
                 argc = strv_length(paths)/2 + 1;
 
@@ -358,13 +356,13 @@ static int run_editor(char **paths) {
                 if (n_editor_args > 0)
                         execvp(args[0], (char* const*) args);
 
-                FOREACH_STRING(p, "editor", "nano", "vim", "vi") {
-                        args[0] = p;
-                        execvp(p, (char* const*) args);
+                FOREACH_STRING(name, "editor", "nano", "vim", "vi") {
+                        args[0] = name;
+                        execvp(name, (char* const*) args);
                         /* We do not fail if the editor doesn't exist because we want to try each one of them
                          * before failing. */
                         if (errno != ENOENT) {
-                                log_error_errno(errno, "Failed to execute %s: %m", editor);
+                                log_error_errno(errno, "Failed to execute %s: %m", name);
                                 _exit(EXIT_FAILURE);
                         }
                 }
@@ -379,7 +377,6 @@ static int run_editor(char **paths) {
 static int find_paths_to_edit(sd_bus *bus, char **names, char ***paths) {
         _cleanup_(hashmap_freep) Hashmap *cached_name_map = NULL, *cached_id_map = NULL;
         _cleanup_(lookup_paths_free) LookupPaths lp = {};
-        char **name;
         int r;
 
         assert(names);
@@ -409,8 +406,8 @@ static int find_paths_to_edit(sd_bus *bus, char **names, char ***paths) {
                 if (!path) {
                         if (!arg_force) {
                                 log_info("Run 'systemctl edit%s --force --full %s' to create a new unit.",
-                                         arg_scope == UNIT_FILE_GLOBAL ? " --global" :
-                                         arg_scope == UNIT_FILE_USER ? " --user" : "",
+                                         arg_scope == LOOKUP_SCOPE_GLOBAL ? " --global" :
+                                         arg_scope == LOOKUP_SCOPE_USER ? " --user" : "",
                                          *name);
                                 return -ENOENT;
                         }
@@ -497,11 +494,10 @@ static int trim_edit_markers(const char *path) {
         return 0;
 }
 
-int edit(int argc, char *argv[], void *userdata) {
+int verb_edit(int argc, char *argv[], void *userdata) {
         _cleanup_(lookup_paths_free) LookupPaths lp = {};
         _cleanup_strv_free_ char **names = NULL;
         _cleanup_strv_free_ char **paths = NULL;
-        char **original, **tmp;
         sd_bus *bus;
         int r;
 
@@ -511,9 +507,9 @@ int edit(int argc, char *argv[], void *userdata) {
         if (arg_transport != BUS_TRANSPORT_LOCAL)
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Cannot edit units remotely.");
 
-        r = lookup_paths_init(&lp, arg_scope, 0, arg_root);
+        r = lookup_paths_init_or_warn(&lp, arg_scope, 0, arg_root);
         if (r < 0)
-                return log_error_errno(r, "Failed to determine unit paths: %m");
+                return r;
 
         r = mac_selinux_init();
         if (r < 0)
@@ -569,8 +565,11 @@ int edit(int argc, char *argv[], void *userdata) {
 
         r = 0;
 
-        if (!arg_no_reload && !install_client_side())
-                r = daemon_reload(argc, argv, userdata);
+        if (!arg_no_reload && !install_client_side()) {
+                r = daemon_reload(ACTION_RELOAD, /* graceful= */ false);
+                if (r > 0)
+                        r = 0;
+        }
 
 end:
         STRV_FOREACH_PAIR(original, tmp, paths) {

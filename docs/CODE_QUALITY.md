@@ -2,6 +2,7 @@
 title: Code Quality Tools
 category: Contributing
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 # Code Quality Tools
@@ -37,21 +38,22 @@ available functionality:
    `./tools/find-tabs.sh recpatch` to fix them. (Again, grain of salt, foreign
    headers should usually be left unmodified.)
 
-6. Use `meson compile -C build check-api-docs` to compare the list of exported
-   symbols of `libsystemd.so` and `libudev.so` with the list of man pages. Symbols
+6. Use `ninja -C build check-api-docs` to compare the list of exported symbols
+   of `libsystemd.so` and `libudev.so` with the list of man pages. Symbols
    lacking documentation are highlighted.
 
-7. Use `meson compile -C build update-hwdb` to automatically download and import the
-   PCI, USB and OUI databases into hwdb.
+7. Use `ninja -C build update-hwdb` and `ninja -C build update-hwdb-autosuspend`
+   to automatically download and import the PCI, USB, and OUI databases and the
+   autosuspend quirks into the hwdb.
 
-8. Use `meson compile -C build update-man-rules` to update the meson rules for
-   building man pages automatically from the docbook XML files included in
-   `man/`.
+8. Use `ninja -C build update-man-rules` to update the meson rules for building
+   man pages automatically from the docbook XML files included in `man/`.
 
-9. There are multiple CI systems in use that run on every github PR submission.
+9. There are multiple CI systems in use that run on every github pull request
+   submission or update.
 
-10. [Coverity](https://scan.coverity.com/) is analyzing systemd master in
-    regular intervals. The reports are available
+10. [Coverity](https://scan.coverity.com/) is analyzing systemd `main` branch
+    in regular intervals. The reports are available
     [online](https://scan.coverity.com/projects/systemd).
 
 11. [oss-fuzz](https://oss-fuzz.com/) is continuously fuzzing the
@@ -64,17 +66,17 @@ available functionality:
 13. When building systemd from a git checkout the build scripts will
     automatically enable a git commit hook that ensures whitespace cleanliness.
 
-14. [LGTM](https://lgtm.com/) analyzes every commit pushed to master. The list
+14. [LGTM](https://lgtm.com/) analyzes every commit pushed to `main`. The list
     of active alerts can be found
     [here](https://lgtm.com/projects/g/systemd/systemd/alerts/?mode=list).
 
 15. Each PR is automatically tested with [Address Sanitizer](https://clang.llvm.org/docs/AddressSanitizer.html)
     and [Undefined Behavior Sanitizer](https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html).
-    See [Testing systemd using sanitizers](https://systemd.io/TESTING_WITH_SANITIZERS)
+    See [Testing systemd using sanitizers](TESTING_WITH_SANITIZERS.md)
     for more information.
 
 16. Fossies provides [source code misspelling reports](https://fossies.org/features.html#codespell).
-    The systemd report can be found [here](https://fossies.org/linux/test/systemd-master.tar.gz/codespell.html).
+    The systemd report can be found [here](https://fossies.org/linux/misc/systemd/codespell.html).
 
 Access to Coverity and oss-fuzz reports is limited. Please reach out to the
 maintainers if you need access.

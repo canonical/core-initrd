@@ -1,0 +1,202 @@
+From: Nick Rosbrook <nick.rosbrook@canonical.com>
+Date: Tue, 24 May 2022 13:08:06 -0400
+Subject: sd-hwdb: add sd_hwdb_new_from_path
+
+Origin: upstream, https://github.com/systemd/systemd/commit/60f0ba75569312825ff14680d05a4b4f95842951
+
+The existing sd_hwdb_new function always initializes the hwdb from the
+first successful hwdb.bin it finds from hwdb_bin_paths. This means there
+is currently no way to initialize a hwdb from an explicit path, which
+would be useful for systemd-hwdb query.
+
+Add sd_hwdb_new_from_path to allow a sd_hwdb to be initialized from a
+custom path outside of hwdb_bin_paths.
+---
+ man/sd_hwdb_new.xml              | 14 +++++++++++--
+ src/libsystemd/libsystemd.sym    |  5 +++++
+ src/libsystemd/sd-hwdb/sd-hwdb.c | 45 +++++++++++++++++++++++++++-------------
+ src/systemd/sd-hwdb.h            |  1 +
+ src/test/test-sd-hwdb.c          | 20 ++++++++++++++++++
+ 5 files changed, 69 insertions(+), 16 deletions(-)
+
+diff --git a/man/sd_hwdb_new.xml b/man/sd_hwdb_new.xml
+index c071599..0584add 100644
+--- a/man/sd_hwdb_new.xml
++++ b/man/sd_hwdb_new.xml
+@@ -16,6 +16,7 @@
+ 
+   <refnamediv>
+     <refname>sd_hwdb_new</refname>
++    <refname>sd_hwdb_new_from_path</refname>
+     <refname>sd_hwdb_ref</refname>
+     <refname>sd_hwdb_unref</refname>
+ 
+@@ -31,6 +32,12 @@
+         <paramdef>sd_hwdb **<parameter>hwdb</parameter></paramdef>
+       </funcprototype>
+ 
++      <funcprototype>
++        <funcdef>int <function>sd_hwdb_new_from_path</function></funcdef>
++        <paramdef>const char *<parameter>path</parameter></paramdef>
++        <paramdef>sd_hwdb **<parameter>hwdb</parameter></paramdef>
++      </funcprototype>
++
+       <funcprototype>
+         <funcdef>sd_hwdb* <function>sd_hwdb_ref</function></funcdef>
+         <paramdef>sd_hwdb *<parameter>hwdb</parameter></paramdef>
+@@ -50,6 +57,9 @@
+     database. Upon initialization, the file containing the binary representation of the hardware database is
+     located and opened. The new object is returned in <parameter>hwdb</parameter>.</para>
+ 
++    <para><function>sd_hwdb_new_from_path()</function> may be used to specify the path from which the binary
++    hardware database should be opened.</para>
++
+     <para>The <parameter>hwdb</parameter> object is reference counted. <function>sd_hwdb_ref()</function> and
+     <function>sd_hwdb_unref()</function> may be used to get a new reference or destroy an existing reference
+     to an object. The caller must dispose of the reference acquired with <function>sd_hwdb_new()</function>
+@@ -65,8 +75,8 @@
+   <refsect1>
+     <title>Return Value</title>
+ 
+-    <para>On success, <function>sd_hwdb_new()</function> returns a non-negative integer. On
+-    failure, it returns a negative errno-style error code.</para>
++    <para>On success, <function>sd_hwdb_new()</function> and <function>sd_hwdb_new_from_path()</function>
++    return a non-negative integer. On failure, a negative errno-style error code is returned.</para>
+ 
+     <para><function>sd_hwdb_ref()</function> always returns the argument.
+     </para>
+diff --git a/src/libsystemd/libsystemd.sym b/src/libsystemd/libsystemd.sym
+index ccc321e..e568c80 100644
+--- a/src/libsystemd/libsystemd.sym
++++ b/src/libsystemd/libsystemd.sym
+@@ -778,3 +778,8 @@ global:
+         sd_device_open;
+         sd_device_enumerator_add_nomatch_sysname;
+ } LIBSYSTEMD_250;
++
++LIBSYSTEMD_252 {
++global:
++        sd_hwdb_new_from_path;
++} LIBSYSTEMD_251;
+diff --git a/src/libsystemd/sd-hwdb/sd-hwdb.c b/src/libsystemd/sd-hwdb/sd-hwdb.c
+index 748cf26..f73d1fc 100644
+--- a/src/libsystemd/sd-hwdb/sd-hwdb.c
++++ b/src/libsystemd/sd-hwdb/sd-hwdb.c
+@@ -281,9 +281,9 @@ static int trie_search_f(sd_hwdb *hwdb, const char *search) {
+         return 0;
+ }
+ 
+-_public_ int sd_hwdb_new(sd_hwdb **ret) {
++static int hwdb_new(const char *path, sd_hwdb **ret) {
+         _cleanup_(sd_hwdb_unrefp) sd_hwdb *hwdb = NULL;
+-        const char *hwdb_bin_path;
++        const char *hwdb_bin_path = NULL;
+         const char sig[] = HWDB_SIG;
+ 
+         assert_return(ret, -EINVAL);
+@@ -294,19 +294,26 @@ _public_ int sd_hwdb_new(sd_hwdb **ret) {
+ 
+         hwdb->n_ref = 1;
+ 
+-        /* find hwdb.bin in hwdb_bin_paths */
+-        NULSTR_FOREACH(hwdb_bin_path, hwdb_bin_paths) {
+-                log_debug("Trying to open \"%s\"...", hwdb_bin_path);
+-                hwdb->f = fopen(hwdb_bin_path, "re");
+-                if (hwdb->f)
+-                        break;
+-                if (errno != ENOENT)
+-                        return log_debug_errno(errno, "Failed to open %s: %m", hwdb_bin_path);
+-        }
++        /* find hwdb.bin in hwdb_bin_paths, or from an explicit path if provided */
++        if (!isempty(path)) {
++                log_debug("Trying to open \"%s\"...", path);
++                hwdb->f = fopen(path, "re");
++                if (!hwdb->f)
++                        return log_debug_errno(errno, "Failed to open %s: %m", path);
++        } else {
++                NULSTR_FOREACH(hwdb_bin_path, hwdb_bin_paths) {
++                        log_debug("Trying to open \"%s\"...", hwdb_bin_path);
++                        hwdb->f = fopen(hwdb_bin_path, "re");
++                        if (hwdb->f)
++                                break;
++                        if (errno != ENOENT)
++                                return log_debug_errno(errno, "Failed to open %s: %m", hwdb_bin_path);
++                }
+ 
+-        if (!hwdb->f)
+-                return log_debug_errno(SYNTHETIC_ERRNO(ENOENT),
+-                                       "hwdb.bin does not exist, please run 'systemd-hwdb update'");
++                if (!hwdb->f)
++                        return log_debug_errno(SYNTHETIC_ERRNO(ENOENT),
++                                               "hwdb.bin does not exist, please run 'systemd-hwdb update'");
++        }
+ 
+         if (fstat(fileno(hwdb->f), &hwdb->st) < 0)
+                 return log_debug_errno(errno, "Failed to stat %s: %m", hwdb_bin_path);
+@@ -339,6 +346,16 @@ _public_ int sd_hwdb_new(sd_hwdb **ret) {
+         return 0;
+ }
+ 
++_public_ int sd_hwdb_new_from_path(const char *path, sd_hwdb **ret) {
++        assert_return(!isempty(path), -EINVAL);
++
++        return hwdb_new(path, ret);
++}
++
++_public_ int sd_hwdb_new(sd_hwdb **ret) {
++        return hwdb_new(NULL, ret);
++}
++
+ static sd_hwdb *hwdb_free(sd_hwdb *hwdb) {
+         assert(hwdb);
+ 
+diff --git a/src/systemd/sd-hwdb.h b/src/systemd/sd-hwdb.h
+index 9380759..9eee1c1 100644
+--- a/src/systemd/sd-hwdb.h
++++ b/src/systemd/sd-hwdb.h
+@@ -27,6 +27,7 @@ sd_hwdb *sd_hwdb_ref(sd_hwdb *hwdb);
+ sd_hwdb *sd_hwdb_unref(sd_hwdb *hwdb);
+ 
+ int sd_hwdb_new(sd_hwdb **ret);
++int sd_hwdb_new_from_path(const char *path, sd_hwdb **ret);
+ 
+ int sd_hwdb_get(sd_hwdb *hwdb, const char *modalias, const char *key, const char **value);
+ 
+diff --git a/src/test/test-sd-hwdb.c b/src/test/test-sd-hwdb.c
+index 5e13985..f18634c 100644
+--- a/src/test/test-sd-hwdb.c
++++ b/src/test/test-sd-hwdb.c
+@@ -5,6 +5,8 @@
+ #include "alloc-util.h"
+ #include "errno-util.h"
+ #include "errno.h"
++#include "hwdb-internal.h"
++#include "nulstr-util.h"
+ #include "tests.h"
+ 
+ TEST(failed_enumerate) {
+@@ -52,6 +54,24 @@ TEST(basic_enumerate) {
+         assert_se(len1 == len2);
+ }
+ 
++TEST(sd_hwdb_new_from_path) {
++        _cleanup_(sd_hwdb_unrefp) sd_hwdb *hwdb = NULL;
++        const char *hwdb_bin_path = NULL;
++        int r;
++
++        assert_se(sd_hwdb_new_from_path(NULL, &hwdb) == -EINVAL);
++        assert_se(sd_hwdb_new_from_path("", &hwdb) == -EINVAL);
++        assert_se(sd_hwdb_new_from_path("/path/that/should/not/exist", &hwdb) < 0);
++
++        NULSTR_FOREACH(hwdb_bin_path, hwdb_bin_paths) {
++                r = sd_hwdb_new_from_path(hwdb_bin_path, &hwdb);
++                if (r >= 0)
++                        break;
++        }
++
++        assert_se(r >= 0);
++}
++
+ static int intro(void) {
+         _cleanup_(sd_hwdb_unrefp) sd_hwdb *hwdb = NULL;
+         int r;

@@ -1,0 +1,41 @@
+From: Nick Rosbrook <nick.rosbrook@canonical.com>
+Date: Tue, 28 Jun 2022 16:48:21 -0400
+Subject: test: copy libgcc_s.so.1 to TPM2 test image on Debian-like systems
+Forwarded: https://github.com/systemd/systemd/pull/23858
+
+On Debian, cryptsetup does not link against libgcc_s.so.1 which leads to
+the following test failure in TEST-70-TPM2:
+
+ systemd[1]: Starting testsuite-70.service...
+ systemd[329]: testsuite-70.service: Executing: /usr/lib/systemd/tests/testdata/units/testsuite-70.sh
+ testsuite-70.sh[329]: + export SYSTEMD_LOG_LEVEL=debug
+ testsuite-70.sh[329]: + SYSTEMD_LOG_LEVEL=debug
+ testsuite-70.sh[329]: + img=/var/tmp/test.img
+ testsuite-70.sh[329]: + dd if=/dev/zero of=/var/tmp/test.img bs=1024k count=20 status=none
+ testsuite-70.sh[329]: + echo -n passphrase
+ testsuite-70.sh[329]: + cryptsetup luksFormat -q --use-urandom /var/tmp/test.img /tmp/passphrase
+ testsuite-70.sh[333]: libgcc_s.so.1 must be installed for pthread_exit to work
+ testsuite-70.sh[329]: /usr/lib/systemd/tests/testdata/units/testsuite-70.sh: line 12:   333 Aborted                 (core dumped) cryptsetup luksFormat -q --use-urandom $img /tmp/passphrase
+
+To fix this, manually install libgcc_s.so.1 to the test image if running
+on Debian-like systems.
+---
+ test/TEST-70-TPM2/test.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/test/TEST-70-TPM2/test.sh b/test/TEST-70-TPM2/test.sh
+index 60e8dda..0c077e9 100755
+--- a/test/TEST-70-TPM2/test.sh
++++ b/test/TEST-70-TPM2/test.sh
+@@ -21,6 +21,11 @@ test_append_files() {
+         install_dmevent
+         generate_module_dependencies
+         inst_binary tpm2_pcrextend
++
++        # On Debian, cryptsetup does not link against libgcc_s.so.1
++        if get_bool "$LOOKS_LIKE_DEBIAN"; then
++            inst_library "/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/libgcc_s.so.1"
++        fi
+     )
+ }
+ 

@@ -1,0 +1,44 @@
+---
+# vi: ts=2 sw=2 et:
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# https://github.com/marketplace/actions/super-linter
+name: Lint Code Base
+
+on:
+  pull_request:
+    branches:
+      - main
+      - v[0-9]+-stable
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Lint Code Base
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Repo checkout
+        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
+        with:
+          # We need a full repo clone
+          fetch-depth: 0
+
+      - name: Lint Code Base
+        uses: github/super-linter/slim@ae4e373c56efad95924d9cc6b89624fdb2333007
+        env:
+          DEFAULT_BRANCH: main
+          MULTI_STATUS: false
+          # Excludes:
+          #   - man/.* - all snippets in man pages (false positives due to
+          #              missing shebangs)
+          #   - .*\.(in|SKELETON) - all template/skeleton files
+          #   - tools/coverity\.sh - external file (with some modifications)
+          FILTER_REGEX_EXCLUDE: .*/(man/.*|.*\.(in|SKELETON)|tools/coverity\.sh)$
+          VALIDATE_ALL_CODEBASE: false
+          VALIDATE_BASH: true
+          VALIDATE_GITHUB_ACTIONS: true

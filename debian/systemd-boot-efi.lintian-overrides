@@ -1,0 +1,6 @@
+# Not a shared library
+systemd-boot-efi: shared-library-lacks-prerequisites
+# PE-COFF EFI binaries, false positives
+systemd-boot-efi: executable-not-elf-or-script
+# These are EFI binaries, not libraries, they all ship in /usr/lib/systemd/boot
+systemd-boot-efi: arch-dependent-file-not-in-arch-specific-directory

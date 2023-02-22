@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
 #include "ether-addr-util.h"
@@ -7,7 +7,7 @@
 #include "networkd-network.h"
 #include "networkd-util.h"
 
-DEFINE_NETWORK_SECTION_FUNCTIONS(DHCPStaticLease, dhcp_static_lease_free);
+DEFINE_SECTION_CLEANUP_FUNCTIONS(DHCPStaticLease, dhcp_static_lease_free);
 
 DHCPStaticLease *dhcp_static_lease_free(DHCPStaticLease *static_lease) {
         if (!static_lease)
@@ -16,7 +16,7 @@ DHCPStaticLease *dhcp_static_lease_free(DHCPStaticLease *static_lease) {
         if (static_lease->network && static_lease->section)
                 hashmap_remove(static_lease->network->dhcp_static_leases_by_section, static_lease->section);
 
-        network_config_section_free(static_lease->section);
+        config_section_free(static_lease->section);
         free(static_lease->client_id);
         return mfree(static_lease);
 }
@@ -35,7 +35,7 @@ static int dhcp_static_lease_new(DHCPStaticLease **ret) {
 }
 
 static int lease_new_static(Network *network, const char *filename, unsigned section_line, DHCPStaticLease **ret) {
-        _cleanup_(network_config_section_freep) NetworkConfigSection *n = NULL;
+        _cleanup_(config_section_freep) ConfigSection *n = NULL;
         _cleanup_(dhcp_static_lease_freep) DHCPStaticLease *static_lease = NULL;
         int r;
 
@@ -44,7 +44,7 @@ static int lease_new_static(Network *network, const char *filename, unsigned sec
         assert(section_line > 0);
         assert(ret);
 
-        r = network_config_section_new(filename, section_line, &n);
+        r = config_section_new(filename, section_line, &n);
         if (r < 0)
                 return r;
 
@@ -60,7 +60,7 @@ static int lease_new_static(Network *network, const char *filename, unsigned sec
 
         static_lease->network = network;
         static_lease->section = TAKE_PTR(n);
-        r = hashmap_ensure_put(&network->dhcp_static_leases_by_section, &network_config_hash_ops, static_lease->section, static_lease);
+        r = hashmap_ensure_put(&network->dhcp_static_leases_by_section, &config_section_hash_ops, static_lease->section, static_lease);
         if (r < 0)
                 return r;
 
@@ -184,7 +184,7 @@ int config_parse_dhcp_static_lease_hwaddr(
                 return 0;
         }
 
-        r = ether_addr_from_string(rvalue, &hwaddr);
+        r = parse_ether_addr(rvalue, &hwaddr);
         if (r < 0) {
                 log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to parse MAC address for DHCPv4 static lease, ignoring assignment: %s", rvalue);

@@ -1,8 +1,11 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
+#include "efi-api.h"
 #include "extract-word.h"
 #include "parse-util.h"
+#include "stat-util.h"
 #include "tpm2-util.h"
+#include "virt.h"
 
 #if HAVE_TPM2
 #include "alloc-util.h"
@@ -14,6 +17,7 @@
 #include "hexdecoct.h"
 #include "memory-util.h"
 #include "random-util.h"
+#include "sha256.h"
 #include "time-util.h"
 
 static void *libtss2_esys_dl = NULL;
@@ -25,13 +29,18 @@ TSS2_RC (*sym_Esys_CreatePrimary)(ESYS_CONTEXT *esysContext, ESYS_TR primaryHand
 void (*sym_Esys_Finalize)(ESYS_CONTEXT **context) = NULL;
 TSS2_RC (*sym_Esys_FlushContext)(ESYS_CONTEXT *esysContext, ESYS_TR flushHandle) = NULL;
 void (*sym_Esys_Free)(void *ptr) = NULL;
+TSS2_RC (*sym_Esys_GetCapability)(ESYS_CONTEXT *esysContext, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, TPM2_CAP capability, UINT32 property, UINT32 propertyCount, TPMI_YES_NO *moreData, TPMS_CAPABILITY_DATA **capabilityData);
 TSS2_RC (*sym_Esys_GetRandom)(ESYS_CONTEXT *esysContext, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, UINT16 bytesRequested, TPM2B_DIGEST **randomBytes) = NULL;
 TSS2_RC (*sym_Esys_Initialize)(ESYS_CONTEXT **esys_context,  TSS2_TCTI_CONTEXT *tcti, TSS2_ABI_VERSION *abiVersion) = NULL;
 TSS2_RC (*sym_Esys_Load)(ESYS_CONTEXT *esysContext, ESYS_TR parentHandle, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, const TPM2B_PRIVATE *inPrivate, const TPM2B_PUBLIC *inPublic, ESYS_TR *objectHandle) = NULL;
+TSS2_RC (*sym_Esys_PCR_Read)(ESYS_CONTEXT *esysContext, ESYS_TR shandle1,ESYS_TR shandle2, ESYS_TR shandle3, const TPML_PCR_SELECTION *pcrSelectionIn, UINT32 *pcrUpdateCounter, TPML_PCR_SELECTION **pcrSelectionOut, TPML_DIGEST **pcrValues);
+TSS2_RC (*sym_Esys_PolicyAuthValue)(ESYS_CONTEXT *esysContext, ESYS_TR policySession, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3) = NULL;
 TSS2_RC (*sym_Esys_PolicyGetDigest)(ESYS_CONTEXT *esysContext, ESYS_TR policySession, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, TPM2B_DIGEST **policyDigest) = NULL;
 TSS2_RC (*sym_Esys_PolicyPCR)(ESYS_CONTEXT *esysContext, ESYS_TR policySession, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, const TPM2B_DIGEST *pcrDigest, const TPML_PCR_SELECTION *pcrs) = NULL;
 TSS2_RC (*sym_Esys_StartAuthSession)(ESYS_CONTEXT *esysContext, ESYS_TR tpmKey, ESYS_TR bind, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, const TPM2B_NONCE *nonceCaller, TPM2_SE sessionType, const TPMT_SYM_DEF *symmetric, TPMI_ALG_HASH authHash, ESYS_TR *sessionHandle) = NULL;
 TSS2_RC (*sym_Esys_Startup)(ESYS_CONTEXT *esysContext, TPM2_SU startupType) = NULL;
+TSS2_RC (*sym_Esys_TRSess_SetAttributes)(ESYS_CONTEXT *esysContext, ESYS_TR session, TPMA_SESSION flags, TPMA_SESSION mask);
+TSS2_RC (*sym_Esys_TR_SetAuth)(ESYS_CONTEXT *esysContext, ESYS_TR handle, TPM2B_AUTH const *authValue) = NULL;
 TSS2_RC (*sym_Esys_Unseal)(ESYS_CONTEXT *esysContext, ESYS_TR itemHandle, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, TPM2B_SENSITIVE_DATA **outData) = NULL;
 
 const char* (*sym_Tss2_RC_Decode)(TSS2_RC rc) = NULL;
@@ -51,13 +60,18 @@ int dlopen_tpm2(void) {
                         DLSYM_ARG(Esys_Finalize),
                         DLSYM_ARG(Esys_FlushContext),
                         DLSYM_ARG(Esys_Free),
+                        DLSYM_ARG(Esys_GetCapability),
                         DLSYM_ARG(Esys_GetRandom),
                         DLSYM_ARG(Esys_Initialize),
                         DLSYM_ARG(Esys_Load),
+                        DLSYM_ARG(Esys_PCR_Read),
+                        DLSYM_ARG(Esys_PolicyAuthValue),
                         DLSYM_ARG(Esys_PolicyGetDigest),
                         DLSYM_ARG(Esys_PolicyPCR),
                         DLSYM_ARG(Esys_StartAuthSession),
                         DLSYM_ARG(Esys_Startup),
+                        DLSYM_ARG(Esys_TRSess_SetAttributes),
+                        DLSYM_ARG(Esys_TR_SetAuth),
                         DLSYM_ARG(Esys_Unseal));
         if (r < 0)
                 return r;
@@ -147,7 +161,7 @@ static int tpm2_init(const char *device, struct tpm2_context *ret) {
 
                 param = strchr(device, ':');
                 if (param) {
-                        driver = strndupa(device, param - device);
+                        driver = strndupa_safe(device, param - device);
                         param++;
                 } else {
                         driver = "device";
@@ -255,10 +269,12 @@ static int tpm2_credit_random(ESYS_CONTEXT *c) {
 
 static int tpm2_make_primary(
                 ESYS_CONTEXT *c,
-                ESYS_TR *ret_primary) {
+                ESYS_TR *ret_primary,
+                TPMI_ALG_PUBLIC alg,
+                TPMI_ALG_PUBLIC *ret_alg) {
 
         static const TPM2B_SENSITIVE_CREATE primary_sensitive = {};
-        static const TPM2B_PUBLIC primary_template = {
+        static const TPM2B_PUBLIC primary_template_ecc = {
                 .size = sizeof(TPMT_PUBLIC),
                 .publicArea = {
                         .type = TPM2_ALG_ECC,
@@ -278,43 +294,383 @@ static int tpm2_make_primary(
                         },
                 },
         };
+        static const TPM2B_PUBLIC primary_template_rsa = {
+                .size = sizeof(TPMT_PUBLIC),
+                .publicArea = {
+                        .type = TPM2_ALG_RSA,
+                        .nameAlg = TPM2_ALG_SHA256,
+                        .objectAttributes = TPMA_OBJECT_RESTRICTED|TPMA_OBJECT_DECRYPT|TPMA_OBJECT_FIXEDTPM|TPMA_OBJECT_FIXEDPARENT|TPMA_OBJECT_SENSITIVEDATAORIGIN|TPMA_OBJECT_USERWITHAUTH,
+                        .parameters = {
+                                .rsaDetail = {
+                                        .symmetric = {
+                                                .algorithm = TPM2_ALG_AES,
+                                                .keyBits.aes = 128,
+                                                .mode.aes = TPM2_ALG_CFB,
+                                        },
+                                        .scheme.scheme = TPM2_ALG_NULL,
+                                        .keyBits = 2048,
+                                },
+                        },
+                },
+        };
+
         static const TPML_PCR_SELECTION creation_pcr = {};
         ESYS_TR primary = ESYS_TR_NONE;
         TSS2_RC rc;
+        usec_t ts;
 
         log_debug("Creating primary key on TPM.");
 
-        rc = sym_Esys_CreatePrimary(
-                        c,
-                        ESYS_TR_RH_OWNER,
-                        ESYS_TR_PASSWORD,
-                        ESYS_TR_NONE,
-                        ESYS_TR_NONE,
-                        &primary_sensitive,
-                        &primary_template,
-                        NULL,
-                        &creation_pcr,
-                        &primary,
-                        NULL,
-                        NULL,
-                        NULL,
-                        NULL);
+        /* So apparently not all TPM2 devices support ECC. ECC is generally preferably, because it's so much
+         * faster, noticeably so (~10s vs. ~240ms on my system). Hence, unless explicitly configured let's
+         * try to use ECC first, and if that does not work, let's fall back to RSA. */
 
-        if (rc != TSS2_RC_SUCCESS)
-                return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
-                                       "Failed to generate primary key in TPM: %s", sym_Tss2_RC_Decode(rc));
+        ts = now(CLOCK_MONOTONIC);
 
-        log_debug("Successfully created primary key on TPM.");
+        if (IN_SET(alg, 0, TPM2_ALG_ECC)) {
+                rc = sym_Esys_CreatePrimary(
+                                c,
+                                ESYS_TR_RH_OWNER,
+                                ESYS_TR_PASSWORD,
+                                ESYS_TR_NONE,
+                                ESYS_TR_NONE,
+                                &primary_sensitive,
+                                &primary_template_ecc,
+                                NULL,
+                                &creation_pcr,
+                                &primary,
+                                NULL,
+                                NULL,
+                                NULL,
+                                NULL);
+
+                if (rc != TSS2_RC_SUCCESS) {
+                        if (alg != 0)
+                                return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                                       "Failed to generate ECC primary key in TPM: %s", sym_Tss2_RC_Decode(rc));
+
+                        log_debug("Failed to generate ECC primary key in TPM, trying RSA: %s", sym_Tss2_RC_Decode(rc));
+                } else {
+                        log_debug("Successfully created ECC primary key on TPM.");
+                        alg = TPM2_ALG_ECC;
+                }
+        }
+
+        if (IN_SET(alg, 0, TPM2_ALG_RSA)) {
+                rc = sym_Esys_CreatePrimary(
+                                c,
+                                ESYS_TR_RH_OWNER,
+                                ESYS_TR_PASSWORD,
+                                ESYS_TR_NONE,
+                                ESYS_TR_NONE,
+                                &primary_sensitive,
+                                &primary_template_rsa,
+                                NULL,
+                                &creation_pcr,
+                                &primary,
+                                NULL,
+                                NULL,
+                                NULL,
+                                NULL);
+                if (rc != TSS2_RC_SUCCESS)
+                        return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                               "Failed to generate RSA primary key in TPM: %s", sym_Tss2_RC_Decode(rc));
+                else if (alg == 0) {
+                        log_notice("TPM2 chip apparently does not support ECC primary keys, falling back to RSA. "
+                                   "This likely means TPM2 operations will be relatively slow, please be patient.");
+                        alg = TPM2_ALG_RSA;
+                }
+
+                log_debug("Successfully created RSA primary key on TPM.");
+        }
+
+        log_debug("Generating primary key on TPM2 took %s.", FORMAT_TIMESPAN(now(CLOCK_MONOTONIC) - ts, USEC_PER_MSEC));
 
         *ret_primary = primary;
+        if (ret_alg)
+                *ret_alg = alg;
+
+        return 0;
+}
+
+static void tpm2_pcr_mask_to_selecion(uint32_t mask, uint16_t bank, TPML_PCR_SELECTION *ret) {
+        assert(ret);
+
+        /* We only do 24bit here, as that's what PC TPMs are supposed to support */
+        assert(mask <= 0xFFFFFFU);
+
+        *ret = (TPML_PCR_SELECTION) {
+                .count = 1,
+                .pcrSelections[0].hash = bank,
+                .pcrSelections[0].sizeofSelect = 3,
+                .pcrSelections[0].pcrSelect[0] = mask & 0xFF,
+                .pcrSelections[0].pcrSelect[1] = (mask >> 8) & 0xFF,
+                .pcrSelections[0].pcrSelect[2] = (mask >> 16) & 0xFF,
+        };
+}
+
+static unsigned find_nth_bit(uint32_t mask, unsigned n) {
+        uint32_t bit = 1;
+
+        assert(n < 32);
+
+        /* Returns the bit index of the nth set bit, e.g. mask=0b101001, n=3 → 5 */
+
+        for (unsigned i = 0; i < sizeof(mask)*8; i++) {
+
+                if (bit & mask) {
+                        if (n == 0)
+                                return i;
+
+                        n--;
+                }
+
+                bit <<= 1;
+        }
+
+        return UINT_MAX;
+}
+
+static int tpm2_pcr_mask_good(
+                ESYS_CONTEXT *c,
+                TPMI_ALG_HASH bank,
+                uint32_t mask) {
+
+        _cleanup_(Esys_Freep) TPML_DIGEST *pcr_values = NULL;
+        TPML_PCR_SELECTION selection;
+        bool good = false;
+        TSS2_RC rc;
+
+        assert(c);
+
+        /* So we have the problem that some systems might have working TPM2 chips, but the firmware doesn't
+         * actually measure into them, or only into a suboptimal bank. If so, the PCRs should be all zero or
+         * all 0xFF. Detect that, so that we can warn and maybe pick a better bank. */
+
+        tpm2_pcr_mask_to_selecion(mask, bank, &selection);
+
+        rc = sym_Esys_PCR_Read(
+                        c,
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        &selection,
+                        NULL,
+                        NULL,
+                        &pcr_values);
+        if (rc != TSS2_RC_SUCCESS)
+                return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                       "Failed to read TPM2 PCRs: %s", sym_Tss2_RC_Decode(rc));
+
+        /* If at least one of the selected PCR values is something other than all 0x00 or all 0xFF we are happy. */
+        for (unsigned i = 0; i < pcr_values->count; i++) {
+                if (DEBUG_LOGGING) {
+                        _cleanup_free_ char *h = NULL;
+                        unsigned j;
+
+                        h = hexmem(pcr_values->digests[i].buffer, pcr_values->digests[i].size);
+                        j = find_nth_bit(mask, i);
+                        assert(j != UINT_MAX);
+
+                        log_debug("PCR %u value: %s", j, strna(h));
+                }
+
+                if (!memeqbyte(0x00, pcr_values->digests[i].buffer, pcr_values->digests[i].size) &&
+                    !memeqbyte(0xFF, pcr_values->digests[i].buffer, pcr_values->digests[i].size))
+                        good = true;
+        }
+
+        return good;
+}
+
+static int tpm2_get_best_pcr_bank(
+                ESYS_CONTEXT *c,
+                uint32_t pcr_mask,
+                TPMI_ALG_HASH *ret) {
+
+        _cleanup_(Esys_Freep) TPMS_CAPABILITY_DATA *pcap = NULL;
+        TPMI_ALG_HASH supported_hash = 0, hash_with_valid_pcr = 0;
+        TPMI_YES_NO more;
+        TSS2_RC rc;
+
+        assert(c);
+
+        rc = sym_Esys_GetCapability(
+                        c,
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        TPM2_CAP_PCRS,
+                        0,
+                        1,
+                        &more,
+                        &pcap);
+        if (rc != TSS2_RC_SUCCESS)
+                return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                       "Failed to determine TPM2 PCR bank capabilities: %s", sym_Tss2_RC_Decode(rc));
+
+        assert(pcap->capability == TPM2_CAP_PCRS);
+
+        for (size_t i = 0; i < pcap->data.assignedPCR.count; i++) {
+                bool valid = true;
+                int good;
+
+                /* For now we are only interested in the SHA1 and SHA256 banks */
+                if (!IN_SET(pcap->data.assignedPCR.pcrSelections[i].hash, TPM2_ALG_SHA256, TPM2_ALG_SHA1))
+                        continue;
+
+                /* As per
+                 * https://trustedcomputinggroup.org/wp-content/uploads/TCG_PCClient_PFP_r1p05_v23_pub.pdf a
+                 * TPM2 on a Client PC must have at least 24 PCRs. If this TPM has less, just skip over
+                 * it. */
+                if (pcap->data.assignedPCR.pcrSelections[i].sizeofSelect < TPM2_PCRS_MAX/8) {
+                        log_debug("Skipping TPM2 PCR bank %s with fewer than 24 PCRs.",
+                                  strna(tpm2_pcr_bank_to_string(pcap->data.assignedPCR.pcrSelections[i].hash)));
+                        continue;
+                }
+
+                assert_cc(TPM2_PCRS_MAX % 8 == 0);
+
+                /* It's not enough to check how many PCRs there are, we also need to check that the 24 are
+                 * enabled for this bank. Otherwise this TPM doesn't qualify. */
+                for (size_t j = 0; j < TPM2_PCRS_MAX/8; j++)
+                        if (pcap->data.assignedPCR.pcrSelections[i].pcrSelect[j] != 0xFF) {
+                                valid = false;
+                                break;
+                        }
+
+                if (!valid) {
+                        log_debug("TPM2 PCR bank %s has fewer than 24 PCR bits enabled, ignoring.",
+                                  strna(tpm2_pcr_bank_to_string(pcap->data.assignedPCR.pcrSelections[i].hash)));
+                        continue;
+                }
+
+                good = tpm2_pcr_mask_good(c, pcap->data.assignedPCR.pcrSelections[i].hash, pcr_mask);
+                if (good < 0)
+                        return good;
+
+                if (pcap->data.assignedPCR.pcrSelections[i].hash == TPM2_ALG_SHA256) {
+                        supported_hash = TPM2_ALG_SHA256;
+                        if (good) {
+                                /* Great, SHA256 is supported and has initialized PCR values, we are done. */
+                                hash_with_valid_pcr = TPM2_ALG_SHA256;
+                                break;
+                        }
+                } else {
+                        assert(pcap->data.assignedPCR.pcrSelections[i].hash == TPM2_ALG_SHA1);
+
+                        if (supported_hash == 0)
+                                supported_hash = TPM2_ALG_SHA1;
+
+                        if (good && hash_with_valid_pcr == 0)
+                                hash_with_valid_pcr = TPM2_ALG_SHA1;
+                }
+        }
+
+        /* We preferably pick SHA256, but only if its PCRs are initialized or neither the SHA1 nor the SHA256
+         * PCRs are initialized. If SHA256 is not supported but SHA1 is and its PCRs are too, we prefer
+         * SHA1.
+         *
+         * We log at LOG_NOTICE level whenever we end up using the SHA1 bank or when the PCRs we bind to are
+         * not initialized. */
+
+        if (hash_with_valid_pcr == TPM2_ALG_SHA256) {
+                assert(supported_hash == TPM2_ALG_SHA256);
+                log_debug("TPM2 device supports SHA256 PCR bank and SHA256 PCRs are valid, yay!");
+                *ret = TPM2_ALG_SHA256;
+        } else if (hash_with_valid_pcr == TPM2_ALG_SHA1) {
+                if (supported_hash == TPM2_ALG_SHA256)
+                        log_notice("TPM2 device supports both SHA1 and SHA256 PCR banks, but only SHA1 PCRs are valid, falling back to SHA1 bank. This reduces the security level substantially.");
+                else {
+                        assert(supported_hash == TPM2_ALG_SHA1);
+                        log_notice("TPM2 device lacks support for SHA256 PCR bank, but SHA1 bank is supported and SHA1 PCRs are valid, falling back to SHA1 bank. This reduces the security level substantially.");
+                }
+
+                *ret = TPM2_ALG_SHA1;
+        } else if (supported_hash == TPM2_ALG_SHA256) {
+                log_notice("TPM2 device supports SHA256 PCR bank but none of the selected PCRs are valid! Firmware apparently did not initialize any of the selected PCRs. Proceeding anyway with SHA256 bank. PCR policy effectively unenforced!");
+                *ret = TPM2_ALG_SHA256;
+        } else if (supported_hash == TPM2_ALG_SHA1) {
+                log_notice("TPM2 device lacks support for SHA256 bank, but SHA1 bank is supported, but none of the selected PCRs are valid! Firmware apparently did not initialize any of the selected PCRs. Proceeding anyway with SHA1 bank. PCR policy effectively unenforced!");
+                *ret = TPM2_ALG_SHA1;
+        } else
+                return log_error_errno(SYNTHETIC_ERRNO(EOPNOTSUPP),
+                                       "TPM2 module supports neither SHA1 nor SHA256 PCR banks, cannot operate.");
+
+        return 0;
+}
+
+static int tpm2_make_encryption_session(
+                ESYS_CONTEXT *c,
+                ESYS_TR tpmKey,
+                ESYS_TR *ret_session) {
+
+        static const TPMT_SYM_DEF symmetric = {
+                .algorithm = TPM2_ALG_AES,
+                .keyBits = {
+                        .aes = 128,
+                },
+                .mode = {
+                        .aes = TPM2_ALG_CFB,
+                },
+        };
+        const TPMA_SESSION sessionAttributes = TPMA_SESSION_DECRYPT | TPMA_SESSION_ENCRYPT |
+                        TPMA_SESSION_CONTINUESESSION;
+        ESYS_TR session = ESYS_TR_NONE;
+        TSS2_RC rc;
+
+        assert(c);
+
+        log_debug("Starting HMAC encryption session.");
+
+        /* Start a salted, unbound HMAC session with a well-known key (e.g. primary key) as tpmKey, which
+         * means that the random salt will be encrypted with the well-known key. That way, only the TPM can
+         * recover the salt, which is then used for key derivation. */
+        rc = sym_Esys_StartAuthSession(
+                        c,
+                        tpmKey,
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        ESYS_TR_NONE,
+                        NULL,
+                        TPM2_SE_HMAC,
+                        &symmetric,
+                        TPM2_ALG_SHA256,
+                        &session);
+        if (rc != TSS2_RC_SUCCESS)
+                return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                       "Failed to open session in TPM: %s", sym_Tss2_RC_Decode(rc));
+
+        /* Enable parameter encryption/decryption with AES in CFB mode. Together with HMAC digests (which are
+         * always used for sessions), this provides confidentiality, integrity and replay protection for
+         * operations that use this session. */
+        rc = sym_Esys_TRSess_SetAttributes(c, session, sessionAttributes, 0xff);
+        if (rc != TSS2_RC_SUCCESS)
+                return log_error_errno(
+                                SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                "Failed to configure TPM session: %s",
+                                sym_Tss2_RC_Decode(rc));
+
+        if (ret_session) {
+                *ret_session = session;
+                session = ESYS_TR_NONE;
+        }
+
+        session = flush_context_verbose(c, session);
         return 0;
 }
 
 static int tpm2_make_pcr_session(
                 ESYS_CONTEXT *c,
+                ESYS_TR tpmKey,
+                ESYS_TR parent_session,
                 uint32_t pcr_mask,
+                uint16_t pcr_bank, /* If UINT16_MAX, pick best bank automatically, otherwise specify bank explicitly. */
+                bool use_pin,
                 ESYS_TR *ret_session,
-                TPM2B_DIGEST **ret_policy_digest) {
+                TPM2B_DIGEST **ret_policy_digest,
+                TPMI_ALG_HASH *ret_pcr_bank) {
 
         static const TPMT_SYM_DEF symmetric = {
                 .algorithm = TPM2_ALG_AES,
@@ -325,15 +681,8 @@ static int tpm2_make_pcr_session(
                         .aes = TPM2_ALG_CFB,
                 }
         };
-        TPML_PCR_SELECTION pcr_selection = {
-                .count = 1,
-                .pcrSelections[0].hash = TPM2_ALG_SHA256,
-                .pcrSelections[0].sizeofSelect = 3,
-                .pcrSelections[0].pcrSelect[0] = pcr_mask & 0xFF,
-                .pcrSelections[0].pcrSelect[1] = (pcr_mask >> 8) & 0xFF,
-                .pcrSelections[0].pcrSelect[2] = (pcr_mask >> 16) & 0xFF,
-        };
         _cleanup_(Esys_Freep) TPM2B_DIGEST *policy_digest = NULL;
+        TPML_PCR_SELECTION pcr_selection;
         ESYS_TR session = ESYS_TR_NONE;
         TSS2_RC rc;
         int r;
@@ -342,11 +691,31 @@ static int tpm2_make_pcr_session(
 
         log_debug("Starting authentication session.");
 
+        if (pcr_bank != UINT16_MAX) {
+                r = tpm2_pcr_mask_good(c, pcr_bank, pcr_mask);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        log_notice("Selected TPM2 PCRs are not initialized on this system, most likely due to a firmware issue. PCR policy is effectively not enforced. Proceeding anyway.");
+
+                tpm2_pcr_mask_to_selecion(pcr_mask, pcr_bank, &pcr_selection);
+        } else {
+                TPMI_ALG_HASH h;
+
+                /* No bank configured, pick automatically. Some TPM2 devices only can do SHA1. If we detect
+                 * that use that, but preferably use SHA256 */
+                r = tpm2_get_best_pcr_bank(c, pcr_mask, &h);
+                if (r < 0)
+                        return r;
+
+                tpm2_pcr_mask_to_selecion(pcr_mask, h, &pcr_selection);
+        }
+
         rc = sym_Esys_StartAuthSession(
                         c,
+                        tpmKey,
                         ESYS_TR_NONE,
-                        ESYS_TR_NONE,
-                        ESYS_TR_NONE,
+                        parent_session,
                         ESYS_TR_NONE,
                         ESYS_TR_NONE,
                         NULL,
@@ -372,6 +741,21 @@ static int tpm2_make_pcr_session(
                 r = log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
                                     "Failed to add PCR policy to TPM: %s", sym_Tss2_RC_Decode(rc));
                 goto finish;
+        }
+
+        if (use_pin) {
+                rc = sym_Esys_PolicyAuthValue(
+                                c,
+                                session,
+                                ESYS_TR_NONE,
+                                ESYS_TR_NONE,
+                                ESYS_TR_NONE);
+                if (rc != TSS2_RC_SUCCESS) {
+                        r = log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                            "Failed to add authValue policy to TPM: %s",
+                                            sym_Tss2_RC_Decode(rc));
+                        goto finish;
+                }
         }
 
         if (DEBUG_LOGGING || ret_policy_digest) {
@@ -412,6 +796,9 @@ static int tpm2_make_pcr_session(
         if (ret_policy_digest)
                 *ret_policy_digest = TAKE_PTR(policy_digest);
 
+        if (ret_pcr_bank)
+                *ret_pcr_bank = pcr_selection.pcrSelections[0].hash;
+
         r = 0;
 
 finish:
@@ -419,15 +806,30 @@ finish:
         return r;
 }
 
+static void hash_pin(const char *pin, size_t len, uint8_t ret_digest[static SHA256_DIGEST_SIZE]) {
+        struct sha256_ctx hash;
+
+        assert(pin);
+
+        sha256_init_ctx(&hash);
+        sha256_process_bytes(pin, len, &hash);
+        sha256_finish_ctx(&hash, ret_digest);
+
+        explicit_bzero_safe(&hash, sizeof(hash));
+}
+
 int tpm2_seal(
                 const char *device,
                 uint32_t pcr_mask,
+                const char *pin,
                 void **ret_secret,
                 size_t *ret_secret_size,
                 void **ret_blob,
                 size_t *ret_blob_size,
                 void **ret_pcr_hash,
-                size_t *ret_pcr_hash_size) {
+                size_t *ret_pcr_hash_size,
+                uint16_t *ret_pcr_bank,
+                uint16_t *ret_primary_alg) {
 
         _cleanup_(tpm2_context_destroy) struct tpm2_context c = {};
         _cleanup_(Esys_Freep) TPM2B_DIGEST *policy_digest = NULL;
@@ -437,8 +839,10 @@ int tpm2_seal(
         _cleanup_(erase_and_freep) void *secret = NULL;
         _cleanup_free_ void *blob = NULL, *hash = NULL;
         TPM2B_SENSITIVE_CREATE hmac_sensitive;
-        ESYS_TR primary = ESYS_TR_NONE;
+        ESYS_TR primary = ESYS_TR_NONE, session = ESYS_TR_NONE;
+        TPMI_ALG_PUBLIC primary_alg;
         TPM2B_PUBLIC hmac_template;
+        TPMI_ALG_HASH pcr_bank;
         size_t k, blob_size;
         usec_t start;
         TSS2_RC rc;
@@ -450,18 +854,20 @@ int tpm2_seal(
         assert(ret_blob_size);
         assert(ret_pcr_hash);
         assert(ret_pcr_hash_size);
+        assert(ret_pcr_bank);
 
         assert(pcr_mask < (UINT32_C(1) << TPM2_PCRS_MAX)); /* Support 24 PCR banks */
 
         /* So here's what we do here: we connect to the TPM2 chip. It persistently contains a "seed" key that
          * is randomized when the TPM2 is first initialized or reset and remains stable across boots. We
-         * generate a "primary" key pair derived from that (RSA). Given the seed remains fixed this will
-         * result in the same key pair whenever we specify the exact same parameters for it. We then create a
-         * PCR-bound policy session, which calculates a hash on the current PCR values of the indexes we
-         * specify. We then generate a randomized key on the host (which is the key we actually enroll in the
-         * LUKS2 keyslots), which we upload into the TPM2, where it is encrypted with the "primary" key,
-         * taking the PCR policy session into account. We then download the encrypted key from the TPM2
-         * ("sealing") and marshall it into binary form, which is ultimately placed in the LUKS2 JSON header.
+         * generate a "primary" key pair derived from that (ECC if possible, RSA as fallback). Given the seed
+         * remains fixed this will result in the same key pair whenever we specify the exact same parameters
+         * for it. We then create a PCR-bound policy session, which calculates a hash on the current PCR
+         * values of the indexes we specify. We then generate a randomized key on the host (which is the key
+         * we actually enroll in the LUKS2 keyslots), which we upload into the TPM2, where it is encrypted
+         * with the "primary" key, taking the PCR policy session into account. We then download the encrypted
+         * key from the TPM2 ("sealing") and marshall it into binary form, which is ultimately placed in the
+         * LUKS2 JSON header.
          *
          * The TPM2 "seed" key and "primary" keys never leave the TPM2 chip (and cannot be extracted at
          * all). The random key we enroll in LUKS2 we generate on the host using the Linux random device. It
@@ -474,11 +880,16 @@ int tpm2_seal(
         if (r < 0)
                 return r;
 
-        r = tpm2_make_primary(c.esys_context, &primary);
+        r = tpm2_make_primary(c.esys_context, &primary, 0, &primary_alg);
         if (r < 0)
                 return r;
 
-        r = tpm2_make_pcr_session(c.esys_context, pcr_mask, NULL, &policy_digest);
+        r = tpm2_make_encryption_session(c.esys_context, primary, &session);
+        if (r < 0)
+                goto finish;
+
+        r = tpm2_make_pcr_session(c.esys_context, primary, session, pcr_mask, UINT16_MAX, !!pin, NULL,
+                                  &policy_digest, &pcr_bank);
         if (r < 0)
                 goto finish;
 
@@ -509,6 +920,10 @@ int tpm2_seal(
                 .size = sizeof(hmac_sensitive.sensitive),
                 .sensitive.data.size = 32,
         };
+        if (pin) {
+                hash_pin(pin, strlen(pin), hmac_sensitive.sensitive.userAuth.buffer);
+                hmac_sensitive.sensitive.userAuth.size = SHA256_DIGEST_SIZE;
+        }
         assert(sizeof(hmac_sensitive.sensitive.data.buffer) >= hmac_sensitive.sensitive.data.size);
 
         (void) tpm2_credit_random(c.esys_context);
@@ -526,7 +941,7 @@ int tpm2_seal(
         rc = sym_Esys_Create(
                         c.esys_context,
                         primary,
-                        ESYS_TR_PASSWORD,
+                        session, /* use HMAC session to enable parameter encryption */
                         ESYS_TR_NONE,
                         ESYS_TR_NONE,
                         &hmac_sensitive,
@@ -591,10 +1006,8 @@ int tpm2_seal(
         if (!hash)
                 return log_oom();
 
-        if (DEBUG_LOGGING) {
-                char buf[FORMAT_TIMESPAN_MAX];
-                log_debug("Completed TPM2 key sealing in %s.", format_timespan(buf, sizeof(buf), now(CLOCK_MONOTONIC) - start, 1));
-        }
+        if (DEBUG_LOGGING)
+                log_debug("Completed TPM2 key sealing in %s.", FORMAT_TIMESPAN(now(CLOCK_MONOTONIC) - start, 1));
 
         *ret_secret = TAKE_PTR(secret);
         *ret_secret_size = hmac_sensitive.sensitive.data.size;
@@ -602,26 +1015,34 @@ int tpm2_seal(
         *ret_blob_size = blob_size;
         *ret_pcr_hash = TAKE_PTR(hash);
         *ret_pcr_hash_size = policy_digest->size;
+        *ret_pcr_bank = pcr_bank;
+        *ret_primary_alg = primary_alg;
 
         r = 0;
 
 finish:
+        explicit_bzero_safe(&hmac_sensitive, sizeof(hmac_sensitive));
         primary = flush_context_verbose(c.esys_context, primary);
+        session = flush_context_verbose(c.esys_context, session);
         return r;
 }
 
 int tpm2_unseal(
                 const char *device,
                 uint32_t pcr_mask,
+                uint16_t pcr_bank,
+                uint16_t primary_alg,
                 const void *blob,
                 size_t blob_size,
                 const void *known_policy_hash,
                 size_t known_policy_hash_size,
+                const char *pin,
                 void **ret_secret,
                 size_t *ret_secret_size) {
 
         _cleanup_(tpm2_context_destroy) struct tpm2_context c = {};
-        ESYS_TR primary = ESYS_TR_NONE, session = ESYS_TR_NONE, hmac_key = ESYS_TR_NONE;
+        ESYS_TR primary = ESYS_TR_NONE, session = ESYS_TR_NONE, hmac_session = ESYS_TR_NONE,
+                hmac_key = ESYS_TR_NONE;
         _cleanup_(Esys_Freep) TPM2B_SENSITIVE_DATA* unsealed = NULL;
         _cleanup_(Esys_Freep) TPM2B_DIGEST *policy_digest = NULL;
         _cleanup_(erase_and_freep) char *secret = NULL;
@@ -672,7 +1093,16 @@ int tpm2_unseal(
         if (r < 0)
                 return r;
 
-        r = tpm2_make_pcr_session(c.esys_context, pcr_mask, &session, &policy_digest);
+        r = tpm2_make_primary(c.esys_context, &primary, primary_alg, NULL);
+        if (r < 0)
+                return r;
+
+        r = tpm2_make_encryption_session(c.esys_context, primary, &hmac_session);
+        if (r < 0)
+                goto finish;
+
+        r = tpm2_make_pcr_session(c.esys_context, primary, hmac_session, pcr_mask, pcr_bank, !!pin, &session,
+                                  &policy_digest, NULL);
         if (r < 0)
                 goto finish;
 
@@ -683,25 +1113,48 @@ int tpm2_unseal(
                 return log_error_errno(SYNTHETIC_ERRNO(EPERM),
                                        "Current policy digest does not match stored policy digest, cancelling TPM2 authentication attempt.");
 
-        r = tpm2_make_primary(c.esys_context, &primary);
-        if (r < 0)
-                return r;
-
         log_debug("Loading HMAC key into TPM.");
 
         rc = sym_Esys_Load(
                         c.esys_context,
                         primary,
-                        ESYS_TR_PASSWORD,
+                        hmac_session, /* use HMAC session to enable parameter encryption */
                         ESYS_TR_NONE,
                         ESYS_TR_NONE,
                         &private,
                         &public,
                         &hmac_key);
         if (rc != TSS2_RC_SUCCESS) {
-                r = log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
-                                    "Failed to load HMAC key in TPM: %s", sym_Tss2_RC_Decode(rc));
+                /* If we're in dictionary attack lockout mode, we should see a lockout error here, which we
+                 * need to translate for the caller. */
+                if (rc == TPM2_RC_LOCKOUT)
+                        r = log_error_errno(
+                                        SYNTHETIC_ERRNO(ENOLCK),
+                                        "TPM2 device is in dictionary attack lockout mode.");
+                else
+                        r = log_error_errno(
+                                        SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                        "Failed to load HMAC key in TPM: %s",
+                                        sym_Tss2_RC_Decode(rc));
                 goto finish;
+        }
+
+        if (pin) {
+                TPM2B_AUTH auth = {
+                        .size = SHA256_DIGEST_SIZE
+                };
+
+                hash_pin(pin, strlen(pin), auth.buffer);
+
+                rc = sym_Esys_TR_SetAuth(c.esys_context, hmac_key, &auth);
+                explicit_bzero_safe(&auth, sizeof(auth));
+                if (rc != TSS2_RC_SUCCESS) {
+                        r = log_error_errno(
+                                        SYNTHETIC_ERRNO(ENOTRECOVERABLE),
+                                        "Failed to load PIN in TPM: %s",
+                                        sym_Tss2_RC_Decode(rc));
+                        goto finish;
+                }
         }
 
         log_debug("Unsealing HMAC key.");
@@ -710,7 +1163,7 @@ int tpm2_unseal(
                         c.esys_context,
                         hmac_key,
                         session,
-                        ESYS_TR_NONE,
+                        hmac_session, /* use HMAC session to enable parameter encryption */
                         ESYS_TR_NONE,
                         &unsealed);
         if (rc != TSS2_RC_SUCCESS) {
@@ -726,10 +1179,8 @@ int tpm2_unseal(
                 goto finish;
         }
 
-        if (DEBUG_LOGGING) {
-                char buf[FORMAT_TIMESPAN_MAX];
-                log_debug("Completed TPM2 key unsealing in %s.", format_timespan(buf, sizeof(buf), now(CLOCK_MONOTONIC) - start, 1));
-        }
+        if (DEBUG_LOGGING)
+                log_debug("Completed TPM2 key unsealing in %s.", FORMAT_TIMESPAN(now(CLOCK_MONOTONIC) - start, 1));
 
         *ret_secret = TAKE_PTR(secret);
         *ret_secret_size = unsealed->size;
@@ -913,10 +1364,13 @@ int tpm2_parse_pcrs(const char *s, uint32_t *ret) {
 int tpm2_make_luks2_json(
                 int keyslot,
                 uint32_t pcr_mask,
+                uint16_t pcr_bank,
+                uint16_t primary_alg,
                 const void *blob,
                 size_t blob_size,
                 const void *policy_hash,
                 size_t policy_hash_size,
+                TPM2Flags flags,
                 JsonVariant **ret) {
 
         _cleanup_(json_variant_unrefp) JsonVariant *v = NULL, *a = NULL;
@@ -951,11 +1405,15 @@ int tpm2_make_luks2_json(
 
         r = json_build(&v,
                        JSON_BUILD_OBJECT(
-                                       JSON_BUILD_PAIR("type", JSON_BUILD_STRING("systemd-tpm2")),
+                                       JSON_BUILD_PAIR("type", JSON_BUILD_CONST_STRING("systemd-tpm2")),
                                        JSON_BUILD_PAIR("keyslots", JSON_BUILD_ARRAY(JSON_BUILD_STRING(keyslot_as_string))),
                                        JSON_BUILD_PAIR("tpm2-blob", JSON_BUILD_BASE64(blob, blob_size)),
                                        JSON_BUILD_PAIR("tpm2-pcrs", JSON_BUILD_VARIANT(a)),
-                                       JSON_BUILD_PAIR("tpm2-policy-hash", JSON_BUILD_HEX(policy_hash, policy_hash_size))));
+                                       JSON_BUILD_PAIR_CONDITION(!!tpm2_pcr_bank_to_string(pcr_bank), "tpm2-pcr-bank", JSON_BUILD_STRING(tpm2_pcr_bank_to_string(pcr_bank))),
+                                       JSON_BUILD_PAIR_CONDITION(!!tpm2_primary_alg_to_string(primary_alg), "tpm2-primary-alg", JSON_BUILD_STRING(tpm2_primary_alg_to_string(primary_alg))),
+                                       JSON_BUILD_PAIR("tpm2-policy-hash", JSON_BUILD_HEX(policy_hash, policy_hash_size)),
+                                       JSON_BUILD_PAIR("tpm2-pin", JSON_BUILD_BOOLEAN(flags & TPM2_FLAGS_USE_PIN)))
+                        );
         if (r < 0)
                 return r;
 
@@ -963,4 +1421,65 @@ int tpm2_make_luks2_json(
                 *ret = TAKE_PTR(v);
 
         return keyslot;
+}
+
+const char *tpm2_pcr_bank_to_string(uint16_t bank) {
+        /* For now, let's officially only support these two. We can extend this later on, should the need
+         * arise. */
+        if (bank == TPM2_ALG_SHA256)
+                return "sha256";
+        if (bank == TPM2_ALG_SHA1)
+                return "sha1";
+        return NULL;
+}
+
+int tpm2_pcr_bank_from_string(const char *bank) {
+        if (streq_ptr(bank, "sha256"))
+                return TPM2_ALG_SHA256;
+        if (streq_ptr(bank, "sha1"))
+                return TPM2_ALG_SHA1;
+        return -EINVAL;
+}
+
+const char *tpm2_primary_alg_to_string(uint16_t alg) {
+        if (alg == TPM2_ALG_ECC)
+                return "ecc";
+        if (alg == TPM2_ALG_RSA)
+                return "rsa";
+        return NULL;
+}
+
+int tpm2_primary_alg_from_string(const char *alg) {
+        if (streq_ptr(alg, "ecc"))
+                return TPM2_ALG_ECC;
+        if (streq_ptr(alg, "rsa"))
+                return TPM2_ALG_RSA;
+        return -EINVAL;
+}
+
+Tpm2Support tpm2_support(void) {
+        Tpm2Support support = TPM2_SUPPORT_NONE;
+        int r;
+
+        if (detect_container() <= 0) {
+                /* Check if there's a /dev/tpmrm* device via sysfs. If we run in a container we likely just
+                 * got the host sysfs mounted. Since devices are generally not virtualized for containers,
+                 * let's assume containers never have a TPM, at least for now. */
+
+                r = dir_is_empty("/sys/class/tpmrm", /* ignore_hidden_or_backup= */ false);
+                if (r < 0) {
+                        if (r != -ENOENT)
+                                log_debug_errno(r, "Unable to test whether /sys/class/tpmrm/ exists and is populated, assuming it is not: %m");
+                } else if (r == 0) /* populated! */
+                        support |= TPM2_SUPPORT_DRIVER;
+        }
+
+        if (efi_has_tpm2())
+                support |= TPM2_SUPPORT_FIRMWARE;
+
+#if HAVE_TPM2
+        support |= TPM2_SUPPORT_SYSTEM;
+#endif
+
+        return support;
 }

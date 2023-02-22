@@ -14,10 +14,11 @@
 #include "mkdir.h"
 #include "parse-util.h"
 #include "pretty-print.h"
-#include "terminal-util.h"
+#include "process-util.h"
 #include "reboot-util.h"
 #include "string-util.h"
 #include "strv.h"
+#include "terminal-util.h"
 #include "util.h"
 
 static int help(void) {
@@ -368,7 +369,7 @@ static int run(int argc, char *argv[]) {
 
         log_setup();
 
-        if (strv_contains(strv_skip(argv, 1), "--help"))
+        if (argv_looks_like_help(argc, argv))
                 return help();
 
         if (argc != 3)
@@ -387,7 +388,7 @@ static int run(int argc, char *argv[]) {
         if (!sysname)
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Requires a subsystem and sysname pair specifying a backlight device.");
 
-        ss = strndupa(argv[2], sysname - argv[2]);
+        ss = strndupa_safe(argv[2], sysname - argv[2]);
 
         sysname++;
 
@@ -503,7 +504,7 @@ static int run(int argc, char *argv[]) {
                         return log_device_error_errno(device, r, "Failed to write %s: %m", saved);
 
         } else
-                assert_not_reached("Unknown verb.");
+                assert_not_reached();
 
         return 0;
 }

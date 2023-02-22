@@ -102,8 +102,8 @@ echo hello
 
         l = '/etc/systemd/system/multi-user.target.wants/test_enable.service'
         self.assertTrue(os.path.islink(l))
-        self.assertEqual(os.readlink(l),
-                         system_unit_dir + '/test_enable.service')
+        self.assertTrue(os.readlink(l) == system_unit_dir + '/test_enable.service' or
+                        os.readlink(l) == '../test_enable.service')
 
         # enable should be idempotent
         subprocess.check_call(['systemctl', 'enable', 'test_enable.service'])
@@ -147,8 +147,8 @@ echo hello
 
         l = '/etc/systemd/system/multi-user.target.wants/test_enable.service'
         self.assertTrue(os.path.islink(l))
-        self.assertEqual(os.readlink(l),
-                         system_unit_dir + '/test_enable.service')
+        self.assertTrue(os.readlink(l) == system_unit_dir + '/test_enable.service' or
+                        os.readlink(l) == '../test_enable.service')
 
         # enabled the sysv script
         l = glob('/etc/rc2.d/S??test_enable')
@@ -201,14 +201,14 @@ echo hello
         # enablement symlink
         l = '/etc/systemd/system/multi-user.target.wants/test_enable.service'
         self.assertTrue(os.path.islink(l))
-        self.assertEqual(os.readlink(l),
-                         system_unit_dir + '/test_enable.service')
+        self.assertTrue(os.readlink(l) == system_unit_dir + '/test_enable.service' or
+                        os.readlink(l) == '../test_enable.service')
 
         # alias symlink
         l = '/etc/systemd/system/test_enablea.service'
         self.assertTrue(os.path.islink(l))
-        self.assertEqual(os.readlink(l),
-                         system_unit_dir + '/test_enable.service')
+        self.assertTrue(os.readlink(l) == system_unit_dir + '/test_enable.service' or
+                        os.readlink(l) == 'test_enable.service')
 
     def test_unit_alias_disable(self):
         '''no sysv: disable unit with an alias'''
@@ -246,14 +246,14 @@ echo hello
         # enablement symlink
         l = '/etc/systemd/system/multi-user.target.wants/test_enable.service'
         self.assertTrue(os.path.islink(l))
-        self.assertEqual(os.readlink(l),
-                         system_unit_dir + '/test_enable.service')
+        self.assertTrue(os.readlink(l) == system_unit_dir + '/test_enable.service' or
+                        os.readlink(l) == '../test_enable.service')
 
         # alias symlink
         l = '/etc/systemd/system/test_enablea.service'
         self.assertTrue(os.path.islink(l))
-        self.assertEqual(os.readlink(l),
-                         system_unit_dir + '/test_enable.service')
+        self.assertTrue(os.readlink(l) == system_unit_dir + '/test_enable.service' or
+                        os.readlink(l) == 'test_enable.service')
 
         # enabled the sysv script
         l = glob('/etc/rc2.d/S??test_enable')
@@ -353,7 +353,8 @@ WantedBy=multi-user.target''')
             l = os.path.join('/etc/systemd/system', unit)
             self.assertEqual(os.readlink(l), f.name)
             enable_l = '/etc/systemd/system/multi-user.target.wants/' + unit
-            self.assertEqual(os.readlink(enable_l), f.name)
+            self.assertTrue(os.readlink(enable_l) == f.name or
+                            os.readlink(enable_l) == '../' + unit)
 
             # disable it again
             subprocess.check_call(['systemctl', 'disable', unit])

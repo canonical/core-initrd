@@ -73,11 +73,17 @@ int bus_machine_method_unregister(sd_bus_message *message, void *userdata, sd_bu
         assert(message);
         assert(m);
 
+        const char *details[] = {
+                "machine", m->name,
+                "verb", "unregister",
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_KILL,
                         "org.freedesktop.machine1.manage-machines",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -101,11 +107,17 @@ int bus_machine_method_terminate(sd_bus_message *message, void *userdata, sd_bus
         assert(message);
         assert(m);
 
+        const char *details[] = {
+                "machine", m->name,
+                "verb", "terminate",
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_KILL,
                         "org.freedesktop.machine1.manage-machines",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -147,11 +159,17 @@ int bus_machine_method_kill(sd_bus_message *message, void *userdata, sd_bus_erro
         if (!SIGNAL_VALID(signo))
                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid signal %i", signo);
 
+        const char *details[] = {
+                "machine", m->name,
+                "verb", "kill",
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_KILL,
                         "org.freedesktop.machine1.manage-machines",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -439,11 +457,16 @@ int bus_machine_method_open_pty(sd_bus_message *message, void *userdata, sd_bus_
         assert(message);
         assert(m);
 
+        const char *details[] = {
+                "machine", m->name,
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_SYS_ADMIN,
                         m->class == MACHINE_HOST ? "org.freedesktop.machine1.host-open-pty" : "org.freedesktop.machine1.open-pty",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -526,11 +549,17 @@ int bus_machine_method_open_login(sd_bus_message *message, void *userdata, sd_bu
         assert(message);
         assert(m);
 
+        const char *details[] = {
+                "machine", m->name,
+                "verb", "login",
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_SYS_ADMIN,
                         m->class == MACHINE_HOST ? "org.freedesktop.machine1.host-login" : "org.freedesktop.machine1.login",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -835,11 +864,19 @@ int bus_machine_method_bind_mount(sd_bus_message *message, void *userdata, sd_bu
         else if (!path_is_absolute(dest) || !path_is_normalized(dest))
                 return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Destination path must be absolute and normalized.");
 
+        const char *details[] = {
+                "machine", m->name,
+                "verb", "bind",
+                "src", src,
+                "dest", dest,
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_SYS_ADMIN,
                         "org.freedesktop.machine1.manage-machines",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -899,11 +936,19 @@ int bus_machine_method_copy(sd_bus_message *message, void *userdata, sd_bus_erro
         else if (!path_is_absolute(dest))
                 return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Destination path must be absolute.");
 
+        const char *details[] = {
+                "machine", m->name,
+                "verb", "copy",
+                "src", src,
+                "dest", dest,
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_SYS_ADMIN,
                         "org.freedesktop.machine1.manage-machines",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -930,7 +975,7 @@ int bus_machine_method_copy(sd_bus_message *message, void *userdata, sd_bus_erro
         host_basename = basename(host_path);
 
         container_basename = basename(container_path);
-        t = strdupa(container_path);
+        t = strdupa_safe(container_path);
         container_dirname = dirname(t);
 
         hostfd = open_parent(host_path, O_CLOEXEC, 0);
@@ -1013,11 +1058,17 @@ int bus_machine_method_open_root_directory(sd_bus_message *message, void *userda
         assert(message);
         assert(m);
 
+        const char *details[] = {
+                "machine", m->name,
+                "verb", "open_root_directory",
+                NULL
+        };
+
         r = bus_verify_polkit_async(
                         message,
                         CAP_SYS_ADMIN,
                         "org.freedesktop.machine1.manage-machines",
-                        NULL,
+                        details,
                         false,
                         UID_INVALID,
                         &m->manager->polkit_registry,
@@ -1227,85 +1278,61 @@ static const sd_bus_vtable machine_vtable[] = {
                       NULL,
                       bus_machine_method_terminate,
                       SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("Kill",
-                                 "si",
-                                 SD_BUS_PARAM(who)
-                                 SD_BUS_PARAM(signal),
-                                 NULL,,
-                                 bus_machine_method_kill,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("GetAddresses",
-                                 NULL,,
-                                 "a(iay)",
-                                 SD_BUS_PARAM(addresses),
-                                 bus_machine_method_get_addresses,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("GetOSRelease",
-                                 NULL,,
-                                 "a{ss}",
-                                 SD_BUS_PARAM(fields),
-                                 bus_machine_method_get_os_release,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("GetUIDShift",
-                                 NULL,,
-                                 "u",
-                                 SD_BUS_PARAM(shift),
-                                 bus_machine_method_get_uid_shift,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("OpenPTY",
-                                 NULL,,
-                                 "hs",
-                                 SD_BUS_PARAM(pty)
-                                 SD_BUS_PARAM(pty_path),
-                                 bus_machine_method_open_pty,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("OpenLogin",
-                                 NULL,,
-                                 "hs",
-                                 SD_BUS_PARAM(pty)
-                                 SD_BUS_PARAM(pty_path),
-                                 bus_machine_method_open_login,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("OpenShell",
-                                 "ssasas",
-                                 SD_BUS_PARAM(user)
-                                 SD_BUS_PARAM(path)
-                                 SD_BUS_PARAM(args)
-                                 SD_BUS_PARAM(environment),
-                                 "hs",
-                                 SD_BUS_PARAM(pty)
-                                 SD_BUS_PARAM(pty_path),
-                                 bus_machine_method_open_shell,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("BindMount",
-                                 "ssbb",
-                                 SD_BUS_PARAM(source)
-                                 SD_BUS_PARAM(destination)
-                                 SD_BUS_PARAM(read_only)
-                                 SD_BUS_PARAM(mkdir),
-                                 NULL,,
-                                 bus_machine_method_bind_mount,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("CopyFrom",
-                                 "ss",
-                                 SD_BUS_PARAM(source)
-                                 SD_BUS_PARAM(destination),
-                                 NULL,,
-                                 bus_machine_method_copy,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("CopyTo",
-                                 "ss",
-                                 SD_BUS_PARAM(source)
-                                 SD_BUS_PARAM(destination),
-                                 NULL,,
-                                 bus_machine_method_copy,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("OpenRootDirectory",
-                                 NULL,,
-                                 "h",
-                                 SD_BUS_PARAM(fd),
-                                 bus_machine_method_open_root_directory,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Kill",
+                                SD_BUS_ARGS("s", who, "i", signal),
+                                SD_BUS_NO_RESULT,
+                                bus_machine_method_kill,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("GetAddresses",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_RESULT("a(iay)", addresses),
+                                bus_machine_method_get_addresses,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("GetOSRelease",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_RESULT("a{ss}", fields),
+                                bus_machine_method_get_os_release,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("GetUIDShift",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_RESULT("u", shift),
+                                bus_machine_method_get_uid_shift,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("OpenPTY",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_RESULT("h", pty, "s", pty_path),
+                                bus_machine_method_open_pty,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("OpenLogin",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_RESULT("h", pty, "s", pty_path),
+                                bus_machine_method_open_login,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("OpenShell",
+                                SD_BUS_ARGS("s", user, "s", path, "as", args, "as", environment),
+                                SD_BUS_RESULT("h", pty, "s", pty_path),
+                                bus_machine_method_open_shell,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("BindMount",
+                                SD_BUS_ARGS("s", source, "s", destination, "b", read_only, "b", mkdir),
+                                SD_BUS_NO_RESULT,
+                                bus_machine_method_bind_mount,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("CopyFrom",
+                                SD_BUS_ARGS("s", source, "s", destination),
+                                SD_BUS_NO_RESULT,
+                                bus_machine_method_copy,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("CopyTo",
+                                SD_BUS_ARGS("s", source, "s", destination),
+                                SD_BUS_NO_RESULT,
+                                bus_machine_method_copy,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("OpenRootDirectory",
+                                SD_BUS_NO_ARGS,
+                                SD_BUS_RESULT("h", fd),
+                                bus_machine_method_open_root_directory,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
 
         SD_BUS_VTABLE_END
 };

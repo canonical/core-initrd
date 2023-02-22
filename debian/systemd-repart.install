@@ -1,6 +1,0 @@
-bin/systemd-repart
-lib/systemd/system/initrd-root-fs.target.wants/systemd-repart.service
-lib/systemd/system/sysinit.target.wants/systemd-repart.service
-lib/systemd/system/systemd-repart.service
-usr/share/man/man5/repart*
-usr/share/man/man8/systemd-repart*

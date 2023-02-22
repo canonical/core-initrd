@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "alloc-util.h"
+#include "chase-symlinks.h"
 #include "copy.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -16,6 +17,7 @@
 #include "stdio-util.h"
 #include "string-util.h"
 #include "strv.h"
+#include "sync-util.h"
 #include "tests.h"
 #include "tmpfile-util.h"
 #include "umask-util.h"
@@ -25,15 +27,13 @@
 
 static const char *arg_test_dir = NULL;
 
-static void test_chase_symlinks(void) {
+TEST(chase_symlinks) {
         _cleanup_free_ char *result = NULL;
         _cleanup_close_ int pfd = -1;
         char *temp;
         const char *top, *p, *pslash, *q, *qslash;
         struct stat st;
         int r;
-
-        log_info("/* %s */", __func__);
 
         temp = strjoina(arg_test_dir ?: "/tmp", "/test-chase.XXXXXX");
         assert_se(mkdtemp(temp));
@@ -391,11 +391,9 @@ static void test_chase_symlinks(void) {
         assert_se(rm_rf(temp, REMOVE_ROOT|REMOVE_PHYSICAL) >= 0);
 }
 
-static void test_unlink_noerrno(void) {
+TEST(unlink_noerrno) {
         char *name;
         int fd;
-
-        log_info("/* %s */", __func__);
 
         name = strjoina(arg_test_dir ?: "/tmp", "/test-close_nointr.XXXXXX");
         fd = mkostemp_safe(name);
@@ -412,11 +410,9 @@ static void test_unlink_noerrno(void) {
         }
 }
 
-static void test_readlink_and_make_absolute(void) {
+TEST(readlink_and_make_absolute) {
         const char *tempdir, *name, *name2, *name_alias;
         _cleanup_free_ char *r1 = NULL, *r2 = NULL, *pwd = NULL;
-
-        log_info("/* %s */", __func__);
 
         tempdir = strjoina(arg_test_dir ?: "/tmp", "/test-readlink_and_make_absolute");
         name = strjoina(tempdir, "/original");
@@ -448,7 +444,7 @@ static void test_readlink_and_make_absolute(void) {
         assert_se(rm_rf(tempdir, REMOVE_ROOT|REMOVE_PHYSICAL) >= 0);
 }
 
-static void test_get_files_in_directory(void) {
+TEST(get_files_in_directory) {
         _cleanup_strv_free_ char **l = NULL, **t = NULL;
 
         assert_se(get_files_in_directory(arg_test_dir ?: "/tmp", &l) >= 0);
@@ -456,11 +452,9 @@ static void test_get_files_in_directory(void) {
         assert_se(get_files_in_directory(".", NULL) >= 0);
 }
 
-static void test_var_tmp(void) {
+TEST(var_tmp) {
         _cleanup_free_ char *tmpdir_backup = NULL, *temp_backup = NULL, *tmp_backup = NULL;
         const char *tmp_dir = NULL, *t;
-
-        log_info("/* %s */", __func__);
 
         t = getenv("TMPDIR");
         if (t) {
@@ -515,9 +509,7 @@ static void test_var_tmp(void) {
         }
 }
 
-static void test_dot_or_dot_dot(void) {
-        log_info("/* %s */", __func__);
-
+TEST(dot_or_dot_dot) {
         assert_se(!dot_or_dot_dot(NULL));
         assert_se(!dot_or_dot_dot(""));
         assert_se(!dot_or_dot_dot("xxx"));
@@ -527,12 +519,10 @@ static void test_dot_or_dot_dot(void) {
         assert_se(!dot_or_dot_dot("..foo"));
 }
 
-static void test_access_fd(void) {
+TEST(access_fd) {
         _cleanup_(rmdir_and_freep) char *p = NULL;
         _cleanup_close_ int fd = -1;
         const char *a;
-
-        log_info("/* %s */", __func__);
 
         a = strjoina(arg_test_dir ?: "/tmp", "/access-fd.XXXXXX");
         assert_se(mkdtemp_malloc(a, &p) >= 0);
@@ -557,15 +547,13 @@ static void test_access_fd(void) {
         }
 }
 
-static void test_touch_file(void) {
+TEST(touch_file) {
         uid_t test_uid, test_gid;
         _cleanup_(rm_rf_physical_and_freep) char *p = NULL;
         struct stat st;
         const char *a;
         usec_t test_mtime;
         int r;
-
-        log_info("/* %s */", __func__);
 
         test_uid = geteuid() == 0 ? 65534 : getuid();
         test_gid = geteuid() == 0 ? 65534 : getgid();
@@ -657,12 +645,10 @@ static void test_touch_file(void) {
         assert_se(timespec_load(&st.st_mtim) == test_mtime);
 }
 
-static void test_unlinkat_deallocate(void) {
+TEST(unlinkat_deallocate) {
         _cleanup_free_ char *p = NULL;
         _cleanup_close_ int fd = -1;
         struct stat st;
-
-        log_info("/* %s */", __func__);
 
         assert_se(tempfn_random_child(arg_test_dir, "unlink-deallocation", &p) >= 0);
 
@@ -685,10 +671,8 @@ static void test_unlinkat_deallocate(void) {
         assert_se(st.st_nlink == 0);
 }
 
-static void test_fsync_directory_of_file(void) {
+TEST(fsync_directory_of_file) {
         _cleanup_close_ int fd = -1;
-
-        log_info("/* %s */", __func__);
 
         fd = open_tmpfile_unlinkable(arg_test_dir, O_RDWR);
         assert_se(fd >= 0);
@@ -696,7 +680,7 @@ static void test_fsync_directory_of_file(void) {
         assert_se(fsync_directory_of_file(fd) >= 0);
 }
 
-static void test_rename_noreplace(void) {
+TEST(rename_noreplace) {
         static const char* const table[] = {
                 "/reg",
                 "/dir",
@@ -708,9 +692,6 @@ static void test_rename_noreplace(void) {
 
         _cleanup_(rm_rf_physical_and_freep) char *z = NULL;
         const char *j = NULL;
-        char **a, **b;
-
-        log_info("/* %s */", __func__);
 
         if (arg_test_dir)
                 j = strjoina(arg_test_dir, "/testXXXXXX");
@@ -731,7 +712,7 @@ static void test_rename_noreplace(void) {
         j = strjoina(z, table[4]);
         (void) symlink("foobar", j);
 
-        STRV_FOREACH(a, (char**) table) {
+        STRV_FOREACH(a, table) {
                 _cleanup_free_ char *x = NULL, *y = NULL;
 
                 x = strjoin(z, *a);
@@ -742,7 +723,7 @@ static void test_rename_noreplace(void) {
                         continue;
                 }
 
-                STRV_FOREACH(b, (char**) table) {
+                STRV_FOREACH(b, table) {
                         _cleanup_free_ char *w = NULL;
 
                         w = strjoin(z, *b);
@@ -764,15 +745,13 @@ static void test_rename_noreplace(void) {
         }
 }
 
-static void test_chmod_and_chown(void) {
+TEST(chmod_and_chown) {
         _cleanup_(rm_rf_physical_and_freep) char *d = NULL;
         struct stat st;
         const char *p;
 
         if (geteuid() != 0)
                 return;
-
-        log_info("/* %s */", __func__);
 
         BLOCK_WITH_UMASK(0000);
 
@@ -817,7 +796,7 @@ static void create_binary_file(const char *p, const void *data, size_t l) {
         assert_se(write(fd, data, l) == (ssize_t) l);
 }
 
-static void test_conservative_rename(void) {
+TEST(conservative_rename) {
         _cleanup_(unlink_and_freep) char *p = NULL;
         _cleanup_free_ char *q = NULL;
         size_t l = 16*1024 + random_u64() % (32 * 1024); /* some randomly sized buffer 16k…48k */
@@ -869,24 +848,199 @@ static void test_conservative_rename(void) {
         assert_se(access(q, F_OK) < 0 && errno == ENOENT);
 }
 
-int main(int argc, char *argv[]) {
-        test_setup_logging(LOG_INFO);
+static void test_rmdir_parents_one(
+                const char *prefix,
+                const char *path,
+                const char *stop,
+                int expected,
+                const char *test_exist,
+                const char *test_nonexist_subdir) {
 
-        arg_test_dir = argv[1];
+        const char *p, *s;
 
-        test_chase_symlinks();
-        test_unlink_noerrno();
-        test_readlink_and_make_absolute();
-        test_get_files_in_directory();
-        test_var_tmp();
-        test_dot_or_dot_dot();
-        test_access_fd();
-        test_touch_file();
-        test_unlinkat_deallocate();
-        test_fsync_directory_of_file();
-        test_rename_noreplace();
-        test_chmod_and_chown();
-        test_conservative_rename();
+        log_debug("/* %s(%s, %s) */", __func__, path, stop);
 
-        return 0;
+        p = strjoina(prefix, path);
+        s = strjoina(prefix, stop);
+
+        if (expected >= 0)
+                assert_se(mkdir_parents(p, 0700) >= 0);
+
+        assert_se(rmdir_parents(p, s) == expected);
+
+        if (expected >= 0) {
+                const char *e, *f;
+
+                e = strjoina(prefix, test_exist);
+                f = strjoina(e, test_nonexist_subdir);
+
+                assert_se(access(e, F_OK) >= 0);
+                assert_se(access(f, F_OK) < 0);
+        }
 }
+
+TEST(rmdir_parents) {
+        char *temp;
+
+        temp = strjoina(arg_test_dir ?: "/tmp", "/test-rmdir.XXXXXX");
+        assert_se(mkdtemp(temp));
+
+        test_rmdir_parents_one(temp, "/aaa/../hoge/foo", "/hoge/foo", -EINVAL, NULL, NULL);
+        test_rmdir_parents_one(temp, "/aaa/bbb/ccc", "/hoge/../aaa", -EINVAL, NULL, NULL);
+
+        test_rmdir_parents_one(temp, "/aaa/bbb/ccc/ddd/eee", "/aaa/bbb/ccc/ddd", 0, "/aaa/bbb/ccc/ddd", "/eee");
+        test_rmdir_parents_one(temp, "/aaa/bbb/ccc/ddd/eee", "/aaa/bbb/ccc", 0, "/aaa/bbb/ccc", "/ddd");
+        test_rmdir_parents_one(temp, "/aaa/bbb/ccc/ddd/eee", "/aaa/bbb", 0, "/aaa/bbb", "/ccc");
+        test_rmdir_parents_one(temp, "/aaa/bbb/ccc/ddd/eee", "/aaa", 0, "/aaa", "/bbb");
+        test_rmdir_parents_one(temp, "/aaa/bbb/ccc/ddd/eee", "/", 0, "/", "/aaa");
+
+        test_rmdir_parents_one(temp, "/aaa/bbb/ccc/ddd/eee", "/aaa/hoge/foo", 0, "/aaa", "/bbb");
+        test_rmdir_parents_one(temp, "/aaa////bbb/.//ccc//ddd/eee///./.", "///././aaa/.", 0, "/aaa", "/bbb");
+
+        assert_se(rm_rf(temp, REMOVE_ROOT|REMOVE_PHYSICAL) >= 0);
+}
+
+static void test_parse_cifs_service_one(const char *f, const char *h, const char *s, const char *d, int ret) {
+        _cleanup_free_ char *a = NULL, *b = NULL, *c = NULL;
+
+        assert_se(parse_cifs_service(f, &a, &b, &c) == ret);
+        assert_se(streq_ptr(a, h));
+        assert_se(streq_ptr(b, s));
+        assert_se(streq_ptr(c, d));
+}
+
+TEST(parse_cifs_service) {
+        test_parse_cifs_service_one("//foo/bar/baz", "foo", "bar", "baz", 0);
+        test_parse_cifs_service_one("\\\\foo\\bar\\baz", "foo", "bar", "baz", 0);
+        test_parse_cifs_service_one("//foo/bar", "foo", "bar", NULL, 0);
+        test_parse_cifs_service_one("\\\\foo\\bar", "foo", "bar", NULL, 0);
+        test_parse_cifs_service_one("//foo/bar/baz/uuu", "foo", "bar", "baz/uuu", 0);
+        test_parse_cifs_service_one("\\\\foo\\bar\\baz\\uuu", "foo", "bar", "baz/uuu", 0);
+
+        test_parse_cifs_service_one(NULL, NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("", NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("abc", NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("abc/cde/efg", NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("//foo/bar/baz/..", NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("//foo///", NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("//foo/.", NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("//foo/a/.", NULL, NULL, NULL, -EINVAL);
+        test_parse_cifs_service_one("//./a", NULL, NULL, NULL, -EINVAL);
+}
+
+TEST(open_mkdir_at) {
+        _cleanup_close_ int fd = -1, subdir_fd = -1, subsubdir_fd = -1;
+        _cleanup_(rm_rf_physical_and_freep) char *t = NULL;
+
+        assert_se(open_mkdir_at(AT_FDCWD, "/proc", O_EXCL|O_CLOEXEC, 0) == -EEXIST);
+
+        fd = open_mkdir_at(AT_FDCWD, "/proc", O_CLOEXEC, 0);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+
+        assert_se(open_mkdir_at(AT_FDCWD, "/bin/sh", O_EXCL|O_CLOEXEC, 0) == -EEXIST);
+        assert_se(open_mkdir_at(AT_FDCWD, "/bin/sh", O_CLOEXEC, 0) == -EEXIST);
+
+        assert_se(mkdtemp_malloc(NULL, &t) >= 0);
+
+        assert_se(open_mkdir_at(AT_FDCWD, t, O_EXCL|O_CLOEXEC, 0) == -EEXIST);
+        assert_se(open_mkdir_at(AT_FDCWD, t, O_PATH|O_EXCL|O_CLOEXEC, 0) == -EEXIST);
+
+        fd = open_mkdir_at(AT_FDCWD, t, O_CLOEXEC, 0000);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+
+        fd = open_mkdir_at(AT_FDCWD, t, O_PATH|O_CLOEXEC, 0000);
+        assert_se(fd >= 0);
+
+        subdir_fd = open_mkdir_at(fd, "xxx", O_PATH|O_EXCL|O_CLOEXEC, 0700);
+        assert_se(subdir_fd >= 0);
+
+        assert_se(open_mkdir_at(fd, "xxx", O_PATH|O_EXCL|O_CLOEXEC, 0) == -EEXIST);
+
+        subsubdir_fd = open_mkdir_at(subdir_fd, "yyy", O_EXCL|O_CLOEXEC, 0700);
+        assert_se(subsubdir_fd >= 0);
+        subsubdir_fd = safe_close(subsubdir_fd);
+
+        assert_se(open_mkdir_at(subdir_fd, "yyy", O_EXCL|O_CLOEXEC, 0) == -EEXIST);
+
+        assert_se(open_mkdir_at(fd, "xxx/yyy", O_EXCL|O_CLOEXEC, 0) == -EEXIST);
+
+        subsubdir_fd = open_mkdir_at(fd, "xxx/yyy", O_CLOEXEC, 0700);
+        assert_se(subsubdir_fd >= 0);
+}
+
+TEST(openat_report_new) {
+        _cleanup_free_ char *j = NULL;
+        _cleanup_(rm_rf_physical_and_freep) char *d = NULL;
+        _cleanup_close_ int fd = -1;
+        bool b;
+
+        assert_se(mkdtemp_malloc(NULL, &d) >= 0);
+
+        j = path_join(d, "test");
+        assert_se(j);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(b);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(!b);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(!b);
+
+        assert_se(unlink(j) >= 0);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(b);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(!b);
+
+        assert_se(unlink(j) >= 0);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT, 0666, NULL);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(!b);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(!b);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT|O_EXCL, 0666, &b);
+        assert_se(fd == -EEXIST);
+
+        assert_se(unlink(j) >= 0);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR, 0666, &b);
+        assert_se(fd == -ENOENT);
+
+        fd = openat_report_new(AT_FDCWD, j, O_RDWR|O_CREAT|O_EXCL, 0666, &b);
+        assert_se(fd >= 0);
+        fd = safe_close(fd);
+        assert_se(b);
+}
+
+static int intro(void) {
+        arg_test_dir = saved_argv[1];
+        return EXIT_SUCCESS;
+}
+
+DEFINE_TEST_MAIN_WITH_INTRO(LOG_INFO, intro);

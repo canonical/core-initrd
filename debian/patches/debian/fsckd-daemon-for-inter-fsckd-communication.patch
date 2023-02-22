@@ -46,23 +46,23 @@ http://lists.freedesktop.org/archives/systemd-devel/2015-April/030175.html
  man/systemd-fsckd.service.xml      | 162 +++++++++
  meson.build                        |   9 +
  po/POTFILES.in                     |   1 +
- src/fsckd/fsckd.c                  | 699 +++++++++++++++++++++++++++++++++++++
+ src/fsckd/fsckd.c                  | 697 +++++++++++++++++++++++++++++++++++++
  units/meson.build                  |   2 +
  units/systemd-fsck-root.service.in |   2 +
  units/systemd-fsck@.service.in     |   3 +-
  units/systemd-fsckd.service.in     |  17 +
  units/systemd-fsckd.socket         |  15 +
- 10 files changed, 910 insertions(+), 1 deletion(-)
+ 10 files changed, 908 insertions(+), 1 deletion(-)
  create mode 100644 man/systemd-fsckd.service.xml
  create mode 100644 src/fsckd/fsckd.c
  create mode 100644 units/systemd-fsckd.service.in
  create mode 100644 units/systemd-fsckd.socket
 
 diff --git a/man/rules/meson.build b/man/rules/meson.build
-index 0f65191..b50e5a0 100644
+index 55376c0..4e91263 100644
 --- a/man/rules/meson.build
 +++ b/man/rules/meson.build
-@@ -853,6 +853,7 @@ manpages = [
+@@ -884,6 +884,7 @@ manpages = [
    '8',
    ['systemd-fsck', 'systemd-fsck-root.service'],
    ''],
@@ -239,10 +239,10 @@ index 0000000..b7ad58d
 +
 +</refentry>
 diff --git a/meson.build b/meson.build
-index 5bdfd97..7e4d85e 100644
+index f73c7ff..d94e75d 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -2888,6 +2888,15 @@ executable(
+@@ -3219,6 +3219,15 @@ executable(
          install : true,
          install_dir : rootlibexecdir)
  
@@ -251,7 +251,7 @@ index 5bdfd97..7e4d85e 100644
 +        'src/fsckd/fsckd.c',
 +        include_directories : includes,
 +        link_with : [libshared],
-+        install_rpath : rootlibexecdir,
++        install_rpath : rootpkglibdir,
 +        install : true,
 +        install_dir : rootlibexecdir)
 +
@@ -259,20 +259,20 @@ index 5bdfd97..7e4d85e 100644
          'systemd-sleep',
          'src/sleep/sleep.c',
 diff --git a/po/POTFILES.in b/po/POTFILES.in
-index 0346a19..5ea2444 100644
+index e045852..131e4bc 100644
 --- a/po/POTFILES.in
 +++ b/po/POTFILES.in
-@@ -10,3 +10,4 @@ src/portable/org.freedesktop.portable1.policy
+@@ -12,3 +12,4 @@ src/portable/org.freedesktop.portable1.policy
  src/resolve/org.freedesktop.resolve1.policy
  src/timedate/org.freedesktop.timedate1.policy
  src/core/dbus-unit.c
 +src/fsckd/fsckd.c
 diff --git a/src/fsckd/fsckd.c b/src/fsckd/fsckd.c
 new file mode 100644
-index 0000000..8876961
+index 0000000..8a85b69
 --- /dev/null
 +++ b/src/fsckd/fsckd.c
-@@ -0,0 +1,699 @@
+@@ -0,0 +1,697 @@
 +/*-*- Mode: C; c-basic-offset: 8; indent-tabs-mode: nil -*-*/
 +
 +/***
@@ -485,7 +485,6 @@ index 0000000..8876961
 +
 +static int manager_plymouth_feedback_handler(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
 +        Manager *m = userdata;
-+        Client *current;
 +        char buffer[6];
 +        ssize_t l;
 +
@@ -608,7 +607,6 @@ index 0000000..8876961
 +}
 +
 +static int manager_update_global_progress(Manager *m) {
-+        Client *current = NULL;
 +        _cleanup_free_ char *console_message = NULL;
 +        _cleanup_free_ char *fsck_message = NULL;
 +        int current_numdevices = 0, r;
@@ -900,7 +898,7 @@ index 0000000..8876961
 +        assert(argc >= 0);
 +        assert(argv);
 +
-+        while ((c = getopt_long(argc, argv, "hv", options, NULL)) >= 0)
++        while ((c = getopt_long(argc, argv, "h", options, NULL)) >= 0)
 +                switch (c) {
 +
 +                case 'h':
@@ -915,7 +913,7 @@ index 0000000..8876961
 +                        return -EINVAL;
 +
 +                default:
-+                        assert_not_reached("Unhandled option");
++                        assert_not_reached();
 +                }
 +
 +        if (optind < argc) {
@@ -973,10 +971,10 @@ index 0000000..8876961
 +        return r < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 +}
 diff --git a/units/meson.build b/units/meson.build
-index 3184433..8c3137b 100644
+index e8f81f2..81bb9a8 100644
 --- a/units/meson.build
 +++ b/units/meson.build
-@@ -109,6 +109,7 @@ units = [
+@@ -114,6 +114,7 @@ units = [
          ['systemd-exit.service',                ''],
          ['systemd-firstboot.service',           'ENABLE_FIRSTBOOT',
           'sysinit.target.wants/'],
@@ -984,7 +982,7 @@ index 3184433..8c3137b 100644
          ['systemd-halt.service',                ''],
          ['systemd-homed-activate.service',      'ENABLE_HOMED'],
          ['systemd-initctl.socket',              'HAVE_SYSV_COMPAT',
-@@ -186,6 +187,7 @@ in_units = [
+@@ -194,6 +195,7 @@ in_units = [
          ['systemd-pstore.service',               'ENABLE_PSTORE'],
          ['systemd-fsck-root.service',            ''],
          ['systemd-fsck@.service',                ''],
@@ -993,7 +991,7 @@ index 3184433..8c3137b 100644
          ['systemd-hibernate.service',            'ENABLE_HIBERNATE'],
          ['systemd-hybrid-sleep.service',         'ENABLE_HIBERNATE'],
 diff --git a/units/systemd-fsck-root.service.in b/units/systemd-fsck-root.service.in
-index 6897f13..cfdb086 100644
+index 8378df8..4b1cd43 100644
 --- a/units/systemd-fsck-root.service.in
 +++ b/units/systemd-fsck-root.service.in
 @@ -13,6 +13,8 @@ Documentation=man:systemd-fsck-root.service(8)
@@ -1003,8 +1001,8 @@ index 6897f13..cfdb086 100644
 +Wants=systemd-fsckd.socket
 +After=systemd-fsckd.socket
  ConditionPathIsReadWrite=!/
- 
- [Service]
+ OnFailure=emergency.target
+ OnFailureJobMode=replace-irreversibly
 diff --git a/units/systemd-fsck@.service.in b/units/systemd-fsck@.service.in
 index 06b91aea..de0b767 100644
 --- a/units/systemd-fsck@.service.in

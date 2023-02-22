@@ -8,7 +8,7 @@
 #include "tests.h"
 #include "unit.h"
 
-static int test_default_memory_low(void) {
+TEST_RET(default_memory_low, .sd_booted = true) {
         _cleanup_(rm_rf_physical_and_freep) char *runtime_dir = NULL;
         _cleanup_(manager_freep) Manager *m = NULL;
         Unit *root, *dml,
@@ -26,14 +26,14 @@ static int test_default_memory_low(void) {
         assert_se(get_testdata_dir("units", &unit_dir) >= 0);
         assert_se(set_unit_path(unit_dir) >= 0);
         assert_se(runtime_dir = setup_fake_runtime_dir());
-        r = manager_new(UNIT_FILE_USER, MANAGER_TEST_RUN_BASIC, &m);
+        r = manager_new(LOOKUP_SCOPE_USER, MANAGER_TEST_RUN_BASIC, &m);
         if (IN_SET(r, -EPERM, -EACCES)) {
                 log_error_errno(r, "manager_new: %m");
                 return log_tests_skipped("cannot create manager");
         }
 
         assert_se(r >= 0);
-        assert_se(manager_startup(m, NULL, NULL) >= 0);
+        assert_se(manager_startup(m, NULL, NULL, NULL) >= 0);
 
         /* dml.slice has DefaultMemoryLow=50. Beyond that, individual subhierarchies look like this:
          *
@@ -135,12 +135,4 @@ static int test_default_memory_low(void) {
         return 0;
 }
 
-int main(int argc, char* argv[]) {
-        int rc = EXIT_SUCCESS;
-
-        test_setup_logging(LOG_DEBUG);
-
-        TEST_REQ_RUNNING_SYSTEMD(rc = test_default_memory_low());
-
-        return rc;
-}
+DEFINE_TEST_MAIN(LOG_DEBUG);

@@ -14,14 +14,9 @@ usr/lib/sysctl.d/
 usr/lib/sysusers.d/basic.conf
 usr/lib/sysusers.d/systemd-journal.conf
 usr/lib/sysusers.d/systemd-network.conf
-usr/lib/sysusers.d/systemd-resolve.conf
 usr/lib/systemd/
 usr/lib/tmpfiles.d/
 usr/lib/kernel
-usr/share/man/man1/
-usr/share/man/man5/
-usr/share/man/man7/
-usr/share/man/man8/
 usr/share/bash-completion/
 usr/share/zsh/vendor-completions/
 usr/share/dbus-1/
@@ -32,9 +27,9 @@ usr/share/systemd/kbd-model-map
 usr/share/systemd/language-fallback-map
 usr/share/locale/
 var/lib
-../../extra/init-functions.d lib/lsb/
-../../extra/tmpfiles.d/*.conf usr/lib/tmpfiles.d/
-../../extra/systemd-sysv-install lib/systemd/
-../../extra/units/* lib/systemd/system/
-../../extra/kernel-install.d/* usr/lib/kernel/install.d
-../../extra/pam.d/* usr/lib/pam.d/
+../extra/init-functions.d lib/lsb/
+../extra/tmpfiles.d/*.conf usr/lib/tmpfiles.d/
+../extra/systemd-sysv-install lib/systemd/
+../extra/units/* lib/systemd/system/
+../extra/kernel-install.d/* usr/lib/kernel/install.d
+../extra/pam.d/* usr/lib/pam.d/

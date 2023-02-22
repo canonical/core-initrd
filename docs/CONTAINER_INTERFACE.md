@@ -2,6 +2,7 @@
 title: Container Interface
 category: Interfaces
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 # The Container Interface
@@ -21,10 +22,12 @@ manager, please consider supporting the following interfaces.
    (that file overrides whatever is pre-initialized by the container manager).
 
 2. Make sure to pre-mount `/proc/`, `/sys/`, and `/sys/fs/selinux/` before
-   invoking systemd, and mount `/proc/sys/`, `/sys/`, and `/sys/fs/selinux/`
-   read-only in order to prevent the container from altering the host kernel's
-   configuration settings. (As a special exception, if your container has
-   network namespaces enabled, feel free to make `/proc/sys/net/` writable).
+   invoking systemd, and mount `/sys/`, `/sys/fs/selinux/` and `/proc/sys/`
+   read-only (the latter via e.g. a read-only bind mount on itself) in order
+   to prevent the container from altering the host kernel's configuration
+   settings. (As a special exception, if your container has network namespaces
+   enabled, feel free to make `/proc/sys/net/` writable. If it also has user, ipc,
+   uts and pid namespaces enabled, the entire `/proc/sys` can be left writable).
    systemd and various other subsystems (such as the SELinux userspace) have
    been modified to behave accordingly when these file systems are read-only.
    (It's OK to mount `/sys/` as `tmpfs` btw, and only mount a subset of its
@@ -34,15 +37,18 @@ manager, please consider supporting the following interfaces.
    in this context.)
 
 3. Pre-mount `/dev/` as (container private) `tmpfs` for the container and bind
-   mount some suitable TTY to `/dev/console`. Also, make sure to create device
-   nodes for `/dev/null`, `/dev/zero`, `/dev/full`, `/dev/random`,
-   `/dev/urandom`, `/dev/tty`, `/dev/ptmx` in `/dev/`. It is not necessary to
-   create `/dev/fd` or `/dev/stdout`, as systemd will do that on its own. Make
-   sure to set up a `BPF_PROG_TYPE_CGROUP_DEVICE` BPF program — on cgroupv2 —
-   or the `devices` cgroup controller — on cgroupv1 — so that no other devices
-   but these may be created in the container. Note that many systemd services
-   use `PrivateDevices=`, which means that systemd will set up a private
-   `/dev/` for them for which it needs to be able to create these device nodes.
+   mount some suitable TTY to `/dev/console`. If this is a pty, make sure to
+   not close the controlling pty during systemd's lifetime. PID 1 will close
+   ttys, to avoid being killed by SAK. It only opens ttys for the time it
+   actually needs to print something. Also, make sure to create device nodes
+   for `/dev/null`, `/dev/zero`, `/dev/full`, `/dev/random`, `/dev/urandom`,
+   `/dev/tty`, `/dev/ptmx` in `/dev/`. It is not necessary to create `/dev/fd`
+   or `/dev/stdout`, as systemd will do that on its own. Make sure to set up a
+   `BPF_PROG_TYPE_CGROUP_DEVICE` BPF program — on cgroupv2 — or the `devices`
+   cgroup controller — on cgroupv1 — so that no other devices but these may be
+   created in the container. Note that many systemd services use
+   `PrivateDevices=`, which means that systemd will set up a private `/dev/`
+   for them for which it needs to be able to create these device nodes.
    Dropping `CAP_MKNOD` for containers is hence generally not advisable, but
    see below.
 
@@ -257,7 +263,7 @@ care should be taken to avoid naming conflicts. `systemd` (and in particular
    short string identifying the container manager implementation. This file
    should be newline terminated. Passing this information via this file has the
    benefit that payload code can easily access it, even when running
-   unprivileged without access to the container PID1's environment block.
+   unprivileged without access to the container PID 1's environment block.
 
 6. The `/run/host/container-uuid` file may be used to pass the same information
    as the `$container_uuid` environment variable (see above). This file should
@@ -271,7 +277,7 @@ care should be taken to avoid naming conflicts. `systemd` (and in particular
 1. Do not drop `CAP_MKNOD` from the container. `PrivateDevices=` is a commonly
    used service setting that provides a service with its own, private, minimal
    version of `/dev/`. To set this up systemd in the container needs this
-   capability. If you take away the capability than all services that set this
+   capability. If you take away the capability, then all services that set this
    flag will cease to work. Use `BPF_PROG_TYPE_CGROUP_DEVICE` BPF programs — on
    cgroupv2 — or the `devices` controller — on cgroupv1 — to restrict what
    device nodes the container can create instead of taking away the capability

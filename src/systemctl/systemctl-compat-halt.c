@@ -12,6 +12,7 @@
 #include "systemctl-compat-halt.h"
 #include "systemctl-compat-telinit.h"
 #include "systemctl-logind.h"
+#include "systemctl-start-unit.h"
 #include "systemctl-util.h"
 #include "systemctl.h"
 #include "terminal-util.h"
@@ -75,6 +76,7 @@ int halt_parse_argv(int argc, char *argv[]) {
         assert(argc >= 0);
         assert(argv);
 
+        /* called in sysvinit system as last command in shutdown/reboot so this is always forceful */
         if (utmp_get_runlevel(&runlevel, NULL) >= 0)
                 if (IN_SET(runlevel, '0', '6'))
                         arg_force = 2;
@@ -127,7 +129,7 @@ int halt_parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         if (arg_action == ACTION_REBOOT && (argc == optind || argc == optind + 1)) {
@@ -144,44 +146,37 @@ int halt_parse_argv(int argc, char *argv[]) {
 int halt_main(void) {
         int r;
 
-        r = logind_check_inhibitors(arg_action);
-        if (r < 0)
-                return r;
+        if (arg_force == 0) {
+                /* always try logind first */
+                if (arg_when > 0)
+                        r = logind_schedule_shutdown();
+                else {
+                        r = logind_check_inhibitors(arg_action);
+                        if (r < 0)
+                                return r;
 
-        /* Delayed shutdown requested, and was successful */
-        if (arg_when > 0 && logind_schedule_shutdown() == 0)
-                return 0;
-
-        /* No delay, or logind failed or is not at all available */
-        if (geteuid() != 0) {
-                if (arg_dry_run || arg_force > 0) {
-                        (void) must_be_root();
-                        return -EPERM;
-                }
-
-                /* Try logind if we are a normal user and no special mode applies. Maybe polkit allows us to
-                 * shutdown the machine. */
-                if (IN_SET(arg_action, ACTION_POWEROFF, ACTION_REBOOT, ACTION_KEXEC, ACTION_HALT)) {
                         r = logind_reboot(arg_action);
-                        if (r >= 0)
-                                return r;
-                        if (IN_SET(r, -EOPNOTSUPP, -EINPROGRESS))
-                                /* Requested operation is not supported on the local system or already in
-                                 * progress */
-                                return r;
-
-                        /* on all other errors, try low-level operation */
                 }
+                if (r >= 0)
+                        return r;
+                if (IN_SET(r, -EACCES, -EOPNOTSUPP, -EINPROGRESS))
+                        /* Requested operation requires auth, is not supported on the local system or already in
+                         * progress */
+                        return r;
+                /* on all other errors, try low-level operation */
+
+                /* In order to minimize the difference between operation with and without logind, we explicitly
+                 * enable non-blocking mode for this, as logind's shutdown operations are always non-blocking. */
+                arg_no_block = true;
+
+                if (!arg_dry_run)
+                        return start_with_fallback();
         }
 
-        /* In order to minimize the difference between operation with and without logind, we explicitly
-         * enable non-blocking mode for this, as logind's shutdown operations are always non-blocking. */
-        arg_no_block = true;
-
-        if (!arg_dry_run && !arg_force)
-                return start_with_fallback();
-
-        assert(geteuid() == 0);
+        if (geteuid() != 0) {
+                (void) must_be_root();
+                return -EPERM;
+        }
 
         if (!arg_no_wtmp) {
                 if (sd_booted() > 0)
@@ -197,5 +192,5 @@ int halt_main(void) {
                 return 0;
 
         r = halt_now(arg_action);
-        return log_error_errno(r, "Failed to reboot: %m");
+        return log_error_errno(r, "Failed to %s: %m", action_table[arg_action].verb);
 }

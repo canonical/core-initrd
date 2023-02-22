@@ -2,6 +2,7 @@
 title: Users, Groups, UIDs and GIDs on systemd Systems
 category: Users, Groups and Home Directories
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 # Users, Groups, UIDs and GIDs on systemd Systems
@@ -80,7 +81,7 @@ available during earliest boot, including in the initial RAM disk).
 above). However, it does define some special group/GID assignments, which are
 primarily used for `systemd-udevd`'s device management. The precise list of the
 currently defined groups is found in this `sysusers.d` snippet:
-[basic.conf](https://raw.githubusercontent.com/systemd/systemd/master/sysusers.d/basic.conf.in)
+[basic.conf](https://raw.githubusercontent.com/systemd/systemd/main/sysusers.d/basic.conf.in)
 
 It's strongly recommended that downstream distributions include these groups in
 their default group databases.
@@ -175,7 +176,7 @@ Systemd has compile-time default for these boundaries. Using those defaults is
 recommended. It will nevertheless query `/etc/login.defs` at runtime, when
 compiled with `-Dcompat-mutable-uid-boundaries=true` and that file is present.
 Support for this is considered only a compatibility feature and should not be
-used except when upgrading systems which were creating with different defaults.
+used except when upgrading systems which were created with different defaults.
 
 ## Considerations for container managers
 
@@ -232,6 +233,27 @@ safely use the NSS user database as allocation check, too. Note that if you
 follow this scheme no changes to `/etc/passwd` need to be made, thus minimizing
 the artifacts the container manager persistently leaves in the system.
 
+5. `systemd-homed` by default mounts the home directories it manages with UID
+mapping applied. It will map four UID ranges into that uidmap, and leave
+everything else unmapped: the range from 0…60000, the user's own UID, the range
+60514…65534, and the container range 524288…1879048191. This means
+files/directories in home directories managed by `systemd-homed` cannot be
+owned by UIDs/GIDs outside of these four ranges (attempts to `chown()` files to
+UIDs outside of these ranges will fail). Thus, if container trees are to be
+placed within a home directory managed by `systemd-homed` they should take
+these ranges into consideration and either place the trees at base UID 0 (and
+then map them to a higher UID range for use in user namespacing via another
+level of UID mapped mounts, at *runtime*) or at a base UID from the container
+UID range. That said, placing container trees (and in fact any
+files/directories not owned by the home directory's user) in home directories
+is generally a questionable idea (regardless of whether `systemd-homed` is used
+or not), given this typically breaks quota assumptions, makes it impossible for
+users to properly manage all files in their own home directory due to
+permission problems, introduces security issues around SETUID and severely
+restricts compatibility with networked home directories. Typically, it's a much
+better idea to place container images outside of the home directory,
+i.e. somewhere below `/var/` or similar.
+
 ## Summary
 
 |               UID/GID | Purpose               | Defined By    | Listed in                     |
@@ -254,18 +276,19 @@ the artifacts the container manager persistently leaves in the system.
 | 2147483648…4294967294 | HIC SVNT LEONES       |               |                               |
 |            4294967295 | 32bit `(uid_t) -1`    | Linux         |                               |
 
-Note that "Unused" in the table above doesn't meant that these ranges are
+Note that "Unused" in the table above doesn't mean that these ranges are
 really unused. It just means that these ranges have no well-established
 pre-defined purposes between Linux, generic low-level distributions and
 `systemd`. There might very well be other packages that allocate from these
 ranges.
 
 Note that the range 2147483648…4294967294 (i.e. 2^31…2^32-2) should be handled
-with care. Various programs (including kernel file systems, see `devpts`) have
-trouble with UIDs outside of the signed 32bit range, i.e any UIDs equal to or
-above 2147483648. It is thus strongly recommended to stay away from this range
-in order to avoid complications. This range should be considered reserved for
-future, special purposes.
+with care. Various programs (including kernel file systems — see `devpts` — or
+even kernel syscalls – see `setfsuid()`) have trouble with UIDs outside of the
+signed 32bit range, i.e any UIDs equal to or above 2147483648. It is thus
+strongly recommended to stay away from this range in order to avoid
+complications. This range should be considered reserved for future, special
+purposes.
 
 ## Notes on resolvability of user and group names
 

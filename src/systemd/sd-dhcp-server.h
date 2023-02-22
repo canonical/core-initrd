@@ -38,7 +38,7 @@ enum {
 int sd_dhcp_server_new(sd_dhcp_server **ret, int ifindex);
 
 int sd_dhcp_server_set_ifname(sd_dhcp_server *server, const char *ifname);
-const char *sd_dhcp_server_get_ifname(sd_dhcp_server *server);
+int sd_dhcp_server_get_ifname(sd_dhcp_server *server, const char **ret);
 
 sd_dhcp_server *sd_dhcp_server_ref(sd_dhcp_server *server);
 sd_dhcp_server *sd_dhcp_server_unref(sd_dhcp_server *server);
@@ -58,9 +58,12 @@ int sd_dhcp_server_stop(sd_dhcp_server *server);
 
 int sd_dhcp_server_configure_pool(sd_dhcp_server *server, const struct in_addr *address, unsigned char prefixlen, uint32_t offset, uint32_t size);
 
+int sd_dhcp_server_set_boot_server_address(sd_dhcp_server *server, const struct in_addr *address);
+int sd_dhcp_server_set_boot_server_name(sd_dhcp_server *server, const char *name);
+int sd_dhcp_server_set_boot_filename(sd_dhcp_server *server, const char *filename);
 int sd_dhcp_server_set_bind_to_interface(sd_dhcp_server *server, int enabled);
 int sd_dhcp_server_set_timezone(sd_dhcp_server *server, const char *timezone);
-int sd_dhcp_server_set_emit_router(sd_dhcp_server *server, int enabled);
+int sd_dhcp_server_set_router(sd_dhcp_server *server, const struct in_addr *address);
 
 int sd_dhcp_server_set_servers(
                 sd_dhcp_server *server,

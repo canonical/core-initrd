@@ -81,7 +81,6 @@ int bus_link_method_set_ntp_servers(sd_bus_message *message, void *userdata, sd_
         _cleanup_strv_free_ char **ntp = NULL;
         Link *l = userdata;
         int r;
-        char **i;
 
         assert(message);
         assert(l);
@@ -195,9 +194,16 @@ int bus_link_method_set_domains(sd_bus_message *message, void *userdata, sd_bus_
         if (r < 0)
                 return r;
 
+        search_domains = ordered_set_new(&string_hash_ops_free);
+        if (!search_domains)
+                return -ENOMEM;
+
+        route_domains = ordered_set_new(&string_hash_ops_free);
+        if (!route_domains)
+                return -ENOMEM;
+
         for (;;) {
                 _cleanup_free_ char *str = NULL;
-                OrderedSet **domains;
                 const char *name;
                 int route_only;
 
@@ -219,12 +225,7 @@ int bus_link_method_set_domains(sd_bus_message *message, void *userdata, sd_bus_
                 if (r < 0)
                         return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid search domain %s", name);
 
-                domains = route_only ? &route_domains : &search_domains;
-                r = ordered_set_ensure_allocated(domains, &string_hash_ops_free);
-                if (r < 0)
-                        return r;
-
-                r = ordered_set_consume(*domains, TAKE_PTR(str));
+                r = ordered_set_consume(route_only ? route_domains : search_domains, TAKE_PTR(str));
                 if (r == -EEXIST)
                         continue;
                 if (r < 0)
@@ -482,7 +483,6 @@ int bus_link_method_set_dnssec_negative_trust_anchors(sd_bus_message *message, v
         _cleanup_strv_free_ char **ntas = NULL;
         Link *l = userdata;
         int r;
-        char **i;
 
         assert(message);
         assert(l);
@@ -709,7 +709,7 @@ int bus_link_method_describe(sd_bus_message *message, void *userdata, sd_bus_err
         return sd_bus_send(NULL, reply, NULL);
 }
 
-const sd_bus_vtable link_vtable[] = {
+static const sd_bus_vtable link_vtable[] = {
         SD_BUS_VTABLE_START(0),
 
         SD_BUS_PROPERTY("OperationalState", "s", property_get_operational_state, offsetof(Link, operstate), SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
@@ -914,3 +914,10 @@ int link_send_changed(Link *link, const char *property, ...) {
 
         return link_send_changed_strv(link, properties);
 }
+
+const BusObjectImplementation link_object = {
+        "/org/freedesktop/network1/link",
+        "org.freedesktop.network1.Link",
+        .fallback_vtables = BUS_FALLBACK_VTABLES({link_vtable, link_object_find}),
+        .node_enumerator = link_node_enumerator,
+};

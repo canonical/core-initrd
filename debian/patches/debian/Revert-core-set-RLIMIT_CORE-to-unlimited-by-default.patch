@@ -14,16 +14,16 @@ isn't what RLIMIT_CORE is supposed to do (it limits the size of the core
 
 Bug-Debian: https://bugs.debian.org/815020
 ---
- src/core/main.c              | 21 ---------------------
+ src/core/main.c              | 20 --------------------
  sysctl.d/50-coredump.conf.in |  2 +-
- 2 files changed, 1 insertion(+), 22 deletions(-)
+ 2 files changed, 1 insertion(+), 21 deletions(-)
 
 diff --git a/src/core/main.c b/src/core/main.c
-index c64c738..66897c2 100644
+index 69d450a..badd385 100644
 --- a/src/core/main.c
 +++ b/src/core/main.c
-@@ -1651,25 +1651,6 @@ static void cmdline_take_random_seed(void) {
-                    "Note that the seed provided this way is accessible to unprivileged programs. This functionality should not be used outside of testing environments.");
+@@ -1619,24 +1619,6 @@ static void cmdline_take_random_seed(void) {
+                    "This functionality should not be used outside of testing environments.");
  }
  
 -static void initialize_coredump(bool skip_setup) {
@@ -31,15 +31,14 @@ index c64c738..66897c2 100644
 -        if (getpid_cached() != 1)
 -                return;
 -
--        /* Don't limit the core dump size, so that coredump handlers such as systemd-coredump (which honour the limit)
--         * will process core dumps for system services by default. */
+-        /* Don't limit the core dump size, so that coredump handlers such as systemd-coredump (which honour
+-         * the limit) will process core dumps for system services by default. */
 -        if (setrlimit(RLIMIT_CORE, &RLIMIT_MAKE_CONST(RLIM_INFINITY)) < 0)
 -                log_warning_errno(errno, "Failed to set RLIMIT_CORE: %m");
 -
--        /* But at the same time, turn off the core_pattern logic by default, so that no
--         * coredumps are stored until the systemd-coredump tool is enabled via
--         * sysctl. However it can be changed via the kernel command line later so core
--         * dumps can still be generated during early startup and in initramfs. */
+-        /* But at the same time, turn off the core_pattern logic by default, so that no coredumps are stored
+-         * until the systemd-coredump tool is enabled via sysctl. However it can be changed via the kernel
+-         * command line later so core dumps can still be generated during early startup and in initramfs. */
 -        if (!skip_setup)
 -                disable_coredumps();
 -#endif
@@ -48,7 +47,7 @@ index c64c738..66897c2 100644
  static void initialize_core_pattern(bool skip_setup) {
          int r;
  
-@@ -2735,8 +2716,6 @@ int main(int argc, char *argv[]) {
+@@ -2763,8 +2745,6 @@ int main(int argc, char *argv[]) {
                          kernel_timestamp = DUAL_TIMESTAMP_NULL;
                  }
  

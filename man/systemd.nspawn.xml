@@ -33,7 +33,7 @@
     <title>Description</title>
 
     <para>An nspawn container settings file (suffix <filename>.nspawn</filename>) contains runtime
-    configuration for a local container, and is used used by
+    configuration for a local container, and is used by
     <citerefentry><refentrytitle>systemd-nspawn</refentrytitle><manvolnum>1</manvolnum></citerefentry>.
     Files of this type are named after the containers they define settings for. They are optional, and only
     required for containers whose execution environment shall differ from the defaults. Files of this type
@@ -202,7 +202,7 @@
         capabilities (see
         <citerefentry project='man-pages'><refentrytitle>capabilities</refentrytitle><manvolnum>7</manvolnum></citerefentry>
         for details). The <varname>AmbientCapability=</varname> setting
-        specifies capability which will be passed to the started program
+        specifies capabilities which will be passed to the started program
         in the inheritable and ambient capability sets. This will grant
         these capabilities to this process. This setting correspond to
         the <option>--ambient-capability=</option> command line switch.
@@ -363,6 +363,16 @@
         <option>--link-journal=</option> command line switch, and takes the same parameter. See
         <citerefentry><refentrytitle>systemd-nspawn</refentrytitle><manvolnum>1</manvolnum></citerefentry> for
         details.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>SuppressSync=</varname></term>
+
+        <listitem><para>Configures whether to suppress disk synchronization for the container payload. This
+        is equivalent to the <option>--suppress-sync=</option> command line switch, and takes the same
+        parameter. See
+        <citerefentry><refentrytitle>systemd-nspawn</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+        for details.</para></listitem>
       </varlistentry>
 
     </variablelist>

@@ -29,10 +29,6 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(MultipathRoute*, multipath_route_free);
 
 int multipath_route_dup(const MultipathRoute *m, MultipathRoute **ret);
 
-int rtnl_message_new_synthetic_error(sd_netlink *rtnl, int error, uint32_t serial, sd_netlink_message **ret);
-uint32_t rtnl_message_get_serial(sd_netlink_message *m);
-void rtnl_message_seal(sd_netlink_message *m);
-
 static inline bool rtnl_message_type_is_neigh(uint16_t type) {
         return IN_SET(type, RTM_NEWNEIGH, RTM_GETNEIGH, RTM_DELNEIGH);
 }
@@ -63,12 +59,10 @@ static inline bool rtnl_message_type_is_routing_policy_rule(uint16_t type) {
         return IN_SET(type, RTM_NEWRULE, RTM_DELRULE, RTM_GETRULE);
 }
 
-static inline bool rtnl_message_type_is_qdisc(uint16_t type) {
-        return IN_SET(type, RTM_NEWQDISC, RTM_DELQDISC, RTM_GETQDISC);
-}
-
-static inline bool rtnl_message_type_is_tclass(uint16_t type) {
-        return IN_SET(type, RTM_NEWTCLASS, RTM_DELTCLASS, RTM_GETTCLASS);
+static inline bool rtnl_message_type_is_traffic_control(uint16_t type) {
+        return IN_SET(type,
+                      RTM_NEWQDISC, RTM_DELQDISC, RTM_GETQDISC,
+                      RTM_NEWTCLASS, RTM_DELTCLASS, RTM_GETTCLASS);
 }
 
 static inline bool rtnl_message_type_is_mdb(uint16_t type) {
@@ -80,7 +74,7 @@ int rtnl_set_link_properties(
                 sd_netlink **rtnl,
                 int ifindex,
                 const char *alias,
-                const struct ether_addr *mac,
+                const struct hw_addr_data *hw_addr,
                 uint32_t txqueues,
                 uint32_t rxqueues,
                 uint32_t txqueuelen,
@@ -95,7 +89,14 @@ int rtnl_resolve_link_alternative_name(sd_netlink **rtnl, const char *name, char
 int rtnl_resolve_ifname(sd_netlink **rtnl, const char *name);
 int rtnl_resolve_interface(sd_netlink **rtnl, const char *name);
 int rtnl_resolve_interface_or_warn(sd_netlink **rtnl, const char *name);
-int rtnl_get_link_info(sd_netlink **rtnl, int ifindex, unsigned short *ret_iftype, unsigned *ret_flags);
+int rtnl_get_link_info(
+                sd_netlink **rtnl,
+                int ifindex,
+                unsigned short *ret_iftype,
+                unsigned *ret_flags,
+                char **ret_kind,
+                struct hw_addr_data *ret_hw_addr,
+                struct hw_addr_data *ret_permanent_hw_addr);
 
 int rtnl_log_parse_error(int r);
 int rtnl_log_create_error(int r);
@@ -118,6 +119,16 @@ int rtnl_log_create_error(int r);
                                      (sd_netlink_message_handler_t) _callback_, \
                                      (sd_netlink_destroy_t) _destroy_,  \
                                      userdata, description);            \
+        })
+
+#define genl_add_match(nl, ret_slot, family, group, cmd, callback, destroy_callback, userdata, description) \
+        ({                                                              \
+                int (*_callback_)(sd_netlink *, sd_netlink_message *, typeof(userdata)) = callback; \
+                void (*_destroy_)(typeof(userdata)) = destroy_callback; \
+                sd_genl_add_match(nl, ret_slot, family, group, cmd,     \
+                                  (sd_netlink_message_handler_t) _callback_, \
+                                  (sd_netlink_destroy_t) _destroy_,     \
+                                  userdata, description);               \
         })
 
 int netlink_message_append_hw_addr(sd_netlink_message *m, unsigned short type, const struct hw_addr_data *data);

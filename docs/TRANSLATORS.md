@@ -2,6 +2,7 @@
 title: Notes for Translators
 category: Contributing
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 # Notes for Translators
@@ -26,23 +27,23 @@ To create a translation to a language not yet available, start by creating the
 initial template:
 
 ```
-$ meson compile -C build/ systemd-pot
+$ ninja -C build/ systemd-pot
 ```
 
 This will generate file `po/systemd.pot` in the source tree.
 
-Then simply copy it to a new <code><i>${lang_code}</i>.po</code> file, where
-<code><i>${lang_code}</i></code> is the two-letter code for a language
+Then simply copy it to a new `${lang_code}.po` file, where
+`${lang_code}` is the two-letter code for a language
 (possibly followed by a two-letter uppercase country code), according to the
 ISO 639 standard.
 
 In short:
 
-<pre>
-$ cp po/systemd.pot po/<i>${lang_code}</i>.po
-</pre>
+```
+$ cp po/systemd.pot po/${lang_code}.po
+```
 
-Then edit the new <code>po/<i>${lang_code}</i>.po</code> file (for example,
+Then edit the new `po/${lang_code}.po` file (for example,
 using the `poedit` GUI editor.)
 
 ## Updating an Existing Translation
@@ -50,7 +51,7 @@ using the `poedit` GUI editor.)
 Start by updating the `*.po` files from the latest template:
 
 ```
-$ meson compile -C build/ systemd-update-po
+$ ninja -C build/ systemd-update-po
 ```
 
 This will touch all the `*.po` files, so you'll want to pay attention when
@@ -74,7 +75,7 @@ using `git checkout -- po/` after you commit the changes you do want to keep.)
 You can recompile the `*.po` files using the following command:
 
 ```
-$ meson compile -C build/ systemd-gmo
+$ ninja -C build/ systemd-gmo
 ```
 
 The resulting files will be saved in the `build/po/` directory.

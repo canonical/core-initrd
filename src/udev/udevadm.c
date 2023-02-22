@@ -19,13 +19,15 @@
 
 static int help(void) {
         static const char *const short_descriptions[][2] = {
-                { "info",         "Query sysfs or the udev database" },
-                { "trigger",      "Request events from the kernel"   },
-                { "settle",       "Wait for pending udev events"     },
-                { "control",      "Control the udev daemon"          },
-                { "monitor",      "Listen to kernel and udev events" },
-                { "test",         "Test an event run"                },
-                { "test-builtin", "Test a built-in command"          },
+                { "info",         "Query sysfs or the udev database"  },
+                { "trigger",      "Request events from the kernel"    },
+                { "settle",       "Wait for pending udev events"      },
+                { "control",      "Control the udev daemon"           },
+                { "monitor",      "Listen to kernel and udev events"  },
+                { "test",         "Test an event run"                 },
+                { "test-builtin", "Test a built-in command"           },
+                { "wait",         "Wait for device or device symlink" },
+                { "lock",         "Lock a block device"               },
         };
 
         _cleanup_free_ char *link = NULL;
@@ -77,7 +79,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         return 1; /* work to do */
@@ -101,6 +103,8 @@ static int udevadm_main(int argc, char *argv[]) {
                 { "hwdb",         VERB_ANY, VERB_ANY, 0, hwdb_main    },
                 { "test",         VERB_ANY, VERB_ANY, 0, test_main    },
                 { "test-builtin", VERB_ANY, VERB_ANY, 0, builtin_main },
+                { "wait",         VERB_ANY, VERB_ANY, 0, wait_main    },
+                { "lock",         VERB_ANY, VERB_ANY, 0, lock_main    },
                 { "version",      VERB_ANY, VERB_ANY, 0, version_main },
                 { "help",         VERB_ANY, VERB_ANY, 0, help_main    },
                 {}

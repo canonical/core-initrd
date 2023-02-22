@@ -12,7 +12,6 @@
 #include "cgroup.h"
 #include "fdset.h"
 #include "hashmap.h"
-#include "ip-address-access.h"
 #include "list.h"
 #include "prioq.h"
 #include "ratelimit.h"
@@ -61,9 +60,9 @@ typedef enum StatusType {
 } StatusType;
 
 typedef enum OOMPolicy {
-        OOM_CONTINUE,          /* The kernel kills the process it wants to kill, and that's it */
-        OOM_STOP,              /* The kernel kills the process it wants to kill, and we stop the unit */
-        OOM_KILL,              /* The kernel kills the process it wants to kill, and all others in the unit, and we stop the unit */
+        OOM_CONTINUE,          /* The kernel or systemd-oomd kills the process it wants to kill, and that's it */
+        OOM_STOP,              /* The kernel or systemd-oomd kills the process it wants to kill, and we stop the unit */
+        OOM_KILL,              /* The kernel or systemd-oomd kills the process it wants to kill, and all others in the unit, and we stop the unit */
         _OOM_POLICY_MAX,
         _OOM_POLICY_INVALID = -EINVAL,
 } OOMPolicy;
@@ -103,6 +102,7 @@ typedef enum ManagerTimestamp {
         MANAGER_TIMESTAMP_GENERATORS_FINISH,
         MANAGER_TIMESTAMP_UNITS_LOAD_START,
         MANAGER_TIMESTAMP_UNITS_LOAD_FINISH,
+        MANAGER_TIMESTAMP_UNITS_LOAD,
 
         MANAGER_TIMESTAMP_INITRD_SECURITY_START,
         MANAGER_TIMESTAMP_INITRD_SECURITY_FINISH,
@@ -118,6 +118,7 @@ typedef enum WatchdogType {
         WATCHDOG_RUNTIME,
         WATCHDOG_REBOOT,
         WATCHDOG_KEXEC,
+        WATCHDOG_PRETIMEOUT,
         _WATCHDOG_TYPE_MAX,
 } WatchdogType;
 
@@ -128,11 +129,12 @@ typedef enum WatchdogType {
 #include "unit-name.h"
 
 typedef enum ManagerTestRunFlags {
-        MANAGER_TEST_NORMAL             = 0,       /* run normally */
-        MANAGER_TEST_RUN_MINIMAL        = 1 << 0,  /* create basic data structures */
-        MANAGER_TEST_RUN_BASIC          = 1 << 1,  /* interact with the environment */
-        MANAGER_TEST_RUN_ENV_GENERATORS = 1 << 2,  /* also run env generators  */
-        MANAGER_TEST_RUN_GENERATORS     = 1 << 3,  /* also run unit generators */
+        MANAGER_TEST_NORMAL                  = 0,       /* run normally */
+        MANAGER_TEST_RUN_MINIMAL             = 1 << 0,  /* create basic data structures */
+        MANAGER_TEST_RUN_BASIC               = 1 << 1,  /* interact with the environment */
+        MANAGER_TEST_RUN_ENV_GENERATORS      = 1 << 2,  /* also run env generators  */
+        MANAGER_TEST_RUN_GENERATORS          = 1 << 3,  /* also run unit generators */
+        MANAGER_TEST_RUN_IGNORE_DEPENDENCIES = 1 << 4,  /* run while ignoring dependencies */
         MANAGER_TEST_FULL = MANAGER_TEST_RUN_BASIC | MANAGER_TEST_RUN_ENV_GENERATORS | MANAGER_TEST_RUN_GENERATORS,
 } ManagerTestRunFlags;
 
@@ -224,7 +226,6 @@ struct Manager {
 
         sd_event_source *sigchld_event_source;
 
-        int time_change_fd;
         sd_event_source *time_change_event_source;
 
         sd_event_source *timezone_change_event_source;
@@ -234,7 +235,7 @@ struct Manager {
         int user_lookup_fds[2];
         sd_event_source *user_lookup_event_source;
 
-        UnitFileScope unit_file_scope;
+        LookupScope unit_file_scope;
         LookupPaths lookup_paths;
         Hashmap *unit_id_map;
         Hashmap *unit_name_map;
@@ -246,8 +247,8 @@ struct Manager {
 
         usec_t watchdog[_WATCHDOG_TYPE_MAX];
         usec_t watchdog_overridden[_WATCHDOG_TYPE_MAX];
-
-        bool runtime_watchdog_running; /* Whether the runtime HW watchdog was started, so we know if we still need to get the real timeout from the hardware */
+        char *watchdog_pretimeout_governor;
+        char *watchdog_pretimeout_governor_overridden;
 
         dual_timestamp timestamps[_MANAGER_TIMESTAMP_MAX];
 
@@ -329,6 +330,9 @@ struct Manager {
         /* Have we already sent out the READY=1 notification? */
         bool ready_sent;
 
+        /* Was the last status sent "STATUS=Ready."? */
+        bool status_ready;
+
         /* Have we already printed the taint line if necessary? */
         bool taint_logged;
 
@@ -369,6 +373,8 @@ struct Manager {
         usec_t default_timer_accuracy_usec;
 
         OOMPolicy default_oom_policy;
+        int default_oom_score_adjust;
+        bool default_oom_score_adjust_set;
 
         int original_log_level;
         LogTarget original_log_target;
@@ -432,7 +438,8 @@ struct Manager {
 
         /* Prefixes of e.g. RuntimeDirectory= */
         char *prefix[_EXEC_DIRECTORY_TYPE_MAX];
-        char *received_credentials;
+        char *received_credentials_directory;
+        char *received_encrypted_credentials_directory;
 
         /* Used in the SIGCHLD and sd_notify() message invocation logic to avoid that we dispatch the same event
          * multiple times on the same unit. */
@@ -442,8 +449,14 @@ struct Manager {
         bool honor_device_enumeration;
 
         VarlinkServer *varlink_server;
-        /* Only systemd-oomd should be using this to subscribe to changes in ManagedOOM settings */
-        Varlink *managed_oom_varlink_request;
+        /* When we're a system manager, this object manages the subscription from systemd-oomd to PID1 that's
+         * used to report changes in ManagedOOM settings (systemd server - oomd client). When
+         * we're a user manager, this object manages the client connection from the user manager to
+         * systemd-oomd to report changes in ManagedOOM settings (systemd client - oomd server). */
+        Varlink *managed_oom_varlink;
+
+        /* Reference to RestrictFileSystems= BPF program */
+        struct restrict_fs_bpf *restrict_fs;
 };
 
 static inline usec_t manager_default_timeout_abort_usec(Manager *m) {
@@ -451,8 +464,8 @@ static inline usec_t manager_default_timeout_abort_usec(Manager *m) {
         return m->default_timeout_abort_set ? m->default_timeout_abort_usec : m->default_timeout_stop_usec;
 }
 
-#define MANAGER_IS_SYSTEM(m) ((m)->unit_file_scope == UNIT_FILE_SYSTEM)
-#define MANAGER_IS_USER(m) ((m)->unit_file_scope != UNIT_FILE_SYSTEM)
+#define MANAGER_IS_SYSTEM(m) ((m)->unit_file_scope == LOOKUP_SCOPE_SYSTEM)
+#define MANAGER_IS_USER(m) ((m)->unit_file_scope != LOOKUP_SCOPE_SYSTEM)
 
 #define MANAGER_IS_RELOADING(m) ((m)->n_reloading > 0)
 
@@ -463,11 +476,11 @@ static inline usec_t manager_default_timeout_abort_usec(Manager *m) {
 
 #define MANAGER_IS_TEST_RUN(m) ((m)->test_run_flags != 0)
 
-int manager_new(UnitFileScope scope, ManagerTestRunFlags test_run_flags, Manager **m);
+int manager_new(LookupScope scope, ManagerTestRunFlags test_run_flags, Manager **m);
 Manager* manager_free(Manager *m);
 DEFINE_TRIVIAL_CLEANUP_FUNC(Manager*, manager_free);
 
-int manager_startup(Manager *m, FILE *serialization, FDSet *fds);
+int manager_startup(Manager *m, FILE *serialization, FDSet *fds, const char *root);
 
 Job *manager_get_job(Manager *m, uint32_t id);
 Unit *manager_get_unit(Manager *m, const char *name);
@@ -498,14 +511,13 @@ int manager_get_effective_environment(Manager *m, char ***ret);
 
 int manager_set_default_rlimits(Manager *m, struct rlimit **default_rlimit);
 
+void manager_trigger_run_queue(Manager *m);
+
 int manager_loop(Manager *m);
 
-int manager_open_serialization(Manager *m, FILE **_f);
-
-int manager_serialize(Manager *m, FILE *f, FDSet *fds, bool switching_root);
-int manager_deserialize(Manager *m, FILE *f, FDSet *fds);
-
 int manager_reload(Manager *m);
+Manager* manager_reloading_start(Manager *m);
+void manager_reloading_stopp(Manager **m);
 
 void manager_reset_failed(Manager *m);
 
@@ -540,7 +552,7 @@ int manager_ref_uid(Manager *m, uid_t uid, bool clean_ipc);
 void manager_unref_gid(Manager *m, gid_t gid, bool destroy_now);
 int manager_ref_gid(Manager *m, gid_t gid, bool clean_ipc);
 
-char *manager_taint_string(Manager *m);
+char* manager_taint_string(const Manager *m);
 
 void manager_ref_console(Manager *m);
 void manager_unref_console(Manager *m);
@@ -564,8 +576,9 @@ ManagerTimestamp manager_timestamp_initrd_mangle(ManagerTimestamp s);
 
 usec_t manager_get_watchdog(Manager *m, WatchdogType t);
 void manager_set_watchdog(Manager *m, WatchdogType t, usec_t timeout);
-int manager_override_watchdog(Manager *m, WatchdogType t, usec_t timeout);
-void manager_retry_runtime_watchdog(Manager *m);
+void manager_override_watchdog(Manager *m, WatchdogType t, usec_t timeout);
+int manager_set_watchdog_pretimeout_governor(Manager *m, const char *governor);
+int manager_override_watchdog_pretimeout_governor(Manager *m, const char *governor);
 
 const char* oom_policy_to_string(OOMPolicy i) _const_;
 OOMPolicy oom_policy_from_string(const char *s) _pure_;

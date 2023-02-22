@@ -28,6 +28,9 @@ struct Manager {
         Hashmap *polkit_registry;
         int ethtool_fd;
 
+        KeepConfiguration keep_configuration;
+
+        bool test_mode;
         bool enumerating;
         bool dirty;
         bool restarting;
@@ -47,11 +50,11 @@ struct Manager {
         Hashmap *links_by_index;
         Hashmap *links_by_name;
         Hashmap *links_by_hw_addr;
+        Hashmap *links_by_dhcp_pd_subnet_prefix;
         Hashmap *netdevs;
         OrderedHashmap *networks;
-        Hashmap *dhcp6_prefixes;
-        Set *dhcp6_pd_prefixes;
         OrderedSet *address_pools;
+        Set *dhcp_pd_subnet_ids;
 
         usec_t network_dirs_ts_usec;
 
@@ -60,22 +63,17 @@ struct Manager {
         DUID duid_product_uuid;
         bool has_product_uuid;
         bool product_uuid_requested;
-        Set *links_requesting_uuid;
 
         char* dynamic_hostname;
         char* dynamic_timezone;
 
-        unsigned routing_policy_rule_remove_messages;
         Set *rules;
-        Set *rules_foreign;
 
         /* Manage nexthops by id. */
         Hashmap *nexthops_by_id;
 
         /* Manager stores nexthops without RTA_OIF attribute. */
-        unsigned nexthop_remove_messages;
         Set *nexthops;
-        Set *nexthops_foreign;
 
         /* Manager stores routes without RTA_OIF attribute. */
         unsigned route_remove_messages;
@@ -85,6 +83,10 @@ struct Manager {
         /* Route table name */
         Hashmap *route_table_numbers_by_name;
         Hashmap *route_table_names_by_number;
+
+        /* Wiphy */
+        Hashmap *wiphy_by_index;
+        Hashmap *wiphy_by_name;
 
         /* For link speed meter */
         bool use_speed_meter;
@@ -101,10 +103,10 @@ struct Manager {
         OrderedSet *request_queue;
 };
 
-int manager_new(Manager **ret);
+int manager_new(Manager **ret, bool test_mode);
 Manager* manager_free(Manager *m);
 
-int manager_connect_bus(Manager *m);
+int manager_setup(Manager *m);
 int manager_start(Manager *m);
 
 int manager_load_config(Manager *m);

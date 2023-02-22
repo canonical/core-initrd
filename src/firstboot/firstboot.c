@@ -9,6 +9,7 @@
 
 #include "alloc-util.h"
 #include "ask-password-api.h"
+#include "chase-symlinks.h"
 #include "copy.h"
 #include "creds-util.h"
 #include "dissect-image.h"
@@ -16,6 +17,7 @@
 #include "fd-util.h"
 #include "fileio.h"
 #include "fs-util.h"
+#include "glyph-util.h"
 #include "hostname-util.h"
 #include "kbd-util.h"
 #include "libcrypt-util.h"
@@ -32,6 +34,7 @@
 #include "proc-cmdline.h"
 #include "pwquality-util.h"
 #include "random-util.h"
+#include "smack-util.h"
 #include "string-util.h"
 #include "strv.h"
 #include "terminal-util.h"
@@ -566,7 +569,6 @@ static int process_hostname(void) {
 
 static int process_machine_id(void) {
         const char *etc_machine_id;
-        char id[SD_ID128_STRING_MAX];
         int r;
 
         etc_machine_id = prefix_roota(arg_root, "/etc/machine-id");
@@ -576,7 +578,7 @@ static int process_machine_id(void) {
         if (sd_id128_is_null(arg_machine_id))
                 return 0;
 
-        r = write_string_file(etc_machine_id, sd_id128_to_string(arg_machine_id, id),
+        r = write_string_file(etc_machine_id, SD_ID128_TO_STRING(arg_machine_id),
                               WRITE_STRING_FILE_CREATE | WRITE_STRING_FILE_SYNC | WRITE_STRING_FILE_MKDIR_0755 |
                               (arg_force ? WRITE_STRING_FILE_ATOMIC : 0));
         if (r < 0)
@@ -982,37 +984,37 @@ static int help(void) {
 
         printf("%s [OPTIONS...]\n\n"
                "Configures basic settings of the system.\n\n"
-               "  -h --help                                 Show this help\n"
-               "     --version                              Show package version\n"
-               "     --root=PATH                            Operate on an alternate filesystem root\n"
-               "     --image=PATH                           Operate on an alternate filesystem image\n"
-               "     --locale=LOCALE                        Set primary locale (LANG=)\n"
-               "     --locale-messages=LOCALE               Set message locale (LC_MESSAGES=)\n"
-               "     --keymap=KEYMAP                        Set keymap\n"
-               "     --timezone=TIMEZONE                    Set timezone\n"
-               "     --hostname=NAME                        Set hostname\n"
-               "     --machine-ID=ID                        Set machine ID\n"
-               "     --root-password=PASSWORD               Set root password from plaintext password\n"
-               "     --root-password-file=FILE              Set root password from file\n"
-               "     --root-password-hashed=HASHED_PASSWORD Set root password from hashed password\n"
-               "     --root-shell=SHELL                     Set root shell\n"
-               "     --prompt-locale                        Prompt the user for locale settings\n"
-               "     --prompt-keymap                        Prompt the user for keymap settings\n"
-               "     --prompt-timezone                      Prompt the user for timezone\n"
-               "     --prompt-hostname                      Prompt the user for hostname\n"
-               "     --prompt-root-password                 Prompt the user for root password\n"
-               "     --prompt-root-shell                    Prompt the user for root shell\n"
-               "     --prompt                               Prompt for all of the above\n"
-               "     --copy-locale                          Copy locale from host\n"
-               "     --copy-keymap                          Copy keymap from host\n"
-               "     --copy-timezone                        Copy timezone from host\n"
-               "     --copy-root-password                   Copy root password from host\n"
-               "     --copy-root-shell                      Copy root shell from host\n"
-               "     --copy                                 Copy locale, keymap, timezone, root password\n"
-               "     --setup-machine-id                     Generate a new random machine ID\n"
-               "     --force                                Overwrite existing files\n"
-               "     --delete-root-password                 Delete root password\n"
-               "     --welcome=no                           Disable the welcome text\n"
+               "  -h --help                       Show this help\n"
+               "     --version                    Show package version\n"
+               "     --root=PATH                  Operate on an alternate filesystem root\n"
+               "     --image=PATH                 Operate on an alternate filesystem image\n"
+               "     --locale=LOCALE              Set primary locale (LANG=)\n"
+               "     --locale-messages=LOCALE     Set message locale (LC_MESSAGES=)\n"
+               "     --keymap=KEYMAP              Set keymap\n"
+               "     --timezone=TIMEZONE          Set timezone\n"
+               "     --hostname=NAME              Set hostname\n"
+               "     --machine-ID=ID              Set machine ID\n"
+               "     --root-password=PASSWORD     Set root password from plaintext password\n"
+               "     --root-password-file=FILE    Set root password from file\n"
+               "     --root-password-hashed=HASH  Set root password from hashed password\n"
+               "     --root-shell=SHELL           Set root shell\n"
+               "     --prompt-locale              Prompt the user for locale settings\n"
+               "     --prompt-keymap              Prompt the user for keymap settings\n"
+               "     --prompt-timezone            Prompt the user for timezone\n"
+               "     --prompt-hostname            Prompt the user for hostname\n"
+               "     --prompt-root-password       Prompt the user for root password\n"
+               "     --prompt-root-shell          Prompt the user for root shell\n"
+               "     --prompt                     Prompt for all of the above\n"
+               "     --copy-locale                Copy locale from host\n"
+               "     --copy-keymap                Copy keymap from host\n"
+               "     --copy-timezone              Copy timezone from host\n"
+               "     --copy-root-password         Copy root password from host\n"
+               "     --copy-root-shell            Copy root shell from host\n"
+               "     --copy                       Copy locale, keymap, timezone, root password\n"
+               "     --setup-machine-id           Generate a new random machine ID\n"
+               "     --force                      Overwrite existing files\n"
+               "     --delete-root-password       Delete root password\n"
+               "     --welcome=no                 Disable the welcome text\n"
                "\nSee the %s for details.\n",
                program_invocation_short_name,
                link);
@@ -1299,7 +1301,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         /* We check if the specified locale strings are valid down here, so that we can take --root= into

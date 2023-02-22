@@ -2,6 +2,7 @@
 
 #include "ask-password-api.h"
 #include "cryptenroll-password.h"
+#include "env-util.h"
 #include "escape.h"
 #include "memory-util.h"
 #include "pwquality-util.h"
@@ -16,21 +17,13 @@ int enroll_password(
         _cleanup_free_ char *error = NULL;
         const char *node;
         int r, keyslot;
-        char *e;
 
         assert_se(node = crypt_get_device_name(cd));
 
-        e = getenv("NEWPASSWORD");
-        if (e) {
-
-                new_password = strdup(e);
-                if (!new_password)
-                        return log_oom();
-
-                string_erase(e);
-                assert_se(unsetenv("NEWPASSWORD") == 0);
-
-        } else {
+        r = getenv_steal_erase("NEWPASSWORD", &new_password);
+        if (r < 0)
+                return log_error_errno(r, "Failed to acquire password from environment: %m");
+        if (r == 0) {
                 _cleanup_free_ char *disk_path = NULL;
                 unsigned i = 5;
                 const char *id;

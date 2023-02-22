@@ -88,7 +88,7 @@ static int manager_link_is_online(Manager *m, Link *l, LinkOperationalStateRange
         needs_ipv4 = required_family & ADDRESS_FAMILY_IPV4;
         needs_ipv6 = required_family & ADDRESS_FAMILY_IPV6;
 
-        if (s.min >= LINK_OPERSTATE_DEGRADED) {
+        if (s.min < LINK_OPERSTATE_ROUTABLE) {
                 if (needs_ipv4 && l->ipv4_address_state < LINK_ADDRESS_STATE_DEGRADED) {
                         log_link_debug(l, "No routable or link-local IPv4 address is configured.");
                         return 0;
@@ -98,9 +98,7 @@ static int manager_link_is_online(Manager *m, Link *l, LinkOperationalStateRange
                         log_link_debug(l, "No routable or link-local IPv6 address is configured.");
                         return 0;
                 }
-        }
-
-        if (s.min >= LINK_OPERSTATE_ROUTABLE) {
+        } else {
                 if (needs_ipv4 && l->ipv4_address_state < LINK_ADDRESS_STATE_ROUTABLE) {
                         log_link_debug(l, "No routable IPv4 address is configured.");
                         return 0;
@@ -382,7 +380,7 @@ int manager_new(Manager **ret,
         (void) sd_event_add_signal(m->event, NULL, SIGINT, NULL, NULL);
 
         if (timeout > 0) {
-                r = sd_event_add_time_relative(m->event, NULL, clock_boottime_or_monotonic(), timeout, 0, NULL, INT_TO_PTR(-ETIMEDOUT));
+                r = sd_event_add_time_relative(m->event, NULL, CLOCK_BOOTTIME, timeout, 0, NULL, INT_TO_PTR(-ETIMEDOUT));
                 if (r < 0 && r != -EOVERFLOW)
                         return r;
         }

@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
 set -eux
 set -o pipefail
 
 _clear_service () {
-    local SERVICE_NAME="${1:?_clear_service: missing argument}"
+    local SERVICE_NAME="${1:?}"
     systemctl stop "$SERVICE_NAME.service" 2>/dev/null || :
     rm -f  /{etc,run,usr/lib}/systemd/system/"$SERVICE_NAME".service
     rm -fr /{etc,run,usr/lib}/systemd/system/"$SERVICE_NAME".service.d
@@ -24,7 +25,7 @@ clear_services () {
 }
 
 create_service () {
-    local SERVICE_NAME="${1:?create_service: missing argument}"
+    local SERVICE_NAME="${1:?}"
     clear_services "$SERVICE_NAME"
 
     cat >/etc/systemd/system/"$SERVICE_NAME".service <<EOF
@@ -514,6 +515,25 @@ test_invalid_dropins () {
     return 0
 }
 
+test_symlink_dropin_directory () {
+    # For issue #21920.
+    echo "Testing symlink drop-in directory..."
+    create_services test15-a
+    rmdir /{etc,run,usr/lib}/systemd/system/test15-a.service.d
+    mkdir -p /tmp/testsuite-15-test15-a-dropin-directory
+    ln -s /tmp/testsuite-15-test15-a-dropin-directory /etc/systemd/system/test15-a.service.d
+    cat >/tmp/testsuite-15-test15-a-dropin-directory/override.conf <<EOF
+[Unit]
+Description=hogehoge
+EOF
+    ln -s /tmp/testsuite-15-test15-a-dropin-directory-nonexistent /run/systemd/system/test15-a.service.d
+    touch /tmp/testsuite-15-test15-a-dropin-directory-regular
+    ln -s /tmp/testsuite-15-test15-a-dropin-directory-regular /usr/lib/systemd/system/test15-a.service.d
+    check_ok test15-a Description hogehoge
+
+    clear_services test15-a
+}
+
 test_basic_dropins
 test_linked_units
 test_template_alias
@@ -522,5 +542,6 @@ test_template_dropins
 test_alias_dropins
 test_masked_dropins
 test_invalid_dropins
+test_symlink_dropin_directory
 
 touch /testok

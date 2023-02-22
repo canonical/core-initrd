@@ -24,6 +24,7 @@
 #include "mountpoint-util.h"
 #include "set.h"
 #include "socket-util.h"
+#include "stat-util.h"
 #include "string-util.h"
 #include "strv.h"
 
@@ -143,7 +144,7 @@ int device_monitor_new_full(sd_device_monitor **ret, MonitorNetlinkGroup group, 
         }
 
         if (fd < 0) {
-                sock = socket(PF_NETLINK, SOCK_RAW|SOCK_CLOEXEC|SOCK_NONBLOCK, NETLINK_KOBJECT_UEVENT);
+                sock = socket(AF_NETLINK, SOCK_RAW|SOCK_CLOEXEC|SOCK_NONBLOCK, NETLINK_KOBJECT_UEVENT);
                 if (sock < 0)
                         return log_debug_errno(errno, "sd-device-monitor: Failed to create socket: %m");
         }
@@ -195,7 +196,7 @@ int device_monitor_new_full(sd_device_monitor **ret, MonitorNetlinkGroup group, 
                                 else
                                         log_debug_errno(errno, "sd-device-monitor: Failed to stat PID1's netns, ignoring: %m");
 
-                        } else if (a.st_dev != b.st_dev || a.st_ino != b.st_ino)
+                        } else if (!stat_inode_same(&a, &b))
                                 log_debug("sd-device-monitor: Netlink socket we listen on is not from host netns, we won't see device events.");
                 }
         }
@@ -445,7 +446,7 @@ int device_monitor_receive_device(sd_device_monitor *m, sd_device **ret) {
 
         buflen = recvmsg(m->sock, &smsg, 0);
         if (buflen < 0) {
-                if (errno != EINTR)
+                if (ERRNO_IS_TRANSIENT(errno))
                         log_debug_errno(errno, "sd-device-monitor: Failed to receive message: %m");
                 return -errno;
         }
@@ -507,7 +508,7 @@ int device_monitor_receive_device(sd_device_monitor *m, sd_device **ret) {
                                                "sd-device-monitor: Invalid message header");
         }
 
-        r = device_new_from_nulstr(&device, (uint8_t*) &buf.raw[bufpos], buflen - bufpos);
+        r = device_new_from_nulstr(&device, &buf.raw[bufpos], buflen - bufpos);
         if (r < 0)
                 return log_debug_errno(r, "sd-device-monitor: Failed to create device from received message: %m");
 
@@ -573,7 +574,7 @@ int device_monitor_send_device(
         assert(m);
         assert(device);
 
-        r = device_get_properties_nulstr(device, (const uint8_t **) &buf, &blen);
+        r = device_get_properties_nulstr(device, &buf, &blen);
         if (r < 0)
                 return log_device_debug_errno(device, r, "sd-device-monitor: Failed to get device properties: %m");
         if (blen < 32)

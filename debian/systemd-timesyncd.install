@@ -4,5 +4,4 @@ lib/systemd/systemd-timesyncd
 lib/systemd/system/systemd-timesyncd.service
 usr/lib/sysusers.d/systemd-timesync.conf
 usr/share/dbus-1/*/*timesync*
-usr/share/man/man*/*timesyncd*
-../../extra/dhclient-exit-hooks.d/ etc/dhcp/
+../extra/dhclient-exit-hooks.d/ etc/dhcp/

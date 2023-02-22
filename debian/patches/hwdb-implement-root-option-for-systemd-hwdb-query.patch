@@ -1,0 +1,94 @@
+From: Nick Rosbrook <nick.rosbrook@canonical.com>
+Date: Tue, 24 May 2022 13:15:13 -0400
+Subject: hwdb: implement --root option for systemd-hwdb query
+
+Origin: upstream, https://github.com/systemd/systemd/commit/beff73f94e565e4d6c6383c535b8b0742b37c312
+
+Currently, the systemd-hwdb --root flag only has an effect for the
+'update' verb. It would be useful to be able to use the --root option
+for the 'query' verb too (e.g. for testing a hwdb.bin created with
+systemd-hwdb update --root <path>).
+
+Use sd_hwdb_new_from_path to initialize the hwdb if --root is passed to
+systemd-hwdb query.
+
+Note that this functionality was not added to 'udevadm hwdb' since that
+command is deprecated.
+---
+ src/hwdb/hwdb.c         |  2 +-
+ src/shared/hwdb-util.c  | 19 ++++++++++++++++---
+ src/shared/hwdb-util.h  |  2 +-
+ src/udev/udevadm-hwdb.c |  2 +-
+ 4 files changed, 19 insertions(+), 6 deletions(-)
+
+diff --git a/src/hwdb/hwdb.c b/src/hwdb/hwdb.c
+index 17ac7e4..6925aec 100644
+--- a/src/hwdb/hwdb.c
++++ b/src/hwdb/hwdb.c
+@@ -18,7 +18,7 @@ static const char *arg_root = NULL;
+ static bool arg_strict = false;
+ 
+ static int verb_query(int argc, char *argv[], void *userdata) {
+-        return hwdb_query(argv[1]);
++        return hwdb_query(argv[1], arg_root);
+ }
+ 
+ static int verb_update(int argc, char *argv[], void *userdata) {
+diff --git a/src/shared/hwdb-util.c b/src/shared/hwdb-util.c
+index f98d03f..1ec861f 100644
+--- a/src/shared/hwdb-util.c
++++ b/src/shared/hwdb-util.c
+@@ -650,14 +650,27 @@ int hwdb_update(const char *root, const char *hwdb_bin_dir, bool strict, bool co
+         return r;
+ }
+ 
+-int hwdb_query(const char *modalias) {
++int hwdb_query(const char *modalias, const char *root) {
+         _cleanup_(sd_hwdb_unrefp) sd_hwdb *hwdb = NULL;
+-        const char *key, *value;
++        const char *key, *value, *p;
+         int r;
+ 
+         assert(modalias);
+ 
+-        r = sd_hwdb_new(&hwdb);
++        if (!isempty(root))
++                NULSTR_FOREACH(p, hwdb_bin_paths) {
++                        _cleanup_free_ char *hwdb_bin = NULL;
++
++                        hwdb_bin = path_join(root, p);
++                        if (!hwdb_bin)
++                                return -ENOMEM;
++
++                        r = sd_hwdb_new_from_path(hwdb_bin, &hwdb);
++                        if (r >= 0)
++                                break;
++                }
++        else
++                r = sd_hwdb_new(&hwdb);
+         if (r < 0)
+                 return r;
+ 
+diff --git a/src/shared/hwdb-util.h b/src/shared/hwdb-util.h
+index 5afde74..bfecdde 100644
+--- a/src/shared/hwdb-util.h
++++ b/src/shared/hwdb-util.h
+@@ -7,4 +7,4 @@
+ 
+ bool hwdb_validate(sd_hwdb *hwdb);
+ int hwdb_update(const char *root, const char *hwdb_bin_dir, bool strict, bool compat);
+-int hwdb_query(const char *modalias);
++int hwdb_query(const char *modalias, const char *root);
+diff --git a/src/udev/udevadm-hwdb.c b/src/udev/udevadm-hwdb.c
+index 162b351..972cda1 100644
+--- a/src/udev/udevadm-hwdb.c
++++ b/src/udev/udevadm-hwdb.c
+@@ -95,7 +95,7 @@ int hwdb_main(int argc, char *argv[], void *userdata) {
+         }
+ 
+         if (arg_test)
+-                return hwdb_query(arg_test);
++                return hwdb_query(arg_test, NULL);
+ 
+         return 0;
+ }

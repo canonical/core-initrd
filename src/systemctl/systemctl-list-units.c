@@ -49,7 +49,6 @@ static int get_unit_list_recursive(
 
         if (arg_recursive) {
                 _cleanup_strv_free_ char **machines = NULL;
-                char **i;
 
                 r = sd_get_machine_names(&machines);
                 if (r < 0)
@@ -210,7 +209,7 @@ static int output_units_list(const UnitInfo *unit_infos, unsigned c) {
         return 0;
 }
 
-int list_units(int argc, char *argv[], void *userdata) {
+int verb_list_units(int argc, char *argv[], void *userdata) {
         _cleanup_free_ UnitInfo *unit_infos = NULL;
         _cleanup_(message_set_freep) Set *replies = NULL;
         _cleanup_strv_free_ char **machines = NULL;
@@ -221,7 +220,7 @@ int list_units(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return r;
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         if (arg_with_dependencies) {
                 _cleanup_strv_free_ char **names = NULL;
@@ -425,7 +424,7 @@ static int output_sockets_list(struct socket_info *socket_infos, unsigned cs) {
         return 0;
 }
 
-int list_sockets(int argc, char *argv[], void *userdata) {
+int verb_list_sockets(int argc, char *argv[], void *userdata) {
         _cleanup_(message_set_freep) Set *replies = NULL;
         _cleanup_strv_free_ char **machines = NULL;
         _cleanup_strv_free_ char **sockets_with_suffix = NULL;
@@ -439,7 +438,7 @@ int list_sockets(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return r;
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = expand_unit_names(bus, strv_skip(argv, 1), ".socket", &sockets_with_suffix, NULL);
         if (r < 0)
@@ -688,7 +687,7 @@ usec_t calc_next_elapse(dual_timestamp *nw, dual_timestamp *next) {
         return next_elapse;
 }
 
-int list_timers(int argc, char *argv[], void *userdata) {
+int verb_list_timers(int argc, char *argv[], void *userdata) {
         _cleanup_(message_set_freep) Set *replies = NULL;
         _cleanup_strv_free_ char **machines = NULL;
         _cleanup_strv_free_ char **timers_with_suffix = NULL;
@@ -703,7 +702,7 @@ int list_timers(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return r;
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = expand_unit_names(bus, strv_skip(argv, 1), ".timer", &timers_with_suffix, NULL);
         if (r < 0)

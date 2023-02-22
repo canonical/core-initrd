@@ -1,10 +1,12 @@
-../../extra/systemd-oomd-defaults/oomd.conf.d/* usr/lib/systemd/oomd.conf.d/
-../../extra/systemd-oomd-defaults/-.slice.d/* usr/lib/systemd/system/-.slice.d/
-../../extra/systemd-oomd-defaults/user@.service.d/* usr/lib/systemd/system/user@.service.d/
+../extra/systemd-oomd-defaults/oomd.conf.d/* usr/lib/systemd/oomd.conf.d/
+../extra/systemd-oomd-defaults/-.slice.d/* usr/lib/systemd/system/-.slice.d/
+../extra/systemd-oomd-defaults/user@.service.d/* usr/lib/systemd/system/user@.service.d/
 etc/systemd/oomd.conf
 lib/systemd/systemd-oomd
 lib/systemd/system/systemd-oomd.service
+lib/systemd/system/systemd-oomd.socket
 usr/bin/oomctl
 usr/lib/sysusers.d/systemd-oom.conf
 usr/share/dbus-1/*/*oom*
-usr/share/man/man*/*oom*
+usr/share/bash-completion/completions/oomctl
+usr/share/zsh/vendor-completions/_oomctl

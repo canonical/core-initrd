@@ -1,0 +1,6 @@
+usr/share/man/man*/*nspawn*
+usr/share/man/man*/machinectl*
+usr/share/man/man*/portablectl*
+usr/share/man/man*/systemd-dissect*
+usr/share/man/man*/systemd-machined*
+usr/share/man/man*/systemd-portabled*

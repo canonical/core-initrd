@@ -2,3 +2,4 @@ rm_conffile /etc/dhcp/dhclient-exit-hooks.d/timesyncd 245.4-2~
 rm_conffile /etc/systemd/timesyncd.conf 245.4-2~
 rm_conffile /etc/dhcp/dhclient-enter-hooks.d/resolved 246-2ubuntu1~
 rm_conffile /etc/pam.d/systemd-user 246.6-3~
+rm_conffile /etc/systemd/resolved.conf 251.3-2~

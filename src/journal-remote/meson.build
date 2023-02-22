@@ -1,46 +1,46 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-systemd_journal_upload_sources = files('''
-        journal-upload.h
-        journal-upload.c
-        journal-upload-journal.c
-'''.split())
+systemd_journal_upload_sources = files(
+        'journal-upload.h',
+        'journal-upload.c',
+        'journal-upload-journal.c',
+)
 
-libsystemd_journal_remote_sources = files('''
-        journal-remote-parse.h
-        journal-remote-parse.c
-        journal-remote-write.h
-        journal-remote-write.c
-        journal-remote.h
-        journal-remote.c
-'''.split())
+libsystemd_journal_remote_sources = files(
+        'journal-remote-parse.h',
+        'journal-remote-parse.c',
+        'journal-remote-write.h',
+        'journal-remote-write.c',
+        'journal-remote.h',
+        'journal-remote.c',
+)
 
 if conf.get('HAVE_MICROHTTPD') == 1
         libsystemd_journal_remote_sources += files(
                 'microhttpd-util.h',
-                'microhttpd-util.c')
+                'microhttpd-util.c',
+        )
 endif
 
 libsystemd_journal_remote = static_library(
         'systemd-journal-remote',
         libsystemd_journal_remote_sources,
         include_directories : journal_includes,
+        link_with : libjournal_core,
         dependencies : [threads,
                         libmicrohttpd,
                         libgnutls,
                         libxz,
                         liblz4],
-        install : false)
+        build_by_default : false)
 
-systemd_journal_remote_sources = files('''
-        journal-remote-main.c
-'''.split())
+systemd_journal_remote_sources = files('journal-remote-main.c')
 
-systemd_journal_gatewayd_sources = files('''
-        journal-gatewayd.c
-        microhttpd-util.h
-        microhttpd-util.c
-'''.split())
+systemd_journal_gatewayd_sources = files(
+        'journal-gatewayd.c',
+        'microhttpd-util.h',
+        'microhttpd-util.c',
+)
 
 in_files = [
         ['journal-upload.conf',
@@ -54,15 +54,14 @@ foreach tuple : in_files
                 file,
                 input : file + '.in',
                 output: file,
-                command : [meson_render_jinja2, config_h, '@INPUT@'],
-                capture : true,
+                command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'],
                 install : tuple[1],
                 install_dir : pkgsysconfdir)
 endforeach
 
 if conf.get('ENABLE_REMOTE') == 1 and conf.get('HAVE_MICROHTTPD') == 1
         install_data('browse.html',
-                     install_dir : join_paths(pkgdatadir, 'gatewayd'))
+                     install_dir : pkgdatadir / 'gatewayd')
 
         if get_option('create-log-dirs')
                 meson.add_install_script('sh', '-c',
@@ -76,7 +75,9 @@ endif
 ############################################################
 
 fuzzers += [
-        [['src/journal-remote/fuzz-journal-remote.c'],
+        [files('fuzz-journal-remote.c'),
          [libsystemd_journal_remote,
-          libshared]],
+          libshared],
+         [],
+         [journal_includes]],
 ]

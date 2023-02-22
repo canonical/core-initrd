@@ -22,7 +22,6 @@
 
 static int chown_cgroup_path(const char *path, uid_t uid_shift) {
         _cleanup_close_ int fd = -1;
-        const char *fn;
 
         fd = open(path, O_RDONLY|O_CLOEXEC|O_DIRECTORY);
         if (fd < 0)
@@ -154,7 +153,7 @@ int create_subcgroup(pid_t pid, bool keep_unit, CGroupUnified unified_requested)
          * the unified hierarchy and the container does the same, and we did not create a scope unit for the container
          * move us and the container into two separate subcgroups.
          *
-         * Moreover, container payloads such as systemd try to manage the cgroup they run in in full (i.e. including
+         * Moreover, container payloads such as systemd try to manage the cgroup they run in full (i.e. including
          * its attributes), while the host systemd will only delegate cgroups for children of the cgroup created for a
          * delegation unit, instead of the cgroup itself. This means, if we'd pass on the cgroup allocated from the
          * host systemd directly to the payload, the host and payload systemd might fight for the cgroup
@@ -406,7 +405,7 @@ static int mount_legacy_cgns_unsupported(
                 uid_t uid_range,
                 const char *selinux_apifs_context) {
 
-        _cleanup_set_free_free_ Set *controllers = NULL;
+        _cleanup_set_free_ Set *controllers = NULL;
         const char *cgroup_root;
         int r;
 

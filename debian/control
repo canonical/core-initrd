@@ -7,22 +7,25 @@ Uploaders: Michael Biebl <biebl@debian.org>,
            Marco d'Itri <md@linux.it>,
            Sjoerd Simons <sjoerd@debian.org>,
            Martin Pitt <mpitt@debian.org>,
-           Felipe Sateler <fsateler@debian.org>
-Standards-Version: 4.6.0
+           Felipe Sateler <fsateler@debian.org>,
+           Luca Boccassi <bluca@debian.org>,
+Standards-Version: 4.6.1
 Rules-Requires-Root: no
 Vcs-Git: https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd
 Vcs-Browser:  https://git.launchpad.net/~ubuntu-core-dev/ubuntu/+source/systemd
 Homepage: https://www.freedesktop.org/wiki/Software/systemd
 Build-Depends: debhelper-compat (= 13),
+               dh-sequence-installnss,
+               dh-sequence-package-notes,
                pkg-config,
-               xsltproc,
-               docbook-xsl,
-               docbook-xml,
-               meson (>= 0.52.1),
+               xsltproc <!nodoc>,
+               docbook-xsl <!nodoc>,
+               docbook-xml <!nodoc>,
+               meson (>= 0.53.2),
                gettext,
                gperf,
-               gnu-efi [amd64 i386 arm64 armhf],
-               libcap-dev (>= 1:2.24-9~),
+               gnu-efi [amd64 i386 arm64 armhf riscv64],
+               libcap-dev,
                libpam0g-dev,
                libapparmor-dev (>= 2.13) <!stage1>,
                libidn2-dev <!stage1>,
@@ -33,13 +36,12 @@ Build-Depends: debhelper-compat (= 13),
                libselinux1-dev (>= 2.1.9),
                libacl1-dev,
                liblzma-dev,
-               liblz4-dev (>= 0.0~r125),
+               liblz4-dev (>= 1.3.0),
                liblz4-tool <!nocheck>,
                libbz2-dev <!stage1>,
                zlib1g-dev <!stage1> | libz-dev <!stage1>,
-               libcurl4-gnutls-dev <!stage1> | libcurl-dev <!stage1>,
+               libcurl4-openssl-dev <!stage1>,
                libmicrohttpd-dev <!stage1>,
-               libgnutls28-dev <!stage1>,
                libpcre2-dev <!stage1>,
                libgcrypt20-dev,
                libkmod-dev (>= 15),
@@ -70,12 +72,15 @@ Build-Depends: debhelper-compat (= 13),
 Package: systemd
 Architecture: linux-any
 Multi-Arch: foreign
-Section: admin
 Priority: important
 Recommends: default-dbus-system-bus | dbus-system-bus,
             networkd-dispatcher,
             systemd-timesyncd | time-daemon,
+            systemd-resolved,
 Suggests: systemd-container,
+          systemd-homed,
+          systemd-userdbd,
+          systemd-boot,
           libfido2-1,
           libtss2-esys-3.0.2-0,
           libtss2-mu0,
@@ -86,16 +91,20 @@ Pre-Depends: ${shlibs:Pre-Depends},
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          libsystemd0 (= ${binary:Version}),
-         util-linux (>= 2.27.1),
-         mount (>= 2.26),
+         mount,
          adduser,
+Replaces: systemd-repart (<< 250.2-3~)
 Conflicts: consolekit,
            libpam-ck-connector,
            systemd-shim,
 Breaks: resolvconf (<< 1.83~),
         udev (<< 247~),
+        less (<< 563),
+        sicherboot (<< 0.1.6),
+        systemd-repart (<< 250.2-3~),
 Provides: systemd-sysusers (= ${binary:Version}),
           systemd-tmpfiles (= ${binary:Version}),
+          systemd-repart (= ${binary:Version}),
 Description: system and service manager
  systemd is a system and service manager for Linux. It provides aggressive
  parallelization capabilities, uses socket and D-Bus activation for starting
@@ -112,15 +121,13 @@ Description: system and service manager
 Package: systemd-sysv
 Architecture: linux-any
 Multi-Arch: foreign
-Section: admin
 Priority: important
 Conflicts: sysvinit-core,
            file-rc,
            systemd-shim,
 Replaces: sysvinit-core,
 Pre-Depends: systemd
-Depends: ${shlibs:Depends},
-         systemd (= ${binary:Version}),
+Depends: systemd (= ${binary:Version}),
          ${misc:Depends}
 Recommends: libpam-systemd,
             libnss-systemd
@@ -142,8 +149,6 @@ Package: systemd-container
 Build-Profiles: <!stage1>
 Architecture: linux-any
 Multi-Arch: foreign
-Section: admin
-Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd,
@@ -160,8 +165,6 @@ Package: systemd-journal-remote
 Build-Profiles: <!stage1>
 Architecture: linux-any
 Multi-Arch: foreign
-Section: admin
-Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd,
@@ -176,12 +179,11 @@ Package: systemd-coredump
 Build-Profiles: <!stage1>
 Architecture: linux-any
 Multi-Arch: foreign
-Section: admin
-Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
          systemd
+Recommends: libdw1
 Conflicts: core-dump-handler
 Replaces: core-dump-handler
 Provides: core-dump-handler
@@ -193,7 +195,6 @@ Description: tools for storing and retrieving coredumps
 Package: systemd-timesyncd
 Architecture: linux-any
 Multi-Arch: foreign
-Section: admin
 Priority: standard
 Depends: ${shlibs:Depends},
          ${misc:Depends},
@@ -210,8 +211,6 @@ Description: minimalistic service to synchronize local time with NTP servers
 
 Package: systemd-tests
 Architecture: linux-any
-Section: admin
-Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd (= ${binary:Version}),
@@ -224,15 +223,15 @@ Description: tests for systemd
 Package: libpam-systemd
 Architecture: linux-any
 Multi-Arch: same
-Section: admin
 Priority: standard
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd (= ${binary:Version}),
-         libpam-runtime (>= 1.0.1-6),
+         libpam-runtime,
          default-dbus-system-bus | dbus-system-bus,
          systemd-sysv
+Recommends: dbus-user-session,
 Provides: logind (= ${binary:Version}), default-logind (= ${binary:Version})
 Description: system and service manager - PAM module
  This package contains the PAM module which registers user sessions in
@@ -245,8 +244,6 @@ Description: system and service manager - PAM module
 Package: libnss-myhostname
 Architecture: linux-any
 Multi-Arch: same
-Section: admin
-Priority: optional
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
@@ -266,8 +263,6 @@ Description: nss module providing fallback resolution for the current hostname
 Package: libnss-mymachines
 Architecture: linux-any
 Multi-Arch: same
-Section: admin
-Priority: optional
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
@@ -283,23 +278,20 @@ Description: nss module to resolve hostnames for local container instances
 Package: libnss-resolve
 Architecture: linux-any
 Multi-Arch: same
-Section: admin
-Priority: optional
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         systemd (= ${binary:Version}),
+         systemd-resolved (= ${binary:Version}),
 Description: nss module to resolve names via systemd-resolved
  nss-resolve is a plugin for the GNU Name Service Switch (NSS) functionality
  of the GNU C Library (glibc) providing DNS and LLMNR resolution to programs via
- the systemd-resolved daemon (provided in the systemd package).
+ the systemd-resolved daemon (provided in the systemd-resolved package).
  .
  Installing this package automatically adds resolve to /etc/nsswitch.conf.
 
 Package: libnss-systemd
 Architecture: linux-any
 Multi-Arch: same
-Section: admin
 Priority: standard
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
@@ -318,28 +310,38 @@ Package: libsystemd0
 Architecture: linux-any
 Multi-Arch: same
 Section: libs
-Priority: optional
-Pre-Depends: ${shlibs:Depends},
-             ${misc:Pre-Depends}
-Depends: ${misc:Depends}
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
 Description: systemd utility library
- The libsystemd0 library provides interfaces to various systemd components.
+ This library provides APIs to interface with various system components such as
+ the system journal, the system service manager, D-Bus and more.
 
 Package: libsystemd-dev
 Architecture: linux-any
 Multi-Arch: same
 Section: libdevel
-Priority: optional
-Depends: ${shlibs:Depends},
-         ${misc:Depends},
+Depends: ${misc:Depends},
          libsystemd0 (= ${binary:Version})
 Description: systemd utility library - development files
- The libsystemd0 library provides interfaces to various systemd components.
+ This library provides APIs to interface with various system components such as
+ the system journal, the system service manager, D-Bus and more.
  .
- This package contains the development files.
+ This package contains the files needed for developing applications that
+ use libsystemd.
+
+Package: libsystemd-shared
+Architecture: linux-any
+Multi-Arch: same
+Section: libs
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Description: systemd shared private library
+ This internal shared library provides common code used by various systemd
+ components. It is supposed to decrease memory and disk footprint.
+ The shared library is not meant for public use and is not API or ABI stable.
 
 Package: udev
-Section: admin
 Priority: important
 Architecture: linux-any
 Multi-Arch: foreign
@@ -348,9 +350,7 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
          libudev1 (= ${binary:Version}),
-         util-linux (>= 2.27.1),
-         s390-tools (>> 1.6.2) [s390],
-Conflicts: hal
+         s390-tools [s390],
 Recommends: systemd-hwe-hwdb,
 Breaks: systemd (<< ${binary:Version}),
 Description: /dev/ and hotplug management daemon
@@ -359,25 +359,26 @@ Description: /dev/ and hotplug management daemon
 
 Package: libudev1
 Section: libs
-Priority: optional
 Architecture: linux-any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends}
 Description: libudev shared library
- This library provides access to udev device information.
+ This library provides APIs to introspect and enumerate devices on the local
+ system.
 
 Package: libudev-dev
 Section: libdevel
-Priority: optional
 Architecture: linux-any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
-Depends: ${shlibs:Depends},
-         ${misc:Depends},
+Depends: ${misc:Depends},
          libudev1 (= ${binary:Version})
 Description: libudev development files
+ This library provides APIs to introspect and enumerate devices on the local
+ system.
+ .
  This package contains the files needed for developing applications that
  use libudev.
 
@@ -385,7 +386,6 @@ Package: udev-udeb
 Build-Profiles: <!noudeb>
 Package-Type: udeb
 Section: debian-installer
-Priority: optional
 Architecture: linux-any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
@@ -400,7 +400,6 @@ Package: libudev1-udeb
 Build-Profiles: <!noudeb>
 Package-Type: udeb
 Section: debian-installer
-Priority: optional
 Architecture: linux-any
 Depends: ${shlibs:Depends},
          ${misc:Depends}
@@ -410,9 +409,7 @@ Description: libudev shared library
  This is a minimal version, only for use in the installation system.
 
 Package: systemd-standalone-sysusers
-Section: admin
 Architecture: linux-any
-Priority: optional
 Conflicts: systemd-sysusers,
            systemd (<< 249.3-3)
 Replaces: systemd-sysusers,
@@ -420,15 +417,13 @@ Replaces: systemd-sysusers,
 Provides: systemd-sysusers (= ${binary:Version})
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-Description: Standalone sysusers binary for use in non-systemd systems
+Description: standalone sysusers binary for use in non-systemd systems
  Standalone sysusers binary with minimal dependencies.
  This package conflicts with the main systemd package and is meant for use in
  non-systemd systems.
 
 Package: systemd-standalone-tmpfiles
-Section: admin
 Architecture: linux-any
-Priority: optional
 Conflicts: systemd-tmpfiles,
            systemd (<< 249.3-3)
 Replaces: systemd-tmpfiles,
@@ -436,31 +431,102 @@ Replaces: systemd-tmpfiles,
 Provides: systemd-tmpfiles (= ${binary:Version})
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-Description: Standalone tmpfiles binary for use in non-systemd systems
+Description: standalone tmpfiles binary for use in non-systemd systems
  Standalone tmpfiles binary with minimal dependencies.
  This package conflicts with the main systemd package and is meant for use in
  non-systemd systems.
 
 Package: systemd-oomd
-Section: admin
 Architecture: linux-any
-Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
-Description: Userspace out-of-memory (OOM) killer
+Breaks: systemd (<< 250.2-2~)
+Replaces: systemd (<< 250.2-2~)
+Description: userspace out-of-memory (OOM) killer
  systemd-oomd is a system service that uses cgroups-v2 and
  pressure stall information (PSI) to monitor and take action on
  processes before an OOM occurs in kernel space.
 
-Package: systemd-repart
-Section: admin
+Package: systemd-userdbd
+Build-Profiles: <!stage1>
 Architecture: linux-any
-Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd (= ${binary:Version}),
-Description: Provides the systemd-repart utility
- systemd-repart is a configuration-driven system partitioning tool. It follows
- the Discoverable Partitions Specification and provides support for encryption
- and dm-verity among other things.
+Description: dynamic user/group manager
+ systemd-userdbd is a system service that multiplexes user/group lookups to all
+ local services that provide JSON user/group record definitions to the system.
+ In addition it synthesizes JSON user/group records from classic UNIX/glibc NSS
+ user/group records in order to provide full backwards compatibility. It may
+ also pick up statically defined JSON user/group records from drop-in files.
+
+Package: systemd-homed
+Build-Profiles: <!stage1>
+Architecture: linux-any
+Pre-Depends: ${misc:Pre-Depends},
+             init-system-helpers (>= 1.64~),
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         systemd-userdbd (= ${binary:Version}),
+         systemd (= ${binary:Version}),
+         libpam-runtime,
+Description: home area manager
+ systemd-homed is a system service designed to manage home directories. This
+ package includes the homed service, a PAM module to automatically mount home
+ directories on user login, tools and documentation.
+
+Package: systemd-boot
+Architecture: amd64 i386 arm64 armhf riscv64
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         systemd-boot-efi (= ${binary:Version}),
+Recommends: efibootmgr,
+Breaks: systemd (<< 251.2-3~)
+Replaces: systemd (<< 251.2-3~)
+Description: simple UEFI boot manager - tools and services
+ systemd-boot (short: sd-boot) is a simple UEFI boot manager. It provides a
+ textual menu to select the entry to boot and an editor for the kernel command
+ line. It supports systems with UEFI firmware only.
+ .
+ Installing systemd-boot will not automatically switch your boot loader.
+ .
+ This package contains various tools and services to manage systems using
+ systemd-boot.
+
+Package: systemd-boot-efi
+Architecture: amd64 i386 arm64 armhf riscv64
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+Breaks: systemd (<< 251.2-3~)
+Replaces: systemd (<< 251.2-3~)
+Description: simple UEFI boot manager - EFI binaries
+ systemd-boot (short: sd-boot) is a simple UEFI boot manager. It provides a
+ textual menu to select the entry to boot and an editor for the kernel command
+ line. It supports systems with UEFI firmware only.
+ .
+ This package contains the EFI binaries.
+
+Package: systemd-resolved
+Multi-Arch: foreign
+Priority: important
+Architecture: linux-any
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         adduser,
+         systemd (= ${binary:Version}),
+         default-dbus-system-bus | dbus-system-bus
+Suggests: policykit-1,
+Provides: resolvconf
+Conflicts: resolvconf
+Replaces: resolvconf,
+          systemd (<< 251.3-2~)
+Breaks: systemd (<< 251.3-2~)
+Description: systemd DNS resolver
+ This package provides systemd's DNS resolver and the command line tool to
+ manage it.
+ .
+ Installing this package automatically overwrites /etc/resolv.conf and switches
+ it to be managed by systemd-resolved.

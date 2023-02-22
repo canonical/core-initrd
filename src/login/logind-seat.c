@@ -16,7 +16,7 @@
 #include "logind-seat-dbus.h"
 #include "logind-seat.h"
 #include "logind-session-dbus.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "stdio-util.h"
@@ -122,8 +122,6 @@ int seat_save(Seat *s) {
         }
 
         if (s->sessions) {
-                Session *i;
-
                 fputs("SESSIONS=", f);
                 LIST_FOREACH(sessions_by_seat, i, s->sessions) {
                         fprintf(f,
@@ -323,24 +321,19 @@ int seat_switch_to_next(Seat *s) {
 }
 
 int seat_switch_to_previous(Seat *s) {
-        unsigned start, i;
-        Session *session;
-
         if (MALLOC_ELEMENTSOF(s->positions) == 0)
                 return -EINVAL;
 
-        start = 1;
-        if (s->active && s->active->position > 0)
-                start = s->active->position;
+        size_t start = s->active && s->active->position > 0 ? s->active->position : 1;
 
-        for (i = start - 1; i > 0; --i) {
-                session = seat_get_position(s, i);
+        for (size_t i = start - 1; i > 0; i--) {
+                Session *session = seat_get_position(s, i);
                 if (session)
                         return session_activate(session);
         }
 
-        for (i = MALLOC_ELEMENTSOF(s->positions) - 1; i > start; --i) {
-                session = seat_get_position(s, i);
+        for (size_t i = MALLOC_ELEMENTSOF(s->positions) - 1; i > start; i--) {
+                Session *session = seat_get_position(s, i);
                 if (session)
                         return session_activate(session);
         }
@@ -349,7 +342,7 @@ int seat_switch_to_previous(Seat *s) {
 }
 
 int seat_active_vt_changed(Seat *s, unsigned vtnr) {
-        Session *i, *new_active = NULL;
+        Session *new_active = NULL;
         int r;
 
         assert(s);
@@ -368,7 +361,7 @@ int seat_active_vt_changed(Seat *s, unsigned vtnr) {
                         break;
                 }
 
-        if (!new_active) {
+        if (!new_active)
                 /* no running one? then we can't decide which one is the
                  * active one, let the first one win */
                 LIST_FOREACH(sessions_by_seat, i, s->sessions)
@@ -376,7 +369,6 @@ int seat_active_vt_changed(Seat *s, unsigned vtnr) {
                                 new_active = i;
                                 break;
                         }
-        }
 
         r = seat_set_active(s, new_active);
         manager_spawn_autovt(s->manager, vtnr);
@@ -467,7 +459,6 @@ int seat_stop(Seat *s, bool force) {
 }
 
 int seat_stop_sessions(Seat *s, bool force) {
-        Session *session;
         int r = 0, k;
 
         assert(s);
@@ -482,7 +473,6 @@ int seat_stop_sessions(Seat *s, bool force) {
 }
 
 void seat_evict_position(Seat *s, Session *session) {
-        Session *iter;
         unsigned pos = session->position;
 
         session->position = 0;
@@ -496,12 +486,11 @@ void seat_evict_position(Seat *s, Session *session) {
                 /* There might be another session claiming the same
                  * position (eg., during gdm->session transition), so let's look
                  * for it and set it on the free slot. */
-                LIST_FOREACH(sessions_by_seat, iter, s->sessions) {
+                LIST_FOREACH(sessions_by_seat, iter, s->sessions)
                         if (iter->position == pos && session_get_state(iter) != SESSION_CLOSING) {
                                 s->positions[pos] = iter;
                                 break;
                         }
-                }
         }
 }
 
@@ -599,7 +588,6 @@ bool seat_can_graphical(Seat *s) {
 }
 
 int seat_get_idle_hint(Seat *s, dual_timestamp *t) {
-        Session *session;
         bool idle_hint = true;
         dual_timestamp ts = DUAL_TIMESTAMP_NULL;
 

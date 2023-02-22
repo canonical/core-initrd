@@ -20,30 +20,14 @@
 #define _sentinel_ __attribute__((__sentinel__))
 #define _destructor_ __attribute__((__destructor__))
 #define _deprecated_ __attribute__((__deprecated__))
-#define _packed_ __attribute__((__packed__))
 #define _malloc_ __attribute__((__malloc__))
 #define _weak_ __attribute__((__weak__))
-#define _likely_(x) (__builtin_expect(!!(x), 1))
-#define _unlikely_(x) (__builtin_expect(!!(x), 0))
 #define _public_ __attribute__((__visibility__("default")))
 #define _hidden_ __attribute__((__visibility__("hidden")))
 #define _weakref_(x) __attribute__((__weakref__(#x)))
-#define _alignas_(x) __attribute__((__aligned__(__alignof(x))))
+#define _alignas_(x) __attribute__((__aligned__(__alignof__(x))))
 #define _alignptr_ __attribute__((__aligned__(sizeof(void*))))
-#if __GNUC__ >= 7
-#define _fallthrough_ __attribute__((__fallthrough__))
-#else
-#define _fallthrough_
-#endif
-/* Define C11 noreturn without <stdnoreturn.h> and even on older gcc
- * compiler versions */
-#ifndef _noreturn_
-#if __STDC_VERSION__ >= 201112L
-#define _noreturn_ _Noreturn
-#else
-#define _noreturn_ __attribute__((__noreturn__))
-#endif
-#endif
+#define _warn_unused_result_ __attribute__((__warn_unused_result__))
 
 #if !defined(HAS_FEATURE_MEMORY_SANITIZER)
 #  if defined(__has_feature)
@@ -161,10 +145,6 @@
 #define ALIGN4_PTR(p) ((void*) ALIGN4((unsigned long) (p)))
 #define ALIGN8_PTR(p) ((void*) ALIGN8((unsigned long) (p)))
 
-static inline size_t ALIGN_TO(size_t l, size_t ali) {
-        return ((l + ali - 1) & ~(ali - 1));
-}
-
 #define ALIGN_TO_PTR(p, ali) ((void*) ALIGN_TO((unsigned long) (p), (ali)))
 
 /* align to next higher power-of-2 (except for: 0 => 0, overflow => 0) */
@@ -207,13 +187,6 @@ static inline size_t GREEDY_ALLOC_ROUND_UP(size_t l) {
 
         return m;
 }
-
-/*
- * STRLEN - return the length of a string literal, minus the trailing NUL byte.
- *          Contrary to strlen(), this is a constant expression.
- * @x: a string literal.
- */
-#define STRLEN(x) (sizeof(""x"") - 1)
 
 /*
  * container_of - cast a member of a structure out to the containing structure
@@ -281,8 +254,8 @@ static inline int __coverity_check_and_return__(int condition) {
 #define assert(expr) assert_message_se(expr, #expr)
 #endif
 
-#define assert_not_reached(t)                                           \
-        log_assert_failed_unreachable(t, PROJECT_FILE, __LINE__, __PRETTY_FUNCTION__)
+#define assert_not_reached()                                            \
+        log_assert_failed_unreachable(PROJECT_FILE, __LINE__, __PRETTY_FUNCTION__)
 
 #define assert_return(expr, r)                                          \
         do {                                                            \
@@ -336,31 +309,33 @@ static inline int __coverity_check_and_return__(int condition) {
 
 #define sizeof_field(struct_type, member) sizeof(((struct_type *) 0)->member)
 
-/* Returns the number of chars needed to format variables of the
- * specified type as a decimal string. Adds in extra space for a
- * negative '-' prefix (hence works correctly on signed
- * types). Includes space for the trailing NUL. */
+/* Returns the number of chars needed to format variables of the specified type as a decimal string. Adds in
+ * extra space for a negative '-' prefix for signed types. Includes space for the trailing NUL. */
 #define DECIMAL_STR_MAX(type)                                           \
-        (2+(sizeof(type) <= 1 ? 3 :                                     \
-            sizeof(type) <= 2 ? 5 :                                     \
-            sizeof(type) <= 4 ? 10 :                                    \
-            sizeof(type) <= 8 ? 20 : sizeof(int[-2*(sizeof(type) > 8)])))
+        ((size_t) IS_SIGNED_INTEGER_TYPE(type) + 1U +                   \
+            (sizeof(type) <= 1 ? 3U :                                   \
+             sizeof(type) <= 2 ? 5U :                                   \
+             sizeof(type) <= 4 ? 10U :                                  \
+             sizeof(type) <= 8 ? (IS_SIGNED_INTEGER_TYPE(type) ? 19U : 20U) : sizeof(int[-2*(sizeof(type) > 8)])))
 
-#define DECIMAL_STR_WIDTH(x)                            \
-        ({                                              \
-                typeof(x) _x_ = (x);                    \
-                unsigned ans = 1;                       \
-                while ((_x_ /= 10) != 0)                \
-                        ans++;                          \
-                ans;                                    \
+/* Returns the number of chars needed to format the specified integer value. It's hence more specific than
+ * DECIMAL_STR_MAX() which answers the same question for all possible values of the specified type. Does
+ * *not* include space for a trailing NUL. (If you wonder why we special case _x_ == 0 here: it's to trick
+ * out gcc's -Wtype-limits, which would complain on comparing an unsigned type with < 0, otherwise. By
+ * special-casing == 0 here first, we can use <= 0 instead of < 0 to trick out gcc.) */
+#define DECIMAL_STR_WIDTH(x)                                      \
+        ({                                                        \
+                typeof(x) _x_ = (x);                              \
+                size_t ans;                                       \
+                if (_x_ == 0)                                     \
+                        ans = 1;                                  \
+                else {                                            \
+                        ans = _x_ <= 0 ? 2 : 1;                   \
+                        while ((_x_ /= 10) != 0)                  \
+                                ans++;                            \
+                }                                                 \
+                ans;                                              \
         })
-
-#define UPDATE_FLAG(orig, flag, b)                      \
-        ((b) ? ((orig) | (flag)) : ((orig) & ~(flag)))
-#define SET_FLAG(v, flag, b) \
-        (v) = UPDATE_FLAG(v, flag, b)
-#define FLAGS_SET(v, flags) \
-        ((~(v) & (flags)) == 0)
 
 #define SWAP_TWO(x, y) do {                        \
                 typeof(x) _t = (x);                \
@@ -421,8 +396,12 @@ static inline int __coverity_check_and_return__(int condition) {
                 if (!p)                                         \
                         return NULL;                            \
                                                                 \
-                assert(p->n_ref > 0);                           \
-                p->n_ref++;                                     \
+                /* For type check. */                           \
+                unsigned *q = &p->n_ref;                        \
+                assert(*q > 0);                                 \
+                assert_se(*q < UINT_MAX);                       \
+                                                                \
+                (*q)++;                                         \
                 return p;                                       \
         }
 
@@ -478,8 +457,37 @@ static inline int __coverity_check_and_return__(int condition) {
                 _copy;                                                  \
         })
 
+#define saturate_add(x, y, limit)                                       \
+        ({                                                              \
+                typeof(limit) _x = (x);                                 \
+                typeof(limit) _y = (y);                                 \
+                _x > (limit) || _y >= (limit) - _x ? (limit) : _x + _y; \
+        })
+
 static inline size_t size_add(size_t x, size_t y) {
-        return y >= SIZE_MAX - x ? SIZE_MAX : x + y;
+        return saturate_add(x, y, SIZE_MAX);
 }
+
+typedef struct {
+        int _empty[0];
+} dummy_t;
+
+assert_cc(sizeof(dummy_t) == 0);
+
+/* A little helper for subtracting 1 off a pointer in a safe UB-free way. This is intended to be used for for
+ * loops that count down from a high pointer until some base. A naive loop would implement this like this:
+ *
+ * for (p = end-1; p >= base; p--) …
+ *
+ * But this is not safe because p before the base is UB in C. With this macro the loop becomes this instead:
+ *
+ * for (p = PTR_SUB1(end, base); p; p = PTR_SUB1(p, base)) …
+ *
+ * And is free from UB! */
+#define PTR_SUB1(p, base)                                \
+        ({                                               \
+                typeof(p) _q = (p);                      \
+                _q && _q > (base) ? &_q[-1] : NULL;      \
+        })
 
 #include "log.h"

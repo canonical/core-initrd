@@ -13,7 +13,6 @@ static int check_unit_generic(int code, const UnitActiveState good_states[], int
         _cleanup_strv_free_ char **names = NULL;
         UnitActiveState active_state;
         sd_bus *bus;
-        char **name;
         int r;
         bool found = false;
 
@@ -43,7 +42,7 @@ static int check_unit_generic(int code, const UnitActiveState good_states[], int
         return found ? 0 : code;
 }
 
-int check_unit_active(int argc, char *argv[], void *userdata) {
+int verb_is_active(int argc, char *argv[], void *userdata) {
         static const UnitActiveState states[] = {
                 UNIT_ACTIVE,
                 UNIT_RELOADING,
@@ -53,7 +52,7 @@ int check_unit_active(int argc, char *argv[], void *userdata) {
         return check_unit_generic(EXIT_PROGRAM_NOT_RUNNING, states, ELEMENTSOF(states), strv_skip(argv, 1));
 }
 
-int check_unit_failed(int argc, char *argv[], void *userdata) {
+int verb_is_failed(int argc, char *argv[], void *userdata) {
         static const UnitActiveState states[] = {
                 UNIT_FAILED,
         };

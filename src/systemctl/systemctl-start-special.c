@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
+#include <unistd.h>
+
 #include "bootspec.h"
 #include "bus-error.h"
 #include "bus-locator.h"
@@ -16,7 +18,7 @@
 #include "systemctl.h"
 
 static int load_kexec_kernel(void) {
-        _cleanup_(boot_config_free) BootConfig config = {};
+        _cleanup_(boot_config_free) BootConfig config = BOOT_CONFIG_NULL;
         _cleanup_free_ char *kernel = NULL, *initrd = NULL, *options = NULL;
         const BootEntry *e;
         pid_t pid;
@@ -30,7 +32,7 @@ static int load_kexec_kernel(void) {
         if (access(KEXEC, X_OK) < 0)
                 return log_error_errno(errno, KEXEC" is not available: %m");
 
-        r = boot_entries_load_config_auto(NULL, NULL, &config);
+        r = boot_config_load_auto(&config, NULL, NULL);
         if (r == -ENOKEY)
                 /* The call doesn't log about ENOKEY, let's do so here. */
                 return log_error_errno(r,
@@ -38,6 +40,10 @@ static int load_kexec_kernel(void) {
                                        is_efi_boot()
                                        ? "Cannot automatically load kernel: ESP mount point not found."
                                        : "Automatic loading works only on systems booted with EFI.");
+        if (r < 0)
+                return r;
+
+        r = boot_config_select_special_entries(&config);
         if (r < 0)
                 return r;
 
@@ -114,7 +120,7 @@ static int set_exit_code(uint8_t code) {
         return 0;
 }
 
-int start_special(int argc, char *argv[], void *userdata) {
+int verb_start_special(int argc, char *argv[], void *userdata) {
         bool termination_action; /* An action that terminates the manager, can be performed also by
                                   * signal. */
         enum action a;
@@ -195,7 +201,7 @@ int start_special(int argc, char *argv[], void *userdata) {
 
         if (arg_force >= 1 &&
             (termination_action || IN_SET(a, ACTION_KEXEC, ACTION_EXIT)))
-                r = trivial_method(argc, argv, userdata);
+                r = verb_trivial_method(argc, argv, userdata);
         else {
                 /* First try logind, to allow authentication with polkit */
                 if (IN_SET(a,
@@ -211,8 +217,8 @@ int start_special(int argc, char *argv[], void *userdata) {
                         r = logind_reboot(a);
                         if (r >= 0)
                                 return r;
-                        if (IN_SET(r, -EOPNOTSUPP, -EINPROGRESS))
-                                /* Requested operation is not supported or already in progress */
+                        if (IN_SET(r, -EACCES, -EOPNOTSUPP, -EINPROGRESS))
+                                /* Requested operation requires auth, is not supported or already in progress */
                                 return r;
 
                         /* On all other errors, try low-level operation. In order to minimize the difference
@@ -227,7 +233,7 @@ int start_special(int argc, char *argv[], void *userdata) {
                          * behaviour. */
                         arg_no_block = true;
 
-                r = start_unit(argc, argv, userdata);
+                r = verb_start(argc, argv, userdata);
         }
 
         if (termination_action && arg_force < 2 &&
@@ -237,13 +243,13 @@ int start_special(int argc, char *argv[], void *userdata) {
         return r;
 }
 
-int start_system_special(int argc, char *argv[], void *userdata) {
+int verb_start_system_special(int argc, char *argv[], void *userdata) {
         /* Like start_special above, but raises an error when running in user mode */
 
-        if (arg_scope != UNIT_FILE_SYSTEM)
+        if (arg_scope != LOOKUP_SCOPE_SYSTEM)
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
                                        "Bad action for %s mode.",
-                                       arg_scope == UNIT_FILE_GLOBAL ? "--global" : "--user");
+                                       arg_scope == LOOKUP_SCOPE_GLOBAL ? "--global" : "--user");
 
-        return start_special(argc, argv, userdata);
+        return verb_start_special(argc, argv, userdata);
 }

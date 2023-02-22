@@ -31,6 +31,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
         if (!argv[0])
                 return 0; /* argv[0] should always be present, but may be zero-length. */
+        if (strv_length(argv) > 1024)
+                return 0; /* oss-fuzz reports timeouts which are caused by appending to a very long strv.
+                           * The code is indeed not very efficient, but it's designed for normal command-line
+                           * use, where we don't expect more than a dozen of entries. The fact that it is
+                           * slow with ~100k entries is not particularly interesting. Let's just refuse such
+                           * long command lines. */
 
         if (getenv_bool("SYSTEMD_FUZZ_OUTPUT") <= 0) {
                 orig_stdout_fd = fcntl(fileno(stdout), F_DUPFD_CLOEXEC, 3);
@@ -50,12 +56,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         else
                 log_info(r == 0 ? "Done!" : "Action!");
 
-        if (orig_stdout_fd >= 0) {
-                char path[STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(int)];
-
-                xsprintf(path, "/proc/self/fd/%d", orig_stdout_fd);
-                assert_se(freopen(path, "w", stdout));
-        }
+        if (orig_stdout_fd >= 0)
+                assert_se(freopen(FORMAT_PROC_FD_PATH(orig_stdout_fd), "w", stdout));
 
         release_busses(); /* We open the bus for communication with logind.
                            * It needs to be closed to avoid apparent leaks. */

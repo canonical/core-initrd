@@ -43,10 +43,9 @@ static int set_property_one(sd_bus *bus, const char *name, char **properties) {
         return 0;
 }
 
-int set_property(int argc, char *argv[], void *userdata) {
+int verb_set_property(int argc, char *argv[], void *userdata) {
         sd_bus *bus;
         _cleanup_strv_free_ char **names = NULL;
-        char **name;
         int r, k;
 
         r = acquire_bus(BUS_MANAGER, &bus);

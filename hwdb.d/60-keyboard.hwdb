@@ -13,11 +13,6 @@
 # The lookup keys are composed in:
 #   60-evdev.rules
 #
-# Note: The format of the "evdev:" prefix match key is a contract between the
-# rules file and the hardware data, it might change in later revisions to
-# support more or better matches, it is not necessarily expected to be a stable
-# ABI.
-#
 # Supported hardware matches are:
 #  - Generic input devices match:
 #      evdev:input:bZZZZvYYYYpXXXXeWWWW-VVVV
@@ -105,7 +100,7 @@
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pn*:*
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnGateway*:pnA0A1*:*
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svneMachines:pneMachines*E725:*
- KEYBOARD_KEY_86=wlan                                   # Fn+F3 or Fn+Q for comunication key
+ KEYBOARD_KEY_86=wlan                                   # Fn+F3 or Fn+Q for communication key
  KEYBOARD_KEY_a5=help                                   # Fn+F1
  KEYBOARD_KEY_a6=setup                                  # Fn+F2 Acer eSettings
  KEYBOARD_KEY_a7=battery                                # Fn+F3 Power Management
@@ -159,10 +154,22 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnAspire*8930:*
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnAspire*7750G:*
  KEYBOARD_KEY_e0=!pageup
 
+# Acer Aspire One AO532h
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnAO532h:*
+ KEYBOARD_KEY_84=bluetooth
+ KEYBOARD_KEY_ce=unknown  # Brightness Up, also emitted by acpi-video, ignore
+ KEYBOARD_KEY_ef=unknown  # Brightness Down, also emitted by acpi-video, ignore
+
 # Predator PH 315-52
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnPredator*PH*315-52:*
  KEYBOARD_KEY_ef=kbdillumup                             # Fn+F10
  KEYBOARD_KEY_f0=kbdillumdown                           # Fn+F9
+
+# Travelmate B311-31, B311R-31, B311RN-31
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnTravelMateB311-31*:pvr*
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnTravelMateB311R-31*:pvr*
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnTravelMateB311RN-31*:pvr*
+ KEYBOARD_KEY_8a=f20                                    # Microphone mute
 
 # Travelmate C300
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnTravelMate*C3[01]0*:*
@@ -195,7 +202,7 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnAcer*:pnAOA*:*
 # Packard Bell and Gateway models
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnGateway*:pn*:*
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnPackard*Bell*:pn*:*
- KEYBOARD_KEY_86=wlan                                   # Fn+F3 or Fn+Q for comunication key
+ KEYBOARD_KEY_86=wlan                                   # Fn+F3 or Fn+Q for communication key
 
 ###########################################################
 # Alienware
@@ -226,10 +233,19 @@ evdev:name:Asus WMI hotkeys:dmi:bvn*:bvr*:bd*:svnASUS*:pn*:*
 evdev:name:Eee PC WMI hotkeys:dmi:bvn*:bvr*:bd*:svnASUS*:pn*:*
 evdev:name:Asus Laptop extra buttons:dmi:bvn*:bvr*:bd*:svnASUS*:pn*:*
  KEYBOARD_KEY_6b=f21                                    # Touchpad Toggle
+ KEYBOARD_KEY_7c=f20                                    # Remap micmute to f20
 
 # USB keyboard in Asus FX503VD
 evdev:input:b0003v0B05p1869*
  KEYBOARD_KEY_ff31007c=f20                              # Remap micmute to f20
+
+# Asus TF103C misses the home button in its PNP0C40 GPIO resources
+# causing the volume-button mappings to be off by one, correct this
+evdev:name:gpio-keys:phys:gpio-keys/input0:ev:3:dmi:*:svnASUSTeKCOMPUTERINC.:pnTF103C*:*
+ KEYBOARD_KEY_1=volumeup
+
+evdev:name:gpio-keys:phys:gpio-keys/input0:ev:100003:dmi:*:svnASUSTeKCOMPUTERINC.:pnTF103C*:*
+ KEYBOARD_KEY_0=volumedown
 
 ###########################################################
 # BenQ
@@ -267,6 +283,7 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnCompaq*:pn*Evo*N*:*
  KEYBOARD_KEY_9f=homepage
 
 evdev:input:b0003v049Fp0051*
+evdev:input:b0003v049Fp008D*
  KEYBOARD_KEY_0c0011=presentation
  KEYBOARD_KEY_0c0012=addressbook
  KEYBOARD_KEY_0c0013=info
@@ -380,10 +397,14 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnDell*:pnXPS12-9Q33*:*
 evdev:name:Dell WMI hotkeys:dmi:bvn*:bvr*:bd*:svnDell*:pnLatitude*:*
 # Dell Precision microphone mute
 evdev:name:Dell WMI hotkeys:dmi:bvn*:bvr*:bd*:svnDell*:pnPrecision*:*
+# Dell XPS microphone mute
+evdev:name:Dell WMI hotkeys:dmi:bvn*:bvr*:bd*:svnDell*:pnXPS*:*
  KEYBOARD_KEY_100150=f20                                # Mic mute toggle, should be micmute
 
 # Dell Latitude privacy microphone mute
 evdev:name:Dell Privacy Driver:dmi:bvn*:bvr*:bd*:svnDell*:pnLatitude*:*
+# Dell Precision privacy microphone mute
+evdev:name:Dell Privacy Driver:dmi:bvn*:bvr*:bd*:svnDell*:pnPrecision*:*
  KEYBOARD_KEY_120001=f20                                # Mic mute toggle, should be micmute
 
 ###########################################################
@@ -491,11 +512,16 @@ evdev:input:b0003v0458p0708*
  KEYBOARD_KEY_0900fc=screenlock
 
 ###########################################################
-# Hewlett Packard
+# Google
 ###########################################################
 
-evdev:name:Intel HID events:dmi:bvn*:bvr*:bd*:svnHP*:pn*:*
- KEYBOARD_KEY_8=unknown                                 # Use hp-wireless instead
+# Google Hangouts Meet speakermic
+evdev:input:b0003v18D1p8001*
+ KEYBOARD_KEY_b002f=reserved                            # Disable micmute key
+
+###########################################################
+# Hewlett Packard
+###########################################################
 
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*:*
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pn*:*
@@ -560,8 +586,9 @@ evdev:atkbd:dmi:bvn*:bvr*:svnHP*:pnHPElitex21013G3:*
  KEYBOARD_KEY_92=brightnessdown
  KEYBOARD_KEY_97=brightnessup
 
-evdev:name:Intel HID events:dmi:bvn*:bvr*:svnHP*:pnHPElitex21013G3:*
- KEYBOARD_KEY_08=unknown                               # rfkill is also reported by HP Wireless hotkeys
+# HP Laptop 15s-eq0023nl
+evdev:atkbd:dmi:bvn*:bvr*:svnHP*:pnHPLaptop15s-eq0*:sku9MG38EA#ABZ:*
+ KEYBOARD_KEY_9d=102nd                                  # Greater than/Less than
 
 # Elitebook
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*Compaq*:*
@@ -585,6 +612,18 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHP*G60*Notebook*PC:*
 # 2570p
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*2570p*:*
  KEYBOARD_KEY_f8=wlan                                   # Wireless HW switch button
+
+# Elitebook 2760p
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*2760p*:*
+ KEYBOARD_KEY_89=battery                                # Fn+F8
+ KEYBOARD_KEY_f8=unknown                                # rfkill is also reported by HP Wireless hotkeys
+ KEYBOARD_KEY_86=volumeup
+ KEYBOARD_KEY_87=volumedown
+ KEYBOARD_KEY_92=brightnessdown
+ KEYBOARD_KEY_97=brightnessup
+ KEYBOARD_KEY_d8=!f23                                   # touchpad off
+ KEYBOARD_KEY_d9=!f22                                   # touchpad on
+ KEYBOARD_KEY_b3=unknown                                # FIXME: Auto brightness
 
 # TX2
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pn*[tT][xX]2*:*
@@ -623,6 +662,8 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHPLicrice:*
 # HP EliteBook
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHPEliteBook*:*
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook*:*
+# HP Elite x360
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPElite*x360*:*
 # HP Elite Dragonfly
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteDragonfly*:*
 # HP ProBook 440 G2
@@ -666,6 +707,10 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP:pnHPEliteBookFolioG1:*
  KEYBOARD_KEY_64=calendar
  KEYBOARD_KEY_81=f20
 
+# HP EliteBook 845 G7
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPEliteBook845G7*:pvr*
+ KEYBOARD_KEY_68=unknown                                # Fn+F12 HP Programmable Key
+
 # HP ProBook 650
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHP*ProBook*650*:*
  KEYBOARD_KEY_f8=wlan                                   # Wireless HW switch button
@@ -691,6 +736,11 @@ evdev:atkbd:dmi:bvn*:bvr*:svnHP*:pnHP*ProBook*455*G5*:*
  KEYBOARD_KEY_85=unknown                                # lid close; also reported via special evdev
  KEYBOARD_KEY_f8=wlan                                   # Wireless HW switch button
 
+# HP ProBook 11G2
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP*:pnHPProBook11G2*:pvr*
+ KEYBOARD_KEY_d8=!f23                                   # Fn+F2: touchpad off
+ KEYBOARD_KEY_d9=!f22                                   # Fn+F2: touchpad on
+
 # HP mt44 Mobile Thin Client
 evdev:atkbd:dmi:bvn*:bvr*:svnHP*:pnHP*mt44*Mobile*Thin*Client*:*
  KEYBOARD_KEY_64=calendar                               # Calendar icon (Fn + F12)
@@ -708,6 +758,10 @@ evdev:atkbd:dmi:bvn*:bvr*:svnHP*:pnHP*mt44*Mobile*Thin*Client*:*
 evdev:name:gpio-keys:phys:gpio-keys/input0:ev:3:dmi:*:svnHewlett-Packard:pnHPStream7Tablet:*
 evdev:name:gpio-keys:phys:gpio-keys/input0:ev:23:dmi:*:svnHewlett-Packard:pnHPStream7Tablet:*
  KEYBOARD_KEY_0=unknown
+
+# HP Omen
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHP:pnOMEN*:pvr*
+ KEYBOARD_KEY_a1=!calc
 
 ##########################################################
 # Huawei
@@ -880,6 +934,11 @@ evdev:atkbd:dmi:bvn*:bvr*:svnLENOVO*:pn*IdeaPad*Z370*:*
  KEYBOARD_KEY_ae=!volumedown
  KEYBOARD_KEY_b0=!volumeup
 
+evdev:atkbd:dmi:bvn*:bvr*:svnLENOVO*:pn*IdeaPadFlex5*:*
+ KEYBOARD_KEY_a0=!mute
+ KEYBOARD_KEY_ae=!volumedown
+ KEYBOARD_KEY_b0=!volumeup
+
 evdev:atkbd:dmi:*:svnLENOVO:*:pvrLenovoYoga300-11IBR:*
  KEYBOARD_KEY_62=unknown  # Touchpad on, also emitted by "Ideapad extra buttons", ignore
  KEYBOARD_KEY_63=unknown  # Touchpad off, also emitted by "Ideapad extra buttons", ignore
@@ -921,6 +980,15 @@ evdev:input:b0003v04B3p301B*
 evdev:name:SIPODEV Lenovo HID Device:dmi:*:svnLENOVO:*:pvrLenovoideapadD330-10IGM:*
  KEYBOARD_KEY_70073=f21                                 # Fn+Supr (Touchpad toggle)
 
+###########################################################
+# LG
+###########################################################
+
+# LG Gram
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnLGElectronics:pn1*.AAS*:*
+ KEYBOARD_KEY_a0=!mute
+ KEYBOARD_KEY_ae=!volumedown
+ KEYBOARD_KEY_b0=!volumeup
 
 ###########################################################
 # Logitech
@@ -1317,6 +1385,17 @@ evdev:name:MSI Laptop hotkeys:dmi:bvn*:bvr*:bd*:svn*:pnM[iI][cC][rR][oO]-S[tT][a
  KEYBOARD_KEY_0213=f22
  KEYBOARD_KEY_0214=f23
 
+##########################################
+# NEC
+##########################################
+
+# VersaPro VG-S
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnNEC:pnPC-VK22TGSGS:pvr*
+ KEYBOARD_KEY_a8=f21                                    # Fn+Space touchpad toggle
+ KEYBOARD_KEY_67=brightnessdown                         # Fn+F7 brightness down
+ KEYBOARD_KEY_65=brightnessup                           # Fn+F8 brightness up
+ KEYBOARD_KEY_71=battery                                # Fn+F4 ECO
+
 ###########################################################
 # Olimex
 ###########################################################
@@ -1484,7 +1563,7 @@ evdev:input:b0003v047FpC006*
 
 # If you're using an us layout keyboard in one of the below models of
 # Purism Librem 13 consider copying this file to /etc/systemd/hwdb.d/
-# to enable the following rule acording to your model.
+# to enable the following rule according to your model.
 #
 # There's a bug in the keyboards firmware and the additional rule
 # will make your keyboard behave as expected.
@@ -1627,6 +1706,14 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svn[sS][aA][mM][sS][uU][nN][gG]*:pn*SX20S*:*
 
 evdev:atkbd:dmi:bvn*:bvr*:bd*:svn[sS][aA][mM][sS][uU][nN][gG]*:pn*700T*:*
  KEYBOARD_KEY_ad=leftmeta
+
+# Galaxy Book (2021) NP750XDA-KD4SE
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svn[sS][aA][mM][sS][uU][nN][gG]*:pn750XDA:pvr*
+ KEYBOARD_KEY_81=!esc
+ KEYBOARD_KEY_ce=!prog1 	# Fn+F1 launch settings
+ KEYBOARD_KEY_ae=!volumedown 	# Fn+F7 volume down
+ KEYBOARD_KEY_b0=!volumeup	# Fn+F8 volume up
+
 
 ###########################################################
 # SONY
@@ -1854,6 +1941,27 @@ evdev:input:b0003v1038p0310*
  KEYBOARD_KEY_70030=f9
  KEYBOARD_KEY_7002f=f11
  KEYBOARD_KEY_70046=f6
+
+###########################################################
+# CZC
+###########################################################
+
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnCZC:pnODEON*TPC-10:*
+ KEYBOARD_KEY_01=leftmeta                               # Home button held for 2s
+ KEYBOARD_KEY_db=prog1                                  # Home button
+ KEYBOARD_KEY_dd=rfkill                                 # Second button labeled Wi-Fi
+
+evdev:atkbd:dmi:bvn*:bvr*:bd*:svnViewSonic:pnVPAD10:*
+ KEYBOARD_KEY_01=leftmeta                               # Home button held for 2s
+ KEYBOARD_KEY_db=prog1                                  # Home button
+ KEYBOARD_KEY_dd=back                                   # Second button labeled Back
+
+###########################################################
+# Positivo-Vaio
+###########################################################
+# Vaio FE14
+evdev:name:AT Translated Set 2 keyboard:dmi:bvn*:bvr*:bd*:svnPositivoBahia-VAIO:pnVJFE41F11*:pvr*:*
+ KEYBOARD_KEY_76=f21		                     # Fn+F1 toggle touchpad
 
 ###########################################################
 # Other

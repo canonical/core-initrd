@@ -13,7 +13,7 @@
 #include "virt.h"
 
 static int find_netcat_executable(char **ret_path) {
-        char **candidates = STRV_MAKE("ncat", "nc", "netcat"), **c;
+        char **candidates = STRV_MAKE("ncat", "nc", "netcat");
         int r = 0;
 
         STRV_FOREACH(c, candidates) {
@@ -34,9 +34,7 @@ static int test_socket_bind(
                 char **deny_rules) {
         _cleanup_free_ char *exec_start = NULL;
         _cleanup_(unit_freep) Unit *u = NULL;
-        CGroupSocketBindItem *bi;
         CGroupContext *cc = NULL;
-        char **rule;
         int cld_code, r;
 
         assert_se(u = unit_new(m, sizeof(Service)));
@@ -120,14 +118,14 @@ int main(int argc, char *argv[]) {
         (void) setrlimit_closest(RLIMIT_MEMLOCK, &rl);
 
         if (!can_memlock())
-                return log_tests_skipped("Can't use mlock(), skipping.");
+                return log_tests_skipped("Can't use mlock()");
 
         r = bpf_socket_bind_supported();
         if (r <= 0)
-                return log_tests_skipped("socket-bind is not supported, skipping.");
+                return log_tests_skipped("socket-bind is not supported");
 
         if (find_netcat_executable(&netcat_path) != 0)
-                return log_tests_skipped("Can not find netcat executable, skipping.");
+                return log_tests_skipped("Can not find netcat executable");
 
         r = enter_cgroup_subroot(NULL);
         if (r == -ENOMEDIUM)
@@ -137,8 +135,8 @@ int main(int argc, char *argv[]) {
         assert_se(set_unit_path(unit_dir) >= 0);
         assert_se(runtime_dir = setup_fake_runtime_dir());
 
-        assert_se(manager_new(UNIT_FILE_USER, MANAGER_TEST_RUN_BASIC, &m) >= 0);
-        assert_se(manager_startup(m, NULL, NULL) >= 0);
+        assert_se(manager_new(LOOKUP_SCOPE_USER, MANAGER_TEST_RUN_BASIC, &m) >= 0);
+        assert_se(manager_startup(m, NULL, NULL, NULL) >= 0);
 
         assert_se(test_socket_bind(m, "socket_bind_test.service", netcat_path, "2000", STRV_MAKE("2000"), STRV_MAKE("any")) >= 0);
         assert_se(test_socket_bind(m, "socket_bind_test.service", netcat_path, "2000", STRV_MAKE("ipv6:2001-2002"), STRV_MAKE("any")) >= 0);

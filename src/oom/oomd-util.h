@@ -7,6 +7,7 @@
 #include "hashmap.h"
 #include "psi-util.h"
 
+#define DUMP_ON_KILL_COUNT 10
 #define GROWING_SIZE_PERCENTILE 80
 
 extern const struct hash_ops oomd_cgroup_ctx_hash_ops;
@@ -59,8 +60,8 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(OomdCGroupContext*, oomd_cgroup_context_free);
  * Returns -ENOMEM for allocation errors. */
 int oomd_pressure_above(Hashmap *h, usec_t duration, Set **ret);
 
-/* Returns true if the amount of memory free is below the permyriad of memory specified by `threshold_permyriad`. */
-bool oomd_mem_free_below(const OomdSystemContext *ctx, int threshold_permyriad);
+/* Returns true if the amount of memory available (see proc(5)) is below the permyriad of memory specified by `threshold_permyriad`. */
+bool oomd_mem_available_below(const OomdSystemContext *ctx, int threshold_permyriad);
 
 /* Returns true if the amount of swap free is below the permyriad of swap specified by `threshold_permyriad`. */
 bool oomd_swap_free_below(const OomdSystemContext *ctx, int threshold_permyriad);

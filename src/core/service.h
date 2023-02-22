@@ -35,6 +35,13 @@ typedef enum ServiceType {
         _SERVICE_TYPE_INVALID = -EINVAL,
 } ServiceType;
 
+typedef enum ServiceExitType {
+        SERVICE_EXIT_MAIN,    /* we consider the main PID when deciding if the service exited */
+        SERVICE_EXIT_CGROUP,  /* we wait for the last process in the cgroup to exit */
+        _SERVICE_EXIT_TYPE_MAX,
+        _SERVICE_EXIT_TYPE_INVALID = -EINVAL,
+} ServiceExitType;
+
 typedef enum ServiceExecCommand {
         SERVICE_EXEC_CONDITION,
         SERVICE_EXEC_START_PRE,
@@ -68,7 +75,7 @@ typedef enum ServiceResult {
         SERVICE_FAILURE_CORE_DUMP,
         SERVICE_FAILURE_WATCHDOG,
         SERVICE_FAILURE_START_LIMIT_HIT,
-        SERVICE_FAILURE_OOM_KILL,
+        SERVICE_FAILURE_OOM_KILL, /* OOM Kill by the Kernel or systemd-oomd */
         SERVICE_SKIP_CONDITION,
         _SERVICE_RESULT_MAX,
         _SERVICE_RESULT_INVALID = -EINVAL,
@@ -97,6 +104,7 @@ struct Service {
         Unit meta;
 
         ServiceType type;
+        ServiceExitType exit_type;
         ServiceRestart restart;
         ExitStatusSet restart_prevent_status;
         ExitStatusSet restart_force_status;
@@ -111,6 +119,7 @@ struct Service {
         usec_t timeout_abort_usec;
         bool timeout_abort_set;
         usec_t runtime_max_usec;
+        usec_t runtime_rand_extra_usec;
         ServiceTimeoutFailureMode timeout_start_failure_mode;
         ServiceTimeoutFailureMode timeout_stop_failure_mode;
 
@@ -148,8 +157,11 @@ struct Service {
         DynamicCreds dynamic_creds;
 
         pid_t main_pid, control_pid;
+
+        /* if we are a socket activated service instance, store information of the connection/peer/socket */
         int socket_fd;
-        SocketPeer *peer;
+        SocketPeer *socket_peer;
+        UnitRef accept_socket;
         bool socket_fd_selinux_context_net;
 
         bool permissions_start_only;
@@ -176,8 +188,6 @@ struct Service {
 
         char *status_text;
         int status_errno;
-
-        UnitRef accept_socket;
 
         sd_event_source *timer_event_source;
         PathSpec *pid_file_pathspec;
@@ -219,7 +229,7 @@ static inline usec_t service_get_watchdog_usec(Service *s) {
 
 extern const UnitVTable service_vtable;
 
-int service_set_socket_fd(Service *s, int fd, struct Socket *socket, bool selinux_context_net);
+int service_set_socket_fd(Service *s, int fd, struct Socket *socket, struct SocketPeer *peer, bool selinux_context_net);
 void service_close_socket_fd(Service *s);
 
 const char* service_restart_to_string(ServiceRestart i) _const_;
@@ -227,6 +237,9 @@ ServiceRestart service_restart_from_string(const char *s) _pure_;
 
 const char* service_type_to_string(ServiceType i) _const_;
 ServiceType service_type_from_string(const char *s) _pure_;
+
+const char* service_exit_type_to_string(ServiceExitType i) _const_;
+ServiceExitType service_exit_type_from_string(const char *s) _pure_;
 
 const char* service_exec_command_to_string(ServiceExecCommand i) _const_;
 ServiceExecCommand service_exec_command_from_string(const char *s) _pure_;

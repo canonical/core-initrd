@@ -12,6 +12,7 @@ int extension_release_validate(
                 const char *host_os_release_id,
                 const char *host_os_release_version_id,
                 const char *host_os_release_sysext_level,
+                const char *host_sysext_scope,
                 char **extension_release) {
 
         const char *extension_release_id = NULL, *extension_release_sysext_level = NULL;
@@ -25,16 +26,38 @@ int extension_release_validate(
                 return 0;
         }
 
+        if (host_sysext_scope) {
+                _cleanup_strv_free_ char **extension_sysext_scope_list = NULL;
+                const char *extension_sysext_scope;
+                bool valid;
+
+                extension_sysext_scope = strv_env_pairs_get(extension_release, "SYSEXT_SCOPE");
+                if (extension_sysext_scope) {
+                        extension_sysext_scope_list = strv_split(extension_sysext_scope, WHITESPACE);
+                        if (!extension_sysext_scope_list)
+                                return -ENOMEM;
+                }
+
+                /* by default extension are good for attachment in portable service and on the system */
+                valid = strv_contains(
+                                extension_sysext_scope_list ?: STRV_MAKE("system", "portable"),
+                                host_sysext_scope);
+                if (!valid) {
+                        log_debug("Extension '%s' is not suitable for scope %s, ignoring extension.", name, host_sysext_scope);
+                        return 0;
+                }
+        }
+
         extension_release_id = strv_env_pairs_get(extension_release, "ID");
         if (isempty(extension_release_id)) {
                 log_debug("Extension '%s' does not contain ID in extension-release but requested to match '%s'",
-                          name, strna(host_os_release_id));
+                          name, host_os_release_id);
                 return 0;
         }
 
-        if (!streq_ptr(host_os_release_id, extension_release_id)) {
+        if (!streq(host_os_release_id, extension_release_id)) {
                 log_debug("Extension '%s' is for OS '%s', but deployed on top of '%s'.",
-                          name, strna(extension_release_id), strna(host_os_release_id));
+                          name, extension_release_id, host_os_release_id);
                 return 0;
         }
 

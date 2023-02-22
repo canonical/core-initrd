@@ -11,6 +11,7 @@
 #include "blockdev-util.h"
 #include "chattr-util.h"
 #include "creds-util.h"
+#include "efi-api.h"
 #include "env-util.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -32,12 +33,12 @@ bool credential_name_valid(const char *s) {
         return filename_is_valid(s) && fdname_is_valid(s);
 }
 
-int get_credentials_dir(const char **ret) {
+static int get_credentials_dir_internal(const char *envvar, const char **ret) {
         const char *e;
 
         assert(ret);
 
-        e = secure_getenv("CREDENTIALS_DIRECTORY");
+        e = secure_getenv(envvar);
         if (!e)
                 return -ENXIO;
 
@@ -46,6 +47,14 @@ int get_credentials_dir(const char **ret) {
 
         *ret = e;
         return 0;
+}
+
+int get_credentials_dir(const char **ret) {
+        return get_credentials_dir_internal("CREDENTIALS_DIRECTORY", ret);
+}
+
+int get_encrypted_credentials_dir(const char **ret) {
+        return get_credentials_dir_internal("ENCRYPTED_CREDENTIALS_DIRECTORY", ret);
 }
 
 int read_credential(const char *name, void **ret, size_t *ret_size) {
@@ -93,9 +102,30 @@ struct credential_host_secret_format {
         uint8_t data[CREDENTIAL_HOST_SECRET_SIZE];
 } _packed_;
 
+static void warn_not_encrypted(int fd, CredentialSecretFlags flags, const char *dirname, const char *filename) {
+        int r;
+
+        assert(fd >= 0);
+        assert(dirname);
+        assert(filename);
+
+        if (!FLAGS_SET(flags, CREDENTIAL_SECRET_WARN_NOT_ENCRYPTED))
+                return;
+
+        r = fd_is_encrypted(fd);
+        if (r < 0)
+                log_debug_errno(r, "Failed to determine if credential secret file '%s/%s' is encrypted.",
+                                dirname, filename);
+        else if (r == 0)
+                log_warning("Credential secret file '%s/%s' is not located on encrypted media, using anyway.",
+                            dirname, filename);
+}
+
 static int make_credential_host_secret(
                 int dfd,
                 const sd_id128_t machine_id,
+                CredentialSecretFlags flags,
+                const char *dirname,
                 const char *fn,
                 void **ret_data,
                 size_t *ret_size) {
@@ -141,6 +171,8 @@ static int make_credential_host_secret(
                 goto finish;
         }
 
+        warn_not_encrypted(fd, flags, dirname, fn);
+
         if (t) {
                 r = rename_noreplace(dfd, t, dfd, fn);
                 if (r < 0)
@@ -183,49 +215,50 @@ finish:
 }
 
 int get_credential_host_secret(CredentialSecretFlags flags, void **ret, size_t *ret_size) {
-        _cleanup_free_ char *efn = NULL, *ep = NULL;
+        _cleanup_free_ char *_dirname = NULL, *_filename = NULL;
         _cleanup_close_ int dfd = -1;
         sd_id128_t machine_id;
-        const char *e, *fn, *p;
+        const char *dirname, *filename;
         int r;
 
         r = sd_id128_get_machine_app_specific(credential_app_id, &machine_id);
         if (r < 0)
                 return r;
 
-        e = secure_getenv("SYSTEMD_CREDENTIAL_SECRET");
+        const char *e = secure_getenv("SYSTEMD_CREDENTIAL_SECRET");
         if (e) {
                 if (!path_is_normalized(e))
                         return -EINVAL;
                 if (!path_is_absolute(e))
                         return -EINVAL;
 
-                r = path_extract_directory(e, &ep);
+                r = path_extract_directory(e, &_dirname);
                 if (r < 0)
                         return r;
 
-                r = path_extract_filename(e, &efn);
+                r = path_extract_filename(e, &_filename);
                 if (r < 0)
                         return r;
 
-                p = ep;
-                fn = efn;
+                dirname = _dirname;
+                filename = _filename;
         } else {
-                p = "/var/lib/systemd";
-                fn = "credential.secret";
+                dirname = "/var/lib/systemd";
+                filename = "credential.secret";
         }
 
-        (void) mkdir_p(p, 0755);
-        dfd = open(p, O_CLOEXEC|O_DIRECTORY|O_RDONLY);
+        mkdir_parents(dirname, 0755);
+        dfd = open_mkdir_at(AT_FDCWD, dirname, O_CLOEXEC, 0755);
         if (dfd < 0)
-                return -errno;
+                return log_debug_errno(dfd, "Failed to create or open directory '%s': %m", dirname);
 
         if (FLAGS_SET(flags, CREDENTIAL_SECRET_FAIL_ON_TEMPORARY_FS)) {
                 r = fd_is_temporary_fs(dfd);
                 if (r < 0)
-                        return r;
+                        return log_debug_errno(r, "Failed to check directory '%s': %m", dirname);
                 if (r > 0)
-                        return -ENOMEDIUM;
+                        return log_debug_errno(SYNTHETIC_ERRNO(ENOMEDIUM),
+                                               "Directory '%s' is on a temporary file system, refusing.", dirname);
         }
 
         for (unsigned attempt = 0;; attempt++) {
@@ -236,62 +269,70 @@ int get_credential_host_secret(CredentialSecretFlags flags, void **ret, size_t *
                 struct stat st;
 
                 if (attempt >= 3) /* Somebody is playing games with us */
-                        return -EIO;
+                        return log_debug_errno(SYNTHETIC_ERRNO(EIO),
+                                               "All attempts to create secret store in %s failed.", dirname);
 
-                fd = openat(dfd, fn, O_CLOEXEC|O_RDONLY|O_NOCTTY|O_NOFOLLOW);
+                fd = openat(dfd, filename, O_CLOEXEC|O_RDONLY|O_NOCTTY|O_NOFOLLOW);
                 if (fd < 0) {
                         if (errno != ENOENT || !FLAGS_SET(flags, CREDENTIAL_SECRET_GENERATE))
-                                return -errno;
+                                return log_debug_errno(errno,
+                                                       "Failed to open %s/%s: %m", dirname, filename);
 
-                        r = make_credential_host_secret(dfd, machine_id, fn, ret, ret_size);
+
+                        r = make_credential_host_secret(dfd, machine_id, flags, dirname, filename, ret, ret_size);
                         if (r == -EEXIST) {
-                                log_debug_errno(r, "Credential secret was created while we were creating it. Trying to read new secret.");
+                                log_debug_errno(r, "Credential secret %s/%s appeared while we were creating it, rereading.",
+                                                dirname, filename);
                                 continue;
                         }
                         if (r < 0)
-                                return r;
-
+                                return log_debug_errno(r, "Failed to create credential secret %s/%s: %m",
+                                                       dirname, filename);
                         return 0;
                 }
 
                 if (fstat(fd, &st) < 0)
-                        return -errno;
+                        return log_debug_errno(errno, "Failed to stat %s/%s: %m", dirname, filename);
 
                 r = stat_verify_regular(&st);
                 if (r < 0)
-                        return r;
+                        return log_debug_errno(r, "%s/%s is not a regular file: %m", dirname, filename);
                 if (st.st_nlink == 0) /* Deleted by now, try again */
                         continue;
                 if (st.st_nlink > 1)
-                        return -EPERM; /* Our deletion check won't work if hardlinked somewhere else */
-                if ((st.st_mode & 07777) != 0400) /* Don't use file if not 0400 access mode */
-                        return -EPERM;
-                if (st.st_size > 16*1024*1024)
-                        return -E2BIG;
+                        /* Our deletion check won't work if hardlinked somewhere else */
+                        return log_debug_errno(SYNTHETIC_ERRNO(EPERM),
+                                               "%s/%s has too many links, refusing.",
+                                               dirname, filename);
+                if ((st.st_mode & 07777) != 0400)
+                        /* Don't use file if not 0400 access mode */
+                        return log_debug_errno(SYNTHETIC_ERRNO(EPERM),
+                                               "%s/%s has permissive access mode, refusing.",
+                                               dirname, filename);
                 l = st.st_size;
                 if (l < offsetof(struct credential_host_secret_format, data) + 1)
-                        return -EINVAL;
+                        return log_debug_errno(SYNTHETIC_ERRNO(EINVAL),
+                                               "%s/%s is too small, refusing.", dirname, filename);
+                if (l > 16*1024*1024)
+                        return log_debug_errno(SYNTHETIC_ERRNO(E2BIG),
+                                               "%s/%s is too big, refusing.", dirname, filename);
 
                 f = malloc(l+1);
                 if (!f)
-                        return -ENOMEM;
+                        return log_oom_debug();
 
                 n = read(fd, f, l+1);
                 if (n < 0)
-                        return -errno;
+                        return log_debug_errno(errno,
+                                               "Failed to read %s/%s: %m", dirname, filename);
                 if ((size_t) n != l) /* What? The size changed? */
-                        return -EIO;
+                        return log_debug_errno(SYNTHETIC_ERRNO(EIO),
+                                               "Failed to read %s/%s: %m", dirname, filename);
 
                 if (sd_id128_equal(machine_id, f->machine_id)) {
                         size_t sz;
 
-                        if (FLAGS_SET(flags, CREDENTIAL_SECRET_WARN_NOT_ENCRYPTED)) {
-                                r = fd_is_encrypted(fd);
-                                if (r < 0)
-                                        log_debug_errno(r, "Failed to determine if credential secret file '%s/%s' is encrypted.", p, fn);
-                                else if (r == 0)
-                                        log_warning("Credential secret file '%s/%s' is not located on encrypted media, using anyway.", p, fn);
-                        }
+                        warn_not_encrypted(fd, flags, dirname, filename);
 
                         sz = l - offsetof(struct credential_host_secret_format, data);
                         assert(sz > 0);
@@ -303,7 +344,7 @@ int get_credential_host_secret(CredentialSecretFlags flags, void **ret, size_t *
 
                                 copy = memdup(f->data, sz);
                                 if (!copy)
-                                        return -ENOMEM;
+                                        return log_oom_debug();
 
                                 *ret = copy;
                         }
@@ -318,18 +359,20 @@ int get_credential_host_secret(CredentialSecretFlags flags, void **ret, size_t *
                  * to ensure we are the only ones accessing the file while we delete it. */
 
                 if (flock(fd, LOCK_EX) < 0)
-                        return -errno;
+                        return log_debug_errno(errno,
+                                               "Failed to flock %s/%s: %m", dirname, filename);
 
                 /* Before we delete it check that the file is still linked into the file system */
                 if (fstat(fd, &st) < 0)
-                        return -errno;
+                        return log_debug_errno(errno, "Failed to stat %s/%s: %m", dirname, filename);
                 if (st.st_nlink == 0) /* Already deleted by now? */
                         continue;
                 if (st.st_nlink != 1) /* Safety check, someone is playing games with us */
-                        return -EPERM;
-
-                if (unlinkat(dfd, fn, 0) < 0)
-                        return -errno;
+                        return log_debug_errno(SYNTHETIC_ERRNO(EPERM),
+                                               "%s/%s unexpectedly has too many links.",
+                                               dirname, filename);
+                if (unlinkat(dfd, filename, 0) < 0)
+                        return log_debug_errno(errno, "Failed to unlink %s/%s: %m", dirname, filename);
 
                 /* And now try again */
         }
@@ -345,6 +388,11 @@ int get_credential_host_secret(CredentialSecretFlags flags, void **ret, size_t *
  *         by a key derived from its internal seed key.
  *
  *      3. The concatenation of the above.
+ *
+ *      4. Or a fixed "empty" key. This will not provide confidentiality or authenticity, of course, but is
+ *         useful to encode credentials for the initrd on TPM-less systems, where we simply have no better
+ *         concept to bind things to. Note that decryption of a key set up like this will be refused on
+ *         systems that have a TPM and have SecureBoot enabled.
  *
  * The above is hashed with SHA256 which is then used as encryption key for AES256-GCM. The encrypted
  * credential is a short (unencrypted) header describing which of the three keys to use, the IV to use for
@@ -454,14 +502,20 @@ int encrypt_credential_and_warn(
         int ksz, bsz, ivsz, tsz, added, r;
         uint8_t md[SHA256_DIGEST_LENGTH];
         const EVP_CIPHER *cc;
-#if HAVE_TPM2
-        bool try_tpm2 = false;
-#endif
         sd_id128_t id;
 
         assert(input || input_size == 0);
         assert(ret);
         assert(ret_size);
+
+        if (!sd_id128_in_set(with_key,
+                             _CRED_AUTO,
+                             _CRED_AUTO_INITRD,
+                             CRED_AES256_GCM_BY_HOST,
+                             CRED_AES256_GCM_BY_TPM2_HMAC,
+                             CRED_AES256_GCM_BY_HOST_AND_TPM2_HMAC,
+                             CRED_AES256_GCM_BY_TPM2_ABSENT))
+                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Invalid key type: " SD_ID128_FORMAT_STR, SD_ID128_FORMAT_VAL(with_key));
 
         if (name && !credential_name_valid(name))
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Invalid credential name: %s", name);
@@ -480,23 +534,26 @@ int encrypt_credential_and_warn(
                         log_debug("Including not-after timestamp '%s' in encrypted credential.", format_timestamp(buf, sizeof(buf), not_after));
         }
 
-        if (sd_id128_is_null(with_key) ||
-            sd_id128_in_set(with_key, CRED_AES256_GCM_BY_HOST, CRED_AES256_GCM_BY_HOST_AND_TPM2_HMAC)) {
+        if (sd_id128_in_set(with_key,
+                            _CRED_AUTO,
+                            CRED_AES256_GCM_BY_HOST,
+                            CRED_AES256_GCM_BY_HOST_AND_TPM2_HMAC)) {
 
                 r = get_credential_host_secret(
                                 CREDENTIAL_SECRET_GENERATE|
                                 CREDENTIAL_SECRET_WARN_NOT_ENCRYPTED|
-                                (sd_id128_is_null(with_key) ? CREDENTIAL_SECRET_FAIL_ON_TEMPORARY_FS : 0),
+                                (sd_id128_equal(with_key, _CRED_AUTO) ? CREDENTIAL_SECRET_FAIL_ON_TEMPORARY_FS : 0),
                                 &host_key,
                                 &host_key_size);
-                if (r == -ENOMEDIUM && sd_id128_is_null(with_key))
+                if (r == -ENOMEDIUM && sd_id128_equal(with_key, _CRED_AUTO))
                         log_debug_errno(r, "Credential host secret location on temporary file system, not using.");
                 else if (r < 0)
                         return log_error_errno(r, "Failed to determine local credential host secret: %m");
         }
 
 #if HAVE_TPM2
-        if (sd_id128_is_null(with_key)) {
+        bool try_tpm2;
+        if (sd_id128_equal(with_key, _CRED_AUTO)) {
                 /* If automatic mode is selected and we are running in a container, let's not try TPM2. OTOH
                  * if user picks TPM2 explicitly, let's always honour the request and try. */
 
@@ -507,13 +564,20 @@ int encrypt_credential_and_warn(
                         log_debug("Running in container, not attempting to use TPM2.");
 
                 try_tpm2 = r <= 0;
-        }
+        } else if (sd_id128_equal(with_key, _CRED_AUTO_INITRD)) {
+                /* If automatic mode for initrds is selected, we'll use the TPM2 key if the firmware does it,
+                 * otherwise we'll use a fixed key */
 
-        if (try_tpm2 ||
-            sd_id128_in_set(with_key, CRED_AES256_GCM_BY_TPM2_HMAC, CRED_AES256_GCM_BY_HOST_AND_TPM2_HMAC)) {
+                try_tpm2 = efi_has_tpm2();
+                if (!try_tpm2)
+                        log_debug("Firmware lacks TPM2 support, not attempting to use TPM2.");
+        } else
+                try_tpm2 = sd_id128_in_set(with_key, CRED_AES256_GCM_BY_TPM2_HMAC, CRED_AES256_GCM_BY_HOST_AND_TPM2_HMAC);
 
+        if (try_tpm2) {
                 r = tpm2_seal(tpm2_device,
                               tpm2_pcr_mask,
+                              NULL,
                               &tpm2_key,
                               &tpm2_key_size,
                               &tpm2_blob,
@@ -523,10 +587,12 @@ int encrypt_credential_and_warn(
                               &tpm2_pcr_bank,
                               &tpm2_primary_alg);
                 if (r < 0) {
-                        if (!sd_id128_is_null(with_key))
+                        if (sd_id128_equal(with_key, _CRED_AUTO_INITRD))
+                                log_warning("Firmware reported a TPM2 being present and used, but we didn't manage to talk to it. Credential will be refused if SecureBoot is enabled.");
+                        else if (!sd_id128_equal(with_key, _CRED_AUTO))
                                 return r;
 
-                        log_debug_errno(r, "TPM2 sealing didn't work, not using: %m");
+                        log_notice_errno(r, "TPM2 sealing didn't work, continuing without TPM2: %m");
                 }
 
                 assert(tpm2_blob_size <= CREDENTIAL_FIELD_SIZE_MAX);
@@ -534,7 +600,7 @@ int encrypt_credential_and_warn(
         }
 #endif
 
-        if (sd_id128_is_null(with_key)) {
+        if (sd_id128_in_set(with_key, _CRED_AUTO, _CRED_AUTO_INITRD)) {
                 /* Let's settle the key type in auto mode now. */
 
                 if (host_key && tpm2_key)
@@ -543,11 +609,16 @@ int encrypt_credential_and_warn(
                         id = CRED_AES256_GCM_BY_TPM2_HMAC;
                 else if (host_key)
                         id = CRED_AES256_GCM_BY_HOST;
+                else if (sd_id128_equal(with_key, _CRED_AUTO_INITRD))
+                        id = CRED_AES256_GCM_BY_TPM2_ABSENT;
                 else
                         return log_error_errno(SYNTHETIC_ERRNO(ENOTRECOVERABLE),
                                                "TPM2 not available and host key located on temporary file system, no encryption key available.");
         } else
                 id = with_key;
+
+        if (sd_id128_equal(id, CRED_AES256_GCM_BY_TPM2_ABSENT))
+                log_warning("Using a null key for encryption and signing. Confidentiality or authenticity will not be provided.");
 
         /* Let's now take the host key and the TPM2 key and hash it together, to use as encryption key for the data */
         r = sha256_hash_host_and_tpm2_key(host_key, host_key_size, tpm2_key, tpm2_key_size, md);
@@ -706,7 +777,7 @@ int decrypt_credential_and_warn(
         struct encrypted_credential_header *h;
         struct metadata_credential_header *m;
         uint8_t md[SHA256_DIGEST_LENGTH];
-        bool with_tpm2, with_host_key;
+        bool with_tpm2, with_host_key, is_tpm2_absent;
         const EVP_CIPHER *cc;
         int r, added;
 
@@ -722,9 +793,30 @@ int decrypt_credential_and_warn(
 
         with_host_key = sd_id128_in_set(h->id, CRED_AES256_GCM_BY_HOST, CRED_AES256_GCM_BY_HOST_AND_TPM2_HMAC);
         with_tpm2 = sd_id128_in_set(h->id, CRED_AES256_GCM_BY_TPM2_HMAC, CRED_AES256_GCM_BY_HOST_AND_TPM2_HMAC);
+        is_tpm2_absent = sd_id128_equal(h->id, CRED_AES256_GCM_BY_TPM2_ABSENT);
 
-        if (!with_host_key && !with_tpm2)
+        if (!with_host_key && !with_tpm2 && !is_tpm2_absent)
                 return log_error_errno(SYNTHETIC_ERRNO(EOPNOTSUPP), "Unknown encryption format, or corrupted data: %m");
+
+        if (is_tpm2_absent) {
+                /* So this is a credential encrypted with a zero length key. We support this to cover for the
+                 * case where neither a host key not a TPM2 are available (specifically: initrd environments
+                 * where the host key is not yet accessible and no TPM2 chip exists at all), to minimize
+                 * different codeflow for TPM2 and non-TPM2 codepaths. Of course, credentials encoded this
+                 * way offer no confidentiality nor authenticity. Because of that it's important we refuse to
+                 * use them on systems that actually *do* have a TPM2 chip – if we are in SecureBoot
+                 * mode. Otherwise an attacker could hand us credentials like this and we'd use them thinking
+                 * they are trusted, even though they are not. */
+
+                if (efi_has_tpm2()) {
+                        if (is_efi_secure_boot())
+                                return log_error_errno(SYNTHETIC_ERRNO(EBADMSG),
+                                                       "Credential uses fixed key for fallback use when TPM2 is absent — but TPM2 is present, and SecureBoot is enabled, refusing.");
+
+                        log_warning("Credential uses fixed key for use when TPM2 is absent, but TPM2 is present! Accepting anyway, since SecureBoot is disabled.");
+                } else
+                        log_debug("Credential uses fixed key for use when TPM2 is absent, and TPM2 indeed is absent. Accepting.");
+        }
 
         /* Now we know the minimum header size */
         if (input_size < offsetof(struct encrypted_credential_header, iv))
@@ -783,6 +875,7 @@ int decrypt_credential_and_warn(
                                 le32toh(t->blob_size),
                                 t->policy_hash_and_blob + le32toh(t->blob_size),
                                 le32toh(t->policy_hash_size),
+                                NULL,
                                 &tpm2_key,
                                 &tpm2_key_size);
                 if (r < 0)
@@ -804,6 +897,9 @@ int decrypt_credential_and_warn(
                 if (r < 0)
                         return log_error_errno(r, "Failed to determine local credential key: %m");
         }
+
+        if (is_tpm2_absent)
+                log_warning("Warning: using a null key for decryption and authentication. Confidentiality or authenticity are not provided.");
 
         sha256_hash_host_and_tpm2_key(host_key, host_key_size, tpm2_key, tpm2_key_size, md);
 

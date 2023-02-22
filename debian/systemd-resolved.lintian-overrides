@@ -1,0 +1,3 @@
+# Lintian is really bad at associating manpages
+systemd-resolved: spare-manual-page
+systemd-resolved: package-supports-alternative-init-but-no-init.d-script

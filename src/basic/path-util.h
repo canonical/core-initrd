@@ -77,14 +77,6 @@ char* path_extend_internal(char **x, ...);
 
 char* path_simplify(char *path);
 
-enum {
-        PATH_CHECK_FATAL    = 1 << 0,  /* If not set, then error message is appended with 'ignoring'. */
-        PATH_CHECK_ABSOLUTE = 1 << 1,
-        PATH_CHECK_RELATIVE = 1 << 2,
-};
-
-int path_simplify_and_warn(char *path, unsigned flag, const char *unit, const char *filename, unsigned line, const char *lvalue);
-
 static inline bool path_equal_ptr(const char *a, const char *b) {
         return !!a == !!b && (!a || path_equal(a, b));
 }
@@ -99,9 +91,9 @@ int path_strv_make_absolute_cwd(char **l);
 char** path_strv_resolve(char **l, const char *root);
 char** path_strv_resolve_uniq(char **l, const char *root);
 
-int find_executable_full(const char *name, bool use_path_envvar, char **ret_filename, int *ret_fd);
+int find_executable_full(const char *name, const char *root, char **exec_search_path, bool use_path_envvar, char **ret_filename, int *ret_fd);
 static inline int find_executable(const char *name, char **ret_filename) {
-        return find_executable_full(name, true, ret_filename, NULL);
+        return find_executable_full(name, /* root= */ NULL, NULL, true, ret_filename, NULL);
 }
 
 bool paths_check_timestamp(const char* const* paths, usec_t *paths_ts_usec, bool update);
@@ -180,8 +172,6 @@ bool is_device_path(const char *path);
 
 bool valid_device_node_path(const char *path);
 bool valid_device_allow_pattern(const char *path);
-
-int systemd_installation_has_version(const char *root, unsigned minimal_version);
 
 bool dot_or_dot_dot(const char *path);
 

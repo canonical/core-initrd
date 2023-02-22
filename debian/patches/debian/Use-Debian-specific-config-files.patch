@@ -16,10 +16,10 @@ Read/write /etc/timezone if /etc/localtime does not exist.
  4 files changed, 164 insertions(+), 113 deletions(-)
 
 diff --git a/src/basic/time-util.c b/src/basic/time-util.c
-index 5d162e8..4b0a3bf 100644
+index 0ad8de4..f0f0ef4 100644
 --- a/src/basic/time-util.c
 +++ b/src/basic/time-util.c
-@@ -1498,19 +1498,43 @@ int get_timezone(char **ret) {
+@@ -1477,19 +1477,43 @@ int get_timezone(char **ret) {
          const char *e;
          char *z;
          int r;
@@ -69,10 +69,10 @@ index 5d162e8..4b0a3bf 100644
          e = PATH_STARTSWITH_SET(t, "/usr/share/zoneinfo/", "../usr/share/zoneinfo/");
          if (!e)
 diff --git a/src/core/locale-setup.c b/src/core/locale-setup.c
-index 64761dd..b4ea9e2 100644
+index 716febb..9818602 100644
 --- a/src/core/locale-setup.c
 +++ b/src/core/locale-setup.c
-@@ -58,6 +58,27 @@ int locale_setup(char ***environment) {
+@@ -57,6 +57,27 @@ int locale_setup(char ***environment) {
                          log_warning_errno(r, "Failed to read /etc/locale.conf: %m");
          }
  
@@ -97,11 +97,11 @@ index 64761dd..b4ea9e2 100644
 +                        log_warning_errno(r, "Failed to read /etc/default/locale: %m");
 +        }
 +
-         for (i = 0; i < _VARIABLE_LC_MAX; i++) {
+         for (LocaleVariable i = 0; i < _VARIABLE_LC_MAX; i++) {
                  char *s;
  
 diff --git a/src/locale/keymap-util.c b/src/locale/keymap-util.c
-index d2f0566..6d064e2 100644
+index 2d1b982..96b7eca 100644
 --- a/src/locale/keymap-util.c
 +++ b/src/locale/keymap-util.c
 @@ -91,6 +91,7 @@ void locale_simplify(char *locale[_VARIABLE_LC_MAX]) {
@@ -134,7 +134,7 @@ index d2f0566..6d064e2 100644
                                     "LANG",              &c->locale[VARIABLE_LANG],
                                     "LANGUAGE",          &c->locale[VARIABLE_LANGUAGE],
                                     "LC_CTYPE",          &c->locale[VARIABLE_LC_CTYPE],
-@@ -195,8 +200,6 @@ int vconsole_read_data(Context *c, sd_bus_message *m) {
+@@ -190,8 +195,6 @@ int vconsole_read_data(Context *c, sd_bus_message *m) {
  }
  
  int x11_read_data(Context *c, sd_bus_message *m) {
@@ -143,7 +143,7 @@ index d2f0566..6d064e2 100644
          struct stat st;
          usec_t t;
          int r;
-@@ -210,7 +213,7 @@ int x11_read_data(Context *c, sd_bus_message *m) {
+@@ -205,7 +208,7 @@ int x11_read_data(Context *c, sd_bus_message *m) {
                  c->x11_cache = sd_bus_message_ref(m);
          }
  
@@ -152,7 +152,7 @@ index d2f0566..6d064e2 100644
                  if (errno != ENOENT)
                          return -errno;
  
-@@ -227,60 +230,14 @@ int x11_read_data(Context *c, sd_bus_message *m) {
+@@ -222,60 +225,14 @@ int x11_read_data(Context *c, sd_bus_message *m) {
          c->x11_mtime = t;
          context_free_x11(c);
  
@@ -220,7 +220,7 @@ index d2f0566..6d064e2 100644
  
          return 0;
  }
-@@ -289,9 +246,19 @@ int locale_write_data(Context *c, char ***settings) {
+@@ -284,9 +241,19 @@ int locale_write_data(Context *c, char ***settings) {
          _cleanup_strv_free_ char **l = NULL;
          struct stat st;
          int r;
@@ -240,7 +240,7 @@ index d2f0566..6d064e2 100644
          for (LocaleVariable p = 0; p < _VARIABLE_LC_MAX; p++)
                  if (!isempty(c->locale[p])) {
                          r = strv_env_assign(&l, locale_variable_to_string(p), c->locale[p]);
-@@ -300,20 +267,20 @@ int locale_write_data(Context *c, char ***settings) {
+@@ -295,20 +262,20 @@ int locale_write_data(Context *c, char ***settings) {
                  }
  
          if (strv_isempty(l)) {
@@ -264,7 +264,7 @@ index d2f0566..6d064e2 100644
                  c->locale_mtime = timespec_load(&st.st_mtim);
  
          return 0;
-@@ -355,68 +322,92 @@ int vconsole_write_data(Context *c) {
+@@ -350,68 +317,92 @@ int vconsole_write_data(Context *c) {
  }
  
  int x11_write_data(Context *c) {
@@ -402,10 +402,10 @@ index d2f0566..6d064e2 100644
          return r;
  }
 diff --git a/src/timedate/timedated.c b/src/timedate/timedated.c
-index 66b4542..2083c9d 100644
+index 9ca5d37..7b09a4c 100644
 --- a/src/timedate/timedated.c
 +++ b/src/timedate/timedated.c
-@@ -293,6 +293,8 @@ static int context_read_data(Context *c) {
+@@ -296,6 +296,8 @@ static int context_read_data(Context *c) {
  static int context_write_data_timezone(Context *c) {
          _cleanup_free_ char *p = NULL;
          const char *source;
@@ -414,7 +414,7 @@ index 66b4542..2083c9d 100644
  
          assert(c);
  
-@@ -306,9 +308,12 @@ static int context_write_data_timezone(Context *c) {
+@@ -309,9 +311,12 @@ static int context_write_data_timezone(Context *c) {
                  if (access("/usr/share/zoneinfo/UTC", F_OK) < 0) {
  
                          if (unlink("/etc/localtime") < 0 && errno != ENOENT)
@@ -429,7 +429,7 @@ index 66b4542..2083c9d 100644
                  }
  
                  source = "../usr/share/zoneinfo/UTC";
-@@ -320,7 +325,17 @@ static int context_write_data_timezone(Context *c) {
+@@ -323,7 +328,17 @@ static int context_write_data_timezone(Context *c) {
                  source = p;
          }
  

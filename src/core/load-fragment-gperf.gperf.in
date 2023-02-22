@@ -9,6 +9,7 @@
 {{type}}.RootHash,                         config_parse_exec_root_hash,                 0,                                  offsetof({{type}}, exec_context)
 {{type}}.RootHashSignature,                config_parse_exec_root_hash_sig,             0,                                  offsetof({{type}}, exec_context)
 {{type}}.RootVerity,                       config_parse_unit_path_printf,               true,                               offsetof({{type}}, exec_context.root_verity)
+{{type}}.ExtensionDirectories,             config_parse_namespace_path_strv,            0,                                  offsetof({{type}}, exec_context.extension_directories)
 {{type}}.ExtensionImages,                  config_parse_extension_images,               0,                                  offsetof({{type}}, exec_context)
 {{type}}.MountImages,                      config_parse_mount_images,                   0,                                  offsetof({{type}}, exec_context)
 {{type}}.User,                             config_parse_user_group_compat,              0,                                  offsetof({{type}}, exec_context.user)
@@ -41,6 +42,8 @@
 {{type}}.TTYReset,                         config_parse_bool,                           0,                                  offsetof({{type}}, exec_context.tty_reset)
 {{type}}.TTYVHangup,                       config_parse_bool,                           0,                                  offsetof({{type}}, exec_context.tty_vhangup)
 {{type}}.TTYVTDisallocate,                 config_parse_bool,                           0,                                  offsetof({{type}}, exec_context.tty_vt_disallocate)
+{{type}}.TTYRows,                          config_parse_tty_size,                       0,                                  offsetof({{type}}, exec_context.tty_rows)
+{{type}}.TTYColumns,                       config_parse_tty_size,                       0,                                  offsetof({{type}}, exec_context.tty_cols)
 {{type}}.SyslogIdentifier,                 config_parse_unit_string_printf,             0,                                  offsetof({{type}}, exec_context.syslog_identifier)
 {{type}}.SyslogFacility,                   config_parse_log_facility,                   0,                                  offsetof({{type}}, exec_context.syslog_priority)
 {{type}}.SyslogLevel,                      config_parse_log_level,                      0,                                  offsetof({{type}}, exec_context.syslog_priority)
@@ -81,6 +84,7 @@
 {{type}}.RestrictAddressFamilies,          config_parse_warn_compat,                    DISABLED_CONFIGURATION,             0
 {{type}}.LockPersonality,                  config_parse_warn_compat,                    DISABLED_CONFIGURATION,             0
 {% endif %}
+{{type}}.RestrictFileSystems,              config_parse_restrict_filesystems,           0,                                  offsetof({{type}}, exec_context)
 {{type}}.LimitCPU,                         config_parse_rlimit,                         RLIMIT_CPU,                         offsetof({{type}}, exec_context.rlimit)
 {{type}}.LimitFSIZE,                       config_parse_rlimit,                         RLIMIT_FSIZE,                       offsetof({{type}}, exec_context.rlimit)
 {{type}}.LimitDATA,                        config_parse_rlimit,                         RLIMIT_DATA,                        offsetof({{type}}, exec_context.rlimit)
@@ -105,6 +109,7 @@
 {{type}}.InaccessiblePaths,                config_parse_namespace_path_strv,            0,                                  offsetof({{type}}, exec_context.inaccessible_paths)
 {{type}}.ExecPaths,                        config_parse_namespace_path_strv,            0,                                  offsetof({{type}}, exec_context.exec_paths)
 {{type}}.NoExecPaths,                      config_parse_namespace_path_strv,            0,                                  offsetof({{type}}, exec_context.no_exec_paths)
+{{type}}.ExecSearchPath,                   config_parse_colon_separated_paths,          0,                                  offsetof({{type}}, exec_context.exec_search_path)
 {{type}}.BindPaths,                        config_parse_bind_paths,                     0,                                  offsetof({{type}}, exec_context)
 {{type}}.BindReadOnlyPaths,                config_parse_bind_paths,                     0,                                  offsetof({{type}}, exec_context)
 {{type}}.TemporaryFileSystem,              config_parse_temporary_filesystems,          0,                                  offsetof({{type}}, exec_context)
@@ -129,17 +134,19 @@
 {{type}}.Personality,                      config_parse_personality,                    0,                                  offsetof({{type}}, exec_context.personality)
 {{type}}.RuntimeDirectoryPreserve,         config_parse_runtime_preserve_mode,          0,                                  offsetof({{type}}, exec_context.runtime_directory_preserve_mode)
 {{type}}.RuntimeDirectoryMode,             config_parse_mode,                           0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_RUNTIME].mode)
-{{type}}.RuntimeDirectory,                 config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_RUNTIME].paths)
+{{type}}.RuntimeDirectory,                 config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_RUNTIME])
 {{type}}.StateDirectoryMode,               config_parse_mode,                           0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_STATE].mode)
-{{type}}.StateDirectory,                   config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_STATE].paths)
+{{type}}.StateDirectory,                   config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_STATE])
 {{type}}.CacheDirectoryMode,               config_parse_mode,                           0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_CACHE].mode)
-{{type}}.CacheDirectory,                   config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_CACHE].paths)
+{{type}}.CacheDirectory,                   config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_CACHE])
 {{type}}.LogsDirectoryMode,                config_parse_mode,                           0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_LOGS].mode)
-{{type}}.LogsDirectory,                    config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_LOGS].paths)
+{{type}}.LogsDirectory,                    config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_LOGS])
 {{type}}.ConfigurationDirectoryMode,       config_parse_mode,                           0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_CONFIGURATION].mode)
-{{type}}.ConfigurationDirectory,           config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_CONFIGURATION].paths)
+{{type}}.ConfigurationDirectory,           config_parse_exec_directories,               0,                                  offsetof({{type}}, exec_context.directories[EXEC_DIRECTORY_CONFIGURATION])
 {{type}}.SetCredential,                    config_parse_set_credential,                 0,                                  offsetof({{type}}, exec_context)
+{{type}}.SetCredentialEncrypted,           config_parse_set_credential,                 1,                                  offsetof({{type}}, exec_context)
 {{type}}.LoadCredential,                   config_parse_load_credential,                0,                                  offsetof({{type}}, exec_context)
+{{type}}.LoadCredentialEncrypted,          config_parse_load_credential,                1,                                  offsetof({{type}}, exec_context)
 {{type}}.TimeoutCleanSec,                  config_parse_sec,                            0,                                  offsetof({{type}}, exec_context.timeout_clean_usec)
 {% if HAVE_PAM %}
 {{type}}.PAMName,                          config_parse_unit_string_printf,             0,                                  offsetof({{type}}, exec_context.pam_name)
@@ -179,8 +186,10 @@
 
 {%- macro CGROUP_CONTEXT_CONFIG_ITEMS(type) -%}
 {{type}}.Slice,                            config_parse_unit_slice,                     0,                                  0
-{{type}}.AllowedCPUs,                      config_parse_allowed_cpus,                   0,                                  offsetof({{type}}, cgroup_context)
-{{type}}.AllowedMemoryNodes,               config_parse_allowed_mems,                   0,                                  offsetof({{type}}, cgroup_context)
+{{type}}.AllowedCPUs,                      config_parse_allowed_cpuset,                 0,                                  offsetof({{type}}, cgroup_context.cpuset_cpus)
+{{type}}.StartupAllowedCPUs,               config_parse_allowed_cpuset,                 0,                                  offsetof({{type}}, cgroup_context.startup_cpuset_cpus)
+{{type}}.AllowedMemoryNodes,               config_parse_allowed_cpuset,                 0,                                  offsetof({{type}}, cgroup_context.cpuset_mems)
+{{type}}.StartupAllowedMemoryNodes,        config_parse_allowed_cpuset,                 0,                                  offsetof({{type}}, cgroup_context.startup_cpuset_mems)
 {{type}}.CPUAccounting,                    config_parse_bool,                           0,                                  offsetof({{type}}, cgroup_context.cpu_accounting)
 {{type}}.CPUWeight,                        config_parse_cg_weight,                      0,                                  offsetof({{type}}, cgroup_context.cpu_weight)
 {{type}}.StartupCPUWeight,                 config_parse_cg_weight,                      0,                                  offsetof({{type}}, cgroup_context.startup_cpu_weight)
@@ -219,8 +228,8 @@
 {{type}}.Delegate,                         config_parse_delegate,                       0,                                  offsetof({{type}}, cgroup_context)
 {{type}}.DisableControllers,               config_parse_disable_controllers,            0,                                  offsetof({{type}}, cgroup_context)
 {{type}}.IPAccounting,                     config_parse_bool,                           0,                                  offsetof({{type}}, cgroup_context.ip_accounting)
-{{type}}.IPAddressAllow,                   config_parse_ip_address_access,              0,                                  offsetof({{type}}, cgroup_context.ip_address_allow)
-{{type}}.IPAddressDeny,                    config_parse_ip_address_access,              0,                                  offsetof({{type}}, cgroup_context.ip_address_deny)
+{{type}}.IPAddressAllow,                   config_parse_in_addr_prefixes,               AF_UNSPEC,                          offsetof({{type}}, cgroup_context.ip_address_allow)
+{{type}}.IPAddressDeny,                    config_parse_in_addr_prefixes,               AF_UNSPEC,                          offsetof({{type}}, cgroup_context.ip_address_deny)
 {{type}}.IPIngressFilterPath,              config_parse_ip_filter_bpf_progs,            0,                                  offsetof({{type}}, cgroup_context.ip_filters_ingress)
 {{type}}.IPEgressFilterPath,               config_parse_ip_filter_bpf_progs,            0,                                  offsetof({{type}}, cgroup_context.ip_filters_egress)
 {{type}}.ManagedOOMSwap,                   config_parse_managed_oom_mode,               0,                                  offsetof({{type}}, cgroup_context.moom_swap)
@@ -231,6 +240,7 @@
 {{type}}.BPFProgram,                       config_parse_bpf_foreign_program,            0,                                  offsetof({{type}}, cgroup_context)
 {{type}}.SocketBindAllow,                  config_parse_cgroup_socket_bind,             0,                                  offsetof({{type}}, cgroup_context.socket_bind_allow)
 {{type}}.SocketBindDeny,                   config_parse_cgroup_socket_bind,             0,                                  offsetof({{type}}, cgroup_context.socket_bind_deny)
+{{type}}.RestrictNetworkInterfaces,        config_parse_restrict_network_interfaces,    0,                                  offsetof({{type}}, cgroup_context)
 {%- endmacro -%}
 
 %{
@@ -240,6 +250,7 @@ _Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
 #include <stddef.h>
 #include "all-units.h"
 #include "conf-parser.h"
+#include "in-addr-prefix-util.h"
 #include "load-fragment.h"
 %}
 struct ConfigPerfItem;
@@ -325,12 +336,16 @@ Unit.ConditionSecurity,                  config_parse_unit_condition_string,    
 Unit.ConditionCapability,                config_parse_unit_condition_string,          CONDITION_CAPABILITY,               offsetof(Unit, conditions)
 Unit.ConditionACPower,                   config_parse_unit_condition_string,          CONDITION_AC_POWER,                 offsetof(Unit, conditions)
 Unit.ConditionMemory,                    config_parse_unit_condition_string,          CONDITION_MEMORY,                   offsetof(Unit, conditions)
+Unit.ConditionCPUFeature,                config_parse_unit_condition_string,          CONDITION_CPU_FEATURE,              offsetof(Unit, conditions)
 Unit.ConditionCPUs,                      config_parse_unit_condition_string,          CONDITION_CPUS,                     offsetof(Unit, conditions)
 Unit.ConditionEnvironment,               config_parse_unit_condition_string,          CONDITION_ENVIRONMENT,              offsetof(Unit, conditions)
 Unit.ConditionUser,                      config_parse_unit_condition_string,          CONDITION_USER,                     offsetof(Unit, conditions)
 Unit.ConditionGroup,                     config_parse_unit_condition_string,          CONDITION_GROUP,                    offsetof(Unit, conditions)
 Unit.ConditionControlGroupController,    config_parse_unit_condition_string,          CONDITION_CONTROL_GROUP_CONTROLLER, offsetof(Unit, conditions)
 Unit.ConditionOSRelease,                 config_parse_unit_condition_string,          CONDITION_OS_RELEASE,               offsetof(Unit, conditions)
+Unit.ConditionMemoryPressure,            config_parse_unit_condition_string,          CONDITION_MEMORY_PRESSURE,          offsetof(Unit, conditions)
+Unit.ConditionCPUPressure,               config_parse_unit_condition_string,          CONDITION_CPU_PRESSURE,             offsetof(Unit, conditions)
+Unit.ConditionIOPressure,                config_parse_unit_condition_string,          CONDITION_IO_PRESSURE,              offsetof(Unit, conditions)
 Unit.AssertPathExists,                   config_parse_unit_condition_path,            CONDITION_PATH_EXISTS,              offsetof(Unit, asserts)
 Unit.AssertPathExistsGlob,               config_parse_unit_condition_path,            CONDITION_PATH_EXISTS_GLOB,         offsetof(Unit, asserts)
 Unit.AssertPathIsDirectory,              config_parse_unit_condition_path,            CONDITION_PATH_IS_DIRECTORY,        offsetof(Unit, asserts)
@@ -352,12 +367,16 @@ Unit.AssertSecurity,                     config_parse_unit_condition_string,    
 Unit.AssertCapability,                   config_parse_unit_condition_string,          CONDITION_CAPABILITY,               offsetof(Unit, asserts)
 Unit.AssertACPower,                      config_parse_unit_condition_string,          CONDITION_AC_POWER,                 offsetof(Unit, asserts)
 Unit.AssertMemory,                       config_parse_unit_condition_string,          CONDITION_MEMORY,                   offsetof(Unit, asserts)
+Unit.AssertCPUFeature,                   config_parse_unit_condition_string,          CONDITION_CPU_FEATURE,              offsetof(Unit, asserts)
 Unit.AssertCPUs,                         config_parse_unit_condition_string,          CONDITION_CPUS,                     offsetof(Unit, asserts)
 Unit.AssertEnvironment,                  config_parse_unit_condition_string,          CONDITION_ENVIRONMENT,              offsetof(Unit, asserts)
 Unit.AssertUser,                         config_parse_unit_condition_string,          CONDITION_USER,                     offsetof(Unit, asserts)
 Unit.AssertGroup,                        config_parse_unit_condition_string,          CONDITION_GROUP,                    offsetof(Unit, asserts)
 Unit.AssertControlGroupController,       config_parse_unit_condition_string,          CONDITION_CONTROL_GROUP_CONTROLLER, offsetof(Unit, asserts)
 Unit.AssertOSRelease,                    config_parse_unit_condition_string,          CONDITION_OS_RELEASE,               offsetof(Unit, asserts)
+Unit.AssertMemoryPressure,               config_parse_unit_condition_string,          CONDITION_MEMORY_PRESSURE,          offsetof(Unit, asserts)
+Unit.AssertCPUPressure,                  config_parse_unit_condition_string,          CONDITION_CPU_PRESSURE,             offsetof(Unit, asserts)
+Unit.AssertIOPressure,                   config_parse_unit_condition_string,          CONDITION_IO_PRESSURE,              offsetof(Unit, asserts)
 Unit.CollectMode,                        config_parse_collect_mode,                   0,                                  offsetof(Unit, collect_mode)
 Service.PIDFile,                         config_parse_pid_file,                       0,                                  offsetof(Service, pid_file)
 Service.ExecCondition,                   config_parse_exec,                           SERVICE_EXEC_CONDITION,             offsetof(Service, exec_command)
@@ -375,6 +394,7 @@ Service.TimeoutAbortSec,                 config_parse_service_timeout_abort,    
 Service.TimeoutStartFailureMode,         config_parse_service_timeout_failure_mode,   0,                                  offsetof(Service, timeout_start_failure_mode)
 Service.TimeoutStopFailureMode,          config_parse_service_timeout_failure_mode,   0,                                  offsetof(Service, timeout_stop_failure_mode)
 Service.RuntimeMaxSec,                   config_parse_sec,                            0,                                  offsetof(Service, runtime_max_usec)
+Service.RuntimeRandomizedExtraSec,       config_parse_sec,                            0,                                  offsetof(Service, runtime_rand_extra_usec)
 Service.WatchdogSec,                     config_parse_sec,                            0,                                  offsetof(Service, watchdog_usec)
 {# The following five only exist for compatibility, they moved into Unit, see above #}
 Service.StartLimitInterval,              config_parse_sec,                            0,                                  offsetof(Unit, start_ratelimit.interval)
@@ -383,6 +403,7 @@ Service.StartLimitAction,                config_parse_emergency_action,         
 Service.FailureAction,                   config_parse_emergency_action,               0,                                  offsetof(Unit, failure_action)
 Service.RebootArgument,                  config_parse_unit_string_printf,             0,                                  offsetof(Unit, reboot_arg)
 Service.Type,                            config_parse_service_type,                   0,                                  offsetof(Service, type)
+Service.ExitType,                        config_parse_service_exit_type,              0,                                  offsetof(Service, exit_type)
 Service.Restart,                         config_parse_service_restart,                0,                                  offsetof(Service, restart)
 Service.PermissionsStartOnly,            config_parse_bool,                           0,                                  offsetof(Service, permissions_start_only)
 Service.RootDirectoryStartOnly,          config_parse_bool,                           0,                                  offsetof(Service, root_directory_start_only)
@@ -491,6 +512,7 @@ Mount.ReadWriteOnly,                     config_parse_bool,                     
 {{ CGROUP_CONTEXT_CONFIG_ITEMS('Mount') }}
 {{ KILL_CONTEXT_CONFIG_ITEMS('Mount') }}
 Automount.Where,                         config_parse_unit_path_printf,               0,                                  offsetof(Automount, where)
+Automount.ExtraOptions,                  config_parse_unit_string_printf,             0,                                  offsetof(Automount, extra_options)
 Automount.DirectoryMode,                 config_parse_mode,                           0,                                  offsetof(Automount, directory_mode)
 Automount.TimeoutIdleSec,                config_parse_sec_fix_0,                      0,                                  offsetof(Automount, timeout_idle_usec)
 Swap.What,                               config_parse_unit_path_printf,               0,                                  offsetof(Swap, parameters_fragment.what)
@@ -523,10 +545,13 @@ Path.DirectoryNotEmpty,                  config_parse_path_spec,                
 Path.Unit,                               config_parse_trigger_unit,                   0,                                  0
 Path.MakeDirectory,                      config_parse_bool,                           0,                                  offsetof(Path, make_directory)
 Path.DirectoryMode,                      config_parse_mode,                           0,                                  offsetof(Path, directory_mode)
+Path.TriggerLimitIntervalSec,            config_parse_sec,                            0,                                  offsetof(Path, trigger_limit.interval)
+Path.TriggerLimitBurst,                  config_parse_unsigned,                       0,                                  offsetof(Path, trigger_limit.burst)
 {{ CGROUP_CONTEXT_CONFIG_ITEMS('Slice') }}
 {{ CGROUP_CONTEXT_CONFIG_ITEMS('Scope') }}
 {{ KILL_CONTEXT_CONFIG_ITEMS('Scope') }}
 Scope.RuntimeMaxSec,                     config_parse_sec,                            0,                                  offsetof(Scope, runtime_max_usec)
+Scope.RuntimeRandomizedExtraSec,         config_parse_sec,                            0,                                  offsetof(Scope, runtime_rand_extra_usec)
 Scope.TimeoutStopSec,                    config_parse_sec,                            0,                                  offsetof(Scope, timeout_stop_usec)
 {# The [Install] section is ignored here #}
 Install.Alias,                           NULL,                                        0,                                  0

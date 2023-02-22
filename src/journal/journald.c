@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
 
                         /* The retention time is reached, so let's vacuum! */
                         if (server.oldest_file_usec + server.max_retention_usec < n) {
-                                log_info("Retention time reached.");
+                                log_info("Retention time reached, rotating.");
                                 server_rotate(&server);
                                 server_vacuum(&server, false);
                                 continue;
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
                 if (server.system_journal) {
                         usec_t u;
 
-                        if (journal_file_next_evolve_usec(server.system_journal, &u)) {
+                        if (journal_file_next_evolve_usec(server.system_journal->file, &u)) {
                                 if (n >= u)
                                         t = 0;
                                 else

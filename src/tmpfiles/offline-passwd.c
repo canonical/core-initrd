@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
+#include "chase-symlinks.h"
 #include "fd-util.h"
-#include "fs-util.h"
 #include "offline-passwd.h"
 #include "path-util.h"
 #include "user-util.h"
@@ -39,7 +39,6 @@ static int populate_uid_cache(const char *root, Hashmap **ret) {
         /* The directory list is hardcoded here: /etc is the standard, and rpm-ostree uses /usr/lib. This
          * could be made configurable, but I don't see the point right now. */
 
-        const char *fname;
         FOREACH_STRING(fname, "/etc/passwd", "/usr/lib/passwd") {
                 _cleanup_fclose_ FILE *f = NULL;
 
@@ -78,7 +77,6 @@ static int populate_gid_cache(const char *root, Hashmap **ret) {
         if (!cache)
                 return -ENOMEM;
 
-        const char *fname;
         FOREACH_STRING(fname, "/etc/group", "/usr/lib/group") {
                 _cleanup_fclose_ FILE *f = NULL;
 

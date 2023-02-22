@@ -31,7 +31,7 @@ int journal_file_append_tag(JournalFile *f) {
 
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         if (!f->hmac_running)
@@ -69,7 +69,7 @@ int journal_file_hmac_start(JournalFile *f) {
 
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         if (f->hmac_running)
@@ -94,7 +94,7 @@ static int journal_file_get_epoch(JournalFile *f, uint64_t realtime, uint64_t *e
 
         assert(f);
         assert(epoch);
-        assert(f->seal);
+        assert(JOURNAL_HEADER_SEALED(f->header));
 
         if (f->fss_start_usec == 0 ||
             f->fss_interval_usec == 0)
@@ -115,7 +115,7 @@ static int journal_file_fsprg_need_evolve(JournalFile *f, uint64_t realtime) {
         int r;
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         r = journal_file_get_epoch(f, realtime, &goal);
@@ -135,7 +135,7 @@ int journal_file_fsprg_evolve(JournalFile *f, uint64_t realtime) {
 
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         r = journal_file_get_epoch(f, realtime, &goal);
@@ -163,7 +163,7 @@ int journal_file_fsprg_seek(JournalFile *f, uint64_t goal) {
 
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         assert(f->fsprg_seed);
@@ -182,14 +182,13 @@ int journal_file_fsprg_seek(JournalFile *f, uint64_t goal) {
         } else {
                 f->fsprg_state_size = FSPRG_stateinbytes(FSPRG_RECOMMENDED_SECPAR);
                 f->fsprg_state = malloc(f->fsprg_state_size);
-
                 if (!f->fsprg_state)
                         return -ENOMEM;
         }
 
         log_debug("Seeking FSPRG key to %"PRIu64".", goal);
 
-        msk = alloca(FSPRG_mskinbytes(FSPRG_RECOMMENDED_SECPAR));
+        msk = alloca_safe(FSPRG_mskinbytes(FSPRG_RECOMMENDED_SECPAR));
         FSPRG_GenMK(msk, NULL, f->fsprg_seed, f->fsprg_seed_size, FSPRG_RECOMMENDED_SECPAR);
         FSPRG_Seek(f->fsprg_state, goal, msk, f->fsprg_seed, f->fsprg_seed_size);
         return 0;
@@ -200,7 +199,7 @@ int journal_file_maybe_append_tag(JournalFile *f, uint64_t realtime) {
 
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         if (realtime <= 0)
@@ -226,7 +225,7 @@ int journal_file_hmac_put_object(JournalFile *f, ObjectType type, Object *o, uin
 
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         r = journal_file_hmac_start(f);
@@ -249,18 +248,18 @@ int journal_file_hmac_put_object(JournalFile *f, ObjectType type, Object *o, uin
         case OBJECT_DATA:
                 /* All but hash and payload are mutable */
                 gcry_md_write(f->hmac, &o->data.hash, sizeof(o->data.hash));
-                gcry_md_write(f->hmac, o->data.payload, le64toh(o->object.size) - offsetof(DataObject, payload));
+                gcry_md_write(f->hmac, o->data.payload, le64toh(o->object.size) - offsetof(Object, data.payload));
                 break;
 
         case OBJECT_FIELD:
                 /* Same here */
                 gcry_md_write(f->hmac, &o->field.hash, sizeof(o->field.hash));
-                gcry_md_write(f->hmac, o->field.payload, le64toh(o->object.size) - offsetof(FieldObject, payload));
+                gcry_md_write(f->hmac, o->field.payload, le64toh(o->object.size) - offsetof(Object, field.payload));
                 break;
 
         case OBJECT_ENTRY:
                 /* All */
-                gcry_md_write(f->hmac, &o->entry.seqnum, le64toh(o->object.size) - offsetof(EntryObject, seqnum));
+                gcry_md_write(f->hmac, &o->entry.seqnum, le64toh(o->object.size) - offsetof(Object, entry.seqnum));
                 break;
 
         case OBJECT_FIELD_HASH_TABLE:
@@ -286,7 +285,7 @@ int journal_file_hmac_put_header(JournalFile *f) {
 
         assert(f);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         r = journal_file_hmac_start(f);
@@ -317,8 +316,8 @@ int journal_file_fss_load(JournalFile *f) {
 
         assert(f);
 
-        if (!f->seal)
-                return 0;
+        /* This function is used to determine whether sealing should be enabled in the journal header so we
+         * can't check the header to check if sealing is enabled here. */
 
         r = sd_id128_get_machine(&machine);
         if (r < 0)
@@ -419,7 +418,7 @@ finish:
 int journal_file_hmac_setup(JournalFile *f) {
         gcry_error_t e;
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         initialize_libgcrypt(true);
@@ -435,7 +434,7 @@ int journal_file_append_first_tag(JournalFile *f) {
         int r;
         uint64_t p;
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return 0;
 
         log_debug("Calculating first tag...");
@@ -531,7 +530,7 @@ bool journal_file_next_evolve_usec(JournalFile *f, usec_t *u) {
         assert(f);
         assert(u);
 
-        if (!f->seal)
+        if (!JOURNAL_HEADER_SEALED(f->header))
                 return false;
 
         epoch = FSPRG_GetEpoch(f->fsprg_state);

@@ -106,7 +106,6 @@ static int property_get_sessions(
                 sd_bus_error *error) {
 
         User *u = userdata;
-        Session *session;
         int r;
 
         assert(bus);
@@ -381,12 +380,11 @@ static const sd_bus_vtable user_vtable[] = {
         SD_BUS_PROPERTY("Linger", "b", property_get_linger, 0, 0),
 
         SD_BUS_METHOD("Terminate", NULL, NULL, bus_user_method_terminate, SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("Kill",
-                                 "i",
-                                 SD_BUS_PARAM(signal_number),
-                                 NULL,,
-                                 bus_user_method_kill,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Kill",
+                                SD_BUS_ARGS("i", signal_number),
+                                SD_BUS_NO_RESULT,
+                                bus_user_method_kill,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
 
         SD_BUS_VTABLE_END
 };

@@ -10,6 +10,7 @@
 #include "bus-common-errors.h"
 #include "bus-error.h"
 #include "bus-util.h"
+#include "event-util.h"
 #include "format-util.h"
 #include "logind.h"
 #include "path-util.h"
@@ -41,31 +42,38 @@ _const_ static usec_t when_wall(usec_t n, usec_t elapse) {
         return left % USEC_PER_HOUR;
 }
 
-bool logind_wall_tty_filter(const char *tty, void *userdata) {
-        Manager *m = userdata;
-        const char *p;
+bool logind_wall_tty_filter(const char *tty, bool is_local, void *userdata) {
+        Manager *m = ASSERT_PTR(userdata);
 
-        assert(m);
+        assert(m->scheduled_shutdown_action);
 
-        if (!m->scheduled_shutdown_tty)
-                return true;
-
-        p = path_startswith(tty, "/dev/");
+        const char *p = path_startswith(tty, "/dev/");
         if (!p)
                 return true;
 
-        return !streq(p, m->scheduled_shutdown_tty);
+        /* Do not send information about events which do not destroy local sessions to local terminals. We
+         * can assume that if the system enters sleep or hibernation, this will be visible in an obvious way
+         * for any local user. And once the systems exits sleep or hibernation, the notication would be just
+         * noise, in particular for auto-suspend. */
+        if (is_local &&
+            IN_SET(m->scheduled_shutdown_action->handle,
+                   HANDLE_SUSPEND,
+                   HANDLE_HIBERNATE,
+                   HANDLE_HYBRID_SLEEP,
+                   HANDLE_SUSPEND_THEN_HIBERNATE))
+                return false;
+
+        return !streq_ptr(p, m->scheduled_shutdown_tty);
 }
 
 static int warn_wall(Manager *m, usec_t n) {
-        char date[FORMAT_TIMESTAMP_MAX] = {};
         _cleanup_free_ char *l = NULL, *username = NULL;
         usec_t left;
         int r;
 
         assert(m);
 
-        if (!m->enable_wall_messages)
+        if (!m->enable_wall_messages || !m->scheduled_shutdown_action)
                 return 0;
 
         left = m->scheduled_shutdown_timeout > n;
@@ -73,9 +81,9 @@ static int warn_wall(Manager *m, usec_t n) {
         r = asprintf(&l, "%s%sThe system is going down for %s %s%s!",
                      strempty(m->wall_message),
                      isempty(m->wall_message) ? "" : "\n",
-                     m->scheduled_shutdown_type,
+                     handle_action_to_string(m->scheduled_shutdown_action->handle),
                      left ? "at " : "NOW",
-                     left ? format_timestamp(date, sizeof(date), m->scheduled_shutdown_timeout) : "");
+                     left ? FORMAT_TIMESTAMP(m->scheduled_shutdown_timeout) : "");
         if (r < 0) {
                 log_oom();
                 return 0;
@@ -131,16 +139,14 @@ int manager_setup_wall_message_timer(Manager *m) {
 
         /* wall message handling */
 
-        if (isempty(m->scheduled_shutdown_type)) {
-                warn_wall(m, n);
+        if (!m->scheduled_shutdown_action)
                 return 0;
-        }
 
-        if (elapse < n)
+        if (elapse > 0 && elapse < n)
                 return 0;
 
         /* Warn immediately if less than 15 minutes are left */
-        if (elapse - n < 15 * USEC_PER_MINUTE) {
+        if (elapse == 0 || elapse - n < 15 * USEC_PER_MINUTE) {
                 r = warn_wall(m, n);
                 if (r == 0)
                         return 0;
@@ -150,19 +156,15 @@ int manager_setup_wall_message_timer(Manager *m) {
         if (elapse == 0)
                 return 0;
 
-        if (m->wall_message_timeout_source) {
-                r = sd_event_source_set_time(m->wall_message_timeout_source, n + elapse);
-                if (r < 0)
-                        return log_error_errno(r, "sd_event_source_set_time() failed. %m");
+        r = event_reset_time(m->event, &m->wall_message_timeout_source,
+                             CLOCK_REALTIME,
+                             n + elapse, 0,
+                             wall_message_timeout_handler, m,
+                             0, "wall-message-timer", true);
 
-                r = sd_event_source_set_enabled(m->wall_message_timeout_source, SD_EVENT_ONESHOT);
-                if (r < 0)
-                        return log_error_errno(r, "sd_event_source_set_enabled() failed. %m");
-        } else {
-                r = sd_event_add_time(m->event, &m->wall_message_timeout_source,
-                                      CLOCK_REALTIME, n + elapse, 0, wall_message_timeout_handler, m);
-                if (r < 0)
-                        return log_error_errno(r, "sd_event_add_time() failed. %m");
+        if (r < 0) {
+                m->wall_message_timeout_source = sd_event_source_unref(m->wall_message_timeout_source);
+                return log_error_errno(r, "Failed to set up wall message timer: %m");
         }
 
         return 0;

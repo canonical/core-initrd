@@ -25,6 +25,7 @@
 #include "cgroup-util.h"
 #include "env-file.h"
 #include "env-util.h"
+#include "fd-util.h"
 #include "fs-util.h"
 #include "log.h"
 #include "namespace-util.h"
@@ -33,6 +34,7 @@
 #include "random-util.h"
 #include "strv.h"
 #include "tests.h"
+#include "tmpfile-util.h"
 
 char* setup_fake_runtime_dir(void) {
         char t[] = "/tmp/fake-xdg-runtime-XXXXXX", *p;
@@ -46,24 +48,26 @@ char* setup_fake_runtime_dir(void) {
 
 static void load_testdata_env(void) {
         static bool called = false;
-        _cleanup_free_ char *s = NULL;
-        _cleanup_free_ char *envpath = NULL;
+        _cleanup_free_ char *s = NULL, *d = NULL, *envpath = NULL;
         _cleanup_strv_free_ char **pairs = NULL;
-        char **k, **v;
+        int r;
 
         if (called)
                 return;
         called = true;
 
         assert_se(readlink_and_make_absolute("/proc/self/exe", &s) >= 0);
-        dirname(s);
+        assert_se(path_extract_directory(s, &d) >= 0);
+        assert_se(envpath = path_join(d, "systemd-runtest.env"));
 
-        envpath = path_join(s, "systemd-runtest.env");
-        if (load_env_file_pairs(NULL, envpath, &pairs) < 0)
+        r = load_env_file_pairs(NULL, envpath, &pairs);
+        if (r < 0) {
+                log_debug_errno(r, "Reading %s failed: %m", envpath);
                 return;
+        }
 
         STRV_FOREACH_PAIR(k, v, pairs)
-                setenv(*k, *v, 0);
+                assert_se(setenv(*k, *v, 0) >= 0);
 }
 
 int get_testdata_dir(const char *suffix, char **ret) {
@@ -133,6 +137,23 @@ int log_tests_skipped_errno(int r, const char *message) {
         return EXIT_TEST_SKIP;
 }
 
+int write_tmpfile(char *pattern, const char *contents) {
+        _cleanup_close_ int fd = -1;
+
+        assert(pattern);
+        assert(contents);
+
+        fd = mkostemp_safe(pattern);
+        if (fd < 0)
+                return fd;
+
+        ssize_t l = strlen(contents);
+        errno = 0;
+        if (write(fd, contents, l) != l)
+                return errno_or_else(EIO);
+        return 0;
+}
+
 bool have_namespaces(void) {
         siginfo_t si = {};
         pid_t pid;
@@ -160,7 +181,7 @@ bool have_namespaces(void) {
         if (si.si_status == EXIT_FAILURE)
                 return false;
 
-        assert_not_reached("unexpected exit code");
+        assert_not_reached();
 }
 
 bool can_memlock(void) {
@@ -307,16 +328,15 @@ const char *ci_environment(void) {
          * just the general CI environment type, but also whether we're sanitizing or not, etc. The caller is
          * expected to use strstr on the returned value. */
         static const char *ans = POINTER_MAX;
-        const char *p;
         int r;
 
         if (ans != POINTER_MAX)
                 return ans;
 
         /* We allow specifying the environment with $CITYPE. Nobody uses this so far, but we are ready. */
-        p = getenv("CITYPE");
-        if (!isempty(p))
-                return (ans = p);
+        const char *citype = getenv("CITYPE");
+        if (!isempty(citype))
+                return (ans = citype);
 
         if (getenv_bool("TRAVIS") > 0)
                 return (ans = "travis");
@@ -327,12 +347,12 @@ const char *ci_environment(void) {
         if (getenv("AUTOPKGTEST_ARTIFACTS") || getenv("AUTOPKGTEST_TMP"))
                 return (ans = "autopkgtest");
 
-        FOREACH_STRING(p, "CI", "CONTINOUS_INTEGRATION") {
+        FOREACH_STRING(var, "CI", "CONTINOUS_INTEGRATION") {
                 /* Those vars are booleans according to Semaphore and Travis docs:
                  * https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
                  * https://docs.semaphoreci.com/ci-cd-environment/environment-variables/#ci
                  */
-                r = getenv_bool(p);
+                r = getenv_bool(var);
                 if (r > 0)
                         return (ans = "unknown"); /* Some other unknown thing */
                 if (r == 0)

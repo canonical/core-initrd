@@ -117,7 +117,6 @@ int serialize_dual_timestamp(FILE *f, const char *name, const dual_timestamp *t)
 
 int serialize_strv(FILE *f, const char *key, char **l) {
         int ret = 0, r;
-        char **i;
 
         /* Returns the first error, or positive if anything was serialized, 0 otherwise. */
 
@@ -176,6 +175,7 @@ int deserialize_dual_timestamp(const char *value, dual_timestamp *t) {
 
 int deserialize_environment(const char *value, char ***list) {
         _cleanup_free_ char *unescaped = NULL;
+        ssize_t l;
         int r;
 
         assert(value);
@@ -183,9 +183,9 @@ int deserialize_environment(const char *value, char ***list) {
 
         /* Changes the *environment strv inline. */
 
-        r = cunescape(value, 0, &unescaped);
-        if (r < 0)
-                return log_error_errno(r, "Failed to unescape: %m");
+        l = cunescape(value, 0, &unescaped);
+        if (l < 0)
+                return log_error_errno(l, "Failed to unescape: %m");
 
         r = strv_env_replace_consume(list, TAKE_PTR(unescaped));
         if (r < 0)

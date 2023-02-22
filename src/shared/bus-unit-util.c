@@ -19,15 +19,17 @@
 #include "hexdecoct.h"
 #include "hostname-util.h"
 #include "in-addr-util.h"
+#include "ioprio-util.h"
 #include "ip-protocol-list.h"
 #include "libmount-util.h"
 #include "locale-util.h"
 #include "log.h"
+#include "macro.h"
 #include "missing_fs.h"
 #include "mountpoint-util.h"
 #include "nsflags.h"
 #include "numa-util.h"
-#include "parse-socket-bind-item.h"
+#include "parse-helpers.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "percent-util.h"
@@ -474,7 +476,9 @@ static int bus_append_cgroup_property(sd_bus_message *m, const char *field, cons
                 return bus_append_cg_cpu_shares_parse(m, field, eq);
 
         if (STR_IN_SET(field, "AllowedCPUs",
-                              "AllowedMemoryNodes")) {
+                              "StartupAllowedCPUs",
+                              "AllowedMemoryNodes",
+                              "StartupAllowedMemoryNodes")) {
                 _cleanup_(cpu_set_reset) CPUSet cpuset = {};
                 _cleanup_free_ uint8_t *array = NULL;
                 size_t allocated;
@@ -603,7 +607,7 @@ static int bus_append_cgroup_property(sd_bus_message *m, const char *field, cons
 
                         e = strchr(eq, ' ');
                         if (e) {
-                                path = strndupa(eq, e - eq);
+                                path = strndupa_safe(eq, e - eq);
                                 rwm = e+1;
                         }
 
@@ -629,7 +633,7 @@ static int bus_append_cgroup_property(sd_bus_message *m, const char *field, cons
                                                        "Failed to parse %s value %s.",
                                                        field, eq);
 
-                        path = strndupa(eq, e - eq);
+                        path = strndupa_safe(eq, e - eq);
                         bandwidth = e+1;
 
                         if (streq(bandwidth, "infinity"))
@@ -663,7 +667,7 @@ static int bus_append_cgroup_property(sd_bus_message *m, const char *field, cons
                                                        "Failed to parse %s value %s.",
                                                        field, eq);
 
-                        path = strndupa(eq, e - eq);
+                        path = strndupa_safe(eq, e - eq);
                         weight = e+1;
 
                         r = safe_atou64(weight, &u);
@@ -694,7 +698,7 @@ static int bus_append_cgroup_property(sd_bus_message *m, const char *field, cons
                                                        "Failed to parse %s value %s.",
                                                        field, eq);
 
-                        path = strndupa(eq, e - eq);
+                        path = strndupa_safe(eq, e - eq);
                         target = e+1;
 
                         r = parse_sec(target, &usec);
@@ -891,7 +895,8 @@ static int bus_append_cgroup_property(sd_bus_message *m, const char *field, cons
 }
 
 static int bus_append_automount_property(sd_bus_message *m, const char *field, const char *eq) {
-        if (streq(field, "Where"))
+        if (STR_IN_SET(field, "Where",
+                              "ExtraOptions"))
                 return bus_append_string(m, field, eq);
 
         if (streq(field, "DirectoryMode"))
@@ -967,10 +972,8 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                               "InaccessiblePaths",
                               "ExecPaths",
                               "NoExecPaths",
-                              "RuntimeDirectory",
-                              "StateDirectory",
-                              "CacheDirectory",
-                              "LogsDirectory",
+                              "ExecSearchPath",
+                              "ExtensionDirectories",
                               "ConfigurationDirectory",
                               "SupplementaryGroups",
                               "SystemCallArchitectures"))
@@ -1022,7 +1025,9 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
         if (streq(field, "LogRateLimitIntervalSec"))
                 return bus_append_parse_sec_rename(m, field, eq);
 
-        if (streq(field, "LogRateLimitBurst"))
+        if (STR_IN_SET(field, "LogRateLimitBurst",
+                              "TTYRows",
+                              "TTYColumns"))
                 return bus_append_safe_atou(m, field, eq);
 
         if (streq(field, "MountFlags"))
@@ -1046,12 +1051,12 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                 return 1;
         }
 
-        if (streq(field, "SetCredential")) {
+        if (STR_IN_SET(field, "SetCredential", "SetCredentialEncrypted")) {
                 r = sd_bus_message_open_container(m, 'r', "sv");
                 if (r < 0)
                         return bus_log_create_error(r);
 
-                r = sd_bus_message_append_basic(m, 's', "SetCredential");
+                r = sd_bus_message_append_basic(m, 's', field);
                 if (r < 0)
                         return bus_log_create_error(r);
 
@@ -1062,21 +1067,16 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                 if (isempty(eq))
                         r = sd_bus_message_append(m, "a(say)", 0);
                 else {
-                        _cleanup_free_ char *word = NULL, *unescaped = NULL;
+                        _cleanup_free_ char *word = NULL;
                         const char *p = eq;
-                        int l;
 
                         r = extract_first_word(&p, &word, ":", EXTRACT_DONT_COALESCE_SEPARATORS);
                         if (r == -ENOMEM)
                                 return log_oom();
                         if (r < 0)
-                                return log_error_errno(r, "Failed to parse SetCredential= parameter: %s", eq);
+                                return log_error_errno(r, "Failed to parse %s= parameter: %s", field, eq);
                         if (r == 0 || !p)
-                                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Missing argument to SetCredential=.");
-
-                        l = cunescape(p, UNESCAPE_ACCEPT_NUL, &unescaped);
-                        if (l < 0)
-                                return log_error_errno(l, "Failed to unescape SetCredential= value: %s", p);
+                                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Missing argument to %s=.", field);
 
                         r = sd_bus_message_open_container(m, 'a', "(say)");
                         if (r < 0)
@@ -1090,7 +1090,25 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                         if (r < 0)
                                 return bus_log_create_error(r);
 
-                        r = sd_bus_message_append_array(m, 'y', unescaped, l);
+                        if (streq(field, "SetCredentialEncrypted")) {
+                                _cleanup_free_ void *decoded = NULL;
+                                size_t decoded_size;
+
+                                r = unbase64mem(p, SIZE_MAX, &decoded, &decoded_size);
+                                if (r < 0)
+                                        return log_error_errno(r, "Failed to base64 decode encrypted credential: %m");
+
+                                r = sd_bus_message_append_array(m, 'y', decoded, decoded_size);
+                        } else {
+                                _cleanup_free_ char *unescaped = NULL;
+                                ssize_t l;
+
+                                l = cunescape(p, UNESCAPE_ACCEPT_NUL, &unescaped);
+                                if (l < 0)
+                                        return log_error_errno(l, "Failed to unescape %s= value: %s", field, p);
+
+                                r = sd_bus_message_append_array(m, 'y', unescaped, l);
+                        }
                         if (r < 0)
                                 return bus_log_create_error(r);
 
@@ -1114,12 +1132,12 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                 return 1;
         }
 
-        if (streq(field, "LoadCredential")) {
+        if (STR_IN_SET(field, "LoadCredential", "LoadCredentialEncrypted")) {
                 r = sd_bus_message_open_container(m, 'r', "sv");
                 if (r < 0)
                         return bus_log_create_error(r);
 
-                r = sd_bus_message_append_basic(m, 's', "LoadCredential");
+                r = sd_bus_message_append_basic(m, 's', field);
                 if (r < 0)
                         return bus_log_create_error(r);
 
@@ -1137,9 +1155,12 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                         if (r == -ENOMEM)
                                 return log_oom();
                         if (r < 0)
-                                return log_error_errno(r, "Failed to parse LoadCredential= parameter: %s", eq);
-                        if (r == 0 || !p)
-                                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Missing argument to LoadCredential=.");
+                                return log_error_errno(r, "Failed to parse %s= parameter: %s", field, eq);
+                        if (r == 0)
+                                return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Missing argument to %s=.", field);
+
+                        if (isempty(p)) /* If only one field is specified, then this means "inherit from above" */
+                                p = eq;
 
                         r = sd_bus_message_append(m, "a(ss)", 1, word, p);
                 }
@@ -1220,18 +1241,19 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
 
         if (streq(field, "StandardInputText")) {
                 _cleanup_free_ char *unescaped = NULL;
+                ssize_t l;
 
-                r = cunescape(eq, 0, &unescaped);
-                if (r < 0)
-                        return log_error_errno(r, "Failed to unescape text '%s': %m", eq);
+                l = cunescape(eq, 0, &unescaped);
+                if (l < 0)
+                        return log_error_errno(l, "Failed to unescape text '%s': %m", eq);
 
                 if (!strextend(&unescaped, "\n"))
                         return log_oom();
 
-                /* Note that we don't expand specifiers here, but that should be OK, as this is a programmatic
-                 * interface anyway */
+                /* Note that we don't expand specifiers here, but that should be OK, as this is a
+                 * programmatic interface anyway */
 
-                return bus_append_byte_array(m, field, unescaped, strlen(unescaped));
+                return bus_append_byte_array(m, field, unescaped, l + 1);
         }
 
         if (streq(field, "StandardInputData")) {
@@ -1369,8 +1391,10 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
         }
 
         if (STR_IN_SET(field, "RestrictAddressFamilies",
+                              "RestrictFileSystems",
                               "SystemCallFilter",
-                              "SystemCallLog")) {
+                              "SystemCallLog",
+                              "RestrictNetworkInterfaces")) {
                 int allow_list = 1;
                 const char *p = eq;
 
@@ -1654,7 +1678,6 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
 
         if (streq(field, "RootImageOptions")) {
                 _cleanup_strv_free_ char **l = NULL;
-                char **first = NULL, **second = NULL;
                 const char *p = eq;
 
                 r = sd_bus_message_open_container(m, SD_BUS_TYPE_STRUCT, "sv");
@@ -1907,6 +1930,124 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                 return 1;
         }
 
+        if (STR_IN_SET(field, "StateDirectory", "RuntimeDirectory", "CacheDirectory", "LogsDirectory")) {
+                _cleanup_strv_free_ char **symlinks = NULL, **sources = NULL;
+                const char *p = eq;
+
+                /* Adding new directories is supported from both *DirectorySymlink methods and the
+                 * older ones, so first parse the input, and if we are given a new-style src:dst
+                 * tuple use the new method, else use the old one. */
+
+                for (;;) {
+                        _cleanup_free_ char *tuple = NULL, *source = NULL, *destination = NULL;
+
+                        r = extract_first_word(&p, &tuple, NULL, EXTRACT_UNQUOTE);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to parse argument: %m");
+                        if (r == 0)
+                                break;
+
+                        const char *t = tuple;
+                        r = extract_many_words(&t, ":", EXTRACT_UNQUOTE|EXTRACT_DONT_COALESCE_SEPARATORS, &source, &destination, NULL);
+                        if (r <= 0)
+                                return log_error_errno(r ?: SYNTHETIC_ERRNO(EINVAL), "Failed to parse argument: %m");
+
+                        path_simplify(source);
+
+                        if (isempty(destination)) {
+                                r = strv_consume(&sources, TAKE_PTR(source));
+                                if (r < 0)
+                                        return bus_log_create_error(r);
+                        } else {
+                                path_simplify(destination);
+
+                                r = strv_consume_pair(&symlinks, TAKE_PTR(source), TAKE_PTR(destination));
+                                if (r < 0)
+                                        return log_oom();
+                        }
+                }
+
+                if (!strv_isempty(sources)) {
+                        r = sd_bus_message_open_container(m, SD_BUS_TYPE_STRUCT, "sv");
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_append_basic(m, SD_BUS_TYPE_STRING, field);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_open_container(m, 'v', "as");
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_append_strv(m, sources);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_close_container(m);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_close_container(m);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+                }
+
+                /* For State and Runtime directories we support an optional destination parameter, which
+                 * will be used to create a symlink to the source. But it is new so we cannot change the
+                 * old DBUS signatures, so append a new message type. */
+                if (!strv_isempty(symlinks)) {
+                        const char *symlink_field;
+
+                        r = sd_bus_message_open_container(m, SD_BUS_TYPE_STRUCT, "sv");
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        if (streq(field, "StateDirectory"))
+                                symlink_field = "StateDirectorySymlink";
+                        else if (streq(field, "RuntimeDirectory"))
+                                symlink_field = "RuntimeDirectorySymlink";
+                        else if (streq(field, "CacheDirectory"))
+                                symlink_field = "CacheDirectorySymlink";
+                        else if (streq(field, "LogsDirectory"))
+                                symlink_field = "LogsDirectorySymlink";
+                        else
+                                assert_not_reached();
+
+                        r = sd_bus_message_append_basic(m, SD_BUS_TYPE_STRING, symlink_field);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_open_container(m, 'v', "a(sst)");
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_open_container(m, 'a', "(sst)");
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        STRV_FOREACH_PAIR(source, destination, symlinks) {
+                                r = sd_bus_message_append(m, "(sst)", *source, *destination, 0);
+                                if (r < 0)
+                                        return bus_log_create_error(r);
+                        }
+
+                        r = sd_bus_message_close_container(m);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_close_container(m);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+
+                        r = sd_bus_message_close_container(m);
+                        if (r < 0)
+                                return bus_log_create_error(r);
+                }
+
+                return 1;
+        }
+
         return 0;
 }
 
@@ -1974,11 +2115,20 @@ static int bus_append_path_property(sd_bus_message *m, const char *field, const 
                 return 1;
         }
 
+        if (streq(field, "TriggerLimitBurst"))
+                return bus_append_safe_atou(m, field, eq);
+
+        if (streq(field, "TriggerLimitIntervalSec"))
+                return bus_append_parse_sec_rename(m, field, eq);
+
         return 0;
 }
 
 static int bus_append_scope_property(sd_bus_message *m, const char *field, const char *eq) {
         if (streq(field, "RuntimeMaxSec"))
+                return bus_append_parse_sec_rename(m, field, eq);
+
+        if (streq(field, "RuntimeRandomizedExtraSec"))
                 return bus_append_parse_sec_rename(m, field, eq);
 
         if (streq(field, "TimeoutStopSec"))
@@ -1992,6 +2142,7 @@ static int bus_append_service_property(sd_bus_message *m, const char *field, con
 
         if (STR_IN_SET(field, "PIDFile",
                               "Type",
+                              "ExitType",
                               "Restart",
                               "BusName",
                               "NotifyAccess",
@@ -2013,6 +2164,7 @@ static int bus_append_service_property(sd_bus_message *m, const char *field, con
                               "TimeoutStopSec",
                               "TimeoutAbortSec",
                               "RuntimeMaxSec",
+                              "RuntimeRandomizedExtraSec",
                               "WatchdogSec"))
                 return bus_append_parse_sec_rename(m, field, eq);
 
@@ -2379,7 +2531,7 @@ int bus_append_unit_property_assignment(sd_bus_message *m, UnitType t, const cha
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
                                        "Not an assignment: %s", assignment);
 
-        field = strndupa(assignment, eq - assignment);
+        field = strndupa_safe(assignment, eq - assignment);
         eq++;
 
         switch (t) {
@@ -2497,7 +2649,6 @@ int bus_append_unit_property_assignment(sd_bus_message *m, UnitType t, const cha
 }
 
 int bus_append_unit_property_assignment_many(sd_bus_message *m, UnitType t, char **l) {
-        char **i;
         int r;
 
         assert(m);
