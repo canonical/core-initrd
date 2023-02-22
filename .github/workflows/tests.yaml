@@ -11,8 +11,29 @@ on:
       - main
 
 jobs:
+  build-snapd-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: 'valentindavid/snapd'
+          path: snapd
+          ref: 'valentindavid/udev-scan-disk'
+      - name: Build snapd deb
+        working-directory: '${{ github.workspace }}/snapd'
+        run: |
+          sudo apt update
+          sudo DEBIAN_FRONTEND=noninteractive apt build-dep -yqq --no-install-recommends ./
+          bash get-deps.sh
+          DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -us -uc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapd
+          path: "${{ github.workspace }}/snapd_*.deb"
+
   build:
     runs-on: [ self-hosted, spread-enabled ]
+    needs: build-snapd-deb
     steps:
       - name: Cleanup job workspace
         id: cleanup-job-workspace
@@ -20,6 +41,9 @@ jobs:
           rm -rf "${{ github.workspace }}"
           mkdir "${{ github.workspace }}"
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapd
 
       - name: Build snap
         run: |
@@ -41,7 +65,9 @@ jobs:
 
   tests-main:
     runs-on: [ self-hosted, spread-enabled ]
-    needs: build
+    needs:
+      - build
+      - build-snapd-deb
     steps:
       - name: Cleanup job workspace
         id: cleanup-job-workspace
@@ -49,6 +75,9 @@ jobs:
           rm -rf "${{ github.workspace }}"
           mkdir "${{ github.workspace }}"
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapd
       - uses: actions/download-artifact@v4
         with:
           name: snaps
@@ -66,7 +95,9 @@ jobs:
           done
   tests-snapd:
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build
+      - build-snapd-deb
     steps:
       - name: Cleanup job workspace
         id: cleanup-job-workspace
@@ -79,8 +110,12 @@ jobs:
           path: core-initrd
       - uses: actions/checkout@v4
         with:
-          repository: 'snapcore/snapd'
+          repository: 'valentindavid/snapd'
           path: snapd
+          ref: 'valentindavid/udev-scan-disk'
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapd
       - uses: actions/download-artifact@v4
         with:
           name: snaps
@@ -94,7 +129,7 @@ jobs:
           . "core-initrd/tests/lib/prepare-utils.sh"
 
           echo "************* INSTALLING DEPS *************"
-          install_core_initrd_deps '${{ github.workspace }}/core-initrd'
+          install_core_initrd_deps '${{ github.workspace }}/core-initrd' '${{ github.workspace }}'/snapd_*.deb
 
           echo "************* DOWNLOADING SNAPS *************"
           download_core_initrd_snaps 'edge'
