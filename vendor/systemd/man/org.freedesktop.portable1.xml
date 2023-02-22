@@ -58,6 +58,10 @@ node /org/freedesktop/portable1 {
                                      out a{say} units);
       GetImageState(in  s image,
                     out s state);
+      GetImageStateWithExtensions(in  s image,
+                                  in  as extensions,
+                                  in  t flags,
+                                  out s state);
       AttachImage(in  s image,
                   in  as matches,
                   in  s profile,
@@ -132,6 +136,8 @@ node /org/freedesktop/portable1 {
     <variablelist class="dbus-method" generated="True" extra-ref="GetImageMetadataWithExtensions()"/>
 
     <variablelist class="dbus-method" generated="True" extra-ref="GetImageState()"/>
+
+    <variablelist class="dbus-method" generated="True" extra-ref="GetImageStateWithExtensions()"/>
 
     <variablelist class="dbus-method" generated="True" extra-ref="AttachImage()"/>
 
@@ -208,6 +214,12 @@ node /org/freedesktop/portable1 {
 
         <listitem><para>running-runtime</para></listitem>
       </itemizedlist></para>
+
+      <para><function>GetImageStateWithExtensions()</function> is a superset of
+      <function>GetImageState()</function>, with additional support for a list of extensions
+      as input parameters, which is necessary to query the state in case the image was attached
+      in that particular way. The <varname>flag</varname> parameter is currently unused and
+      reserved for future purposes.</para>
 
       <para><function>AttachImage()</function> attaches a portable image to the system.
       This method takes an image path or name, a list of strings that will be used to search for
@@ -337,6 +349,9 @@ node /org/freedesktop/portable1 {
                                 out a{say} extensions,
                                 out a{say} units);
       GetState(out s state);
+      GetStateWithExtensions(in  as extensions,
+                             in  t flags,
+                             out s state);
       Attach(in  as matches,
              in  s profile,
              in  b runtime,
@@ -405,6 +420,8 @@ node /org/freedesktop/portable1 {
 
     <!--method GetState is not documented!-->
 
+    <!--method GetStateWithExtensions is not documented!-->
+
     <!--method Attach is not documented!-->
 
     <!--method AttachWithExtensions is not documented!-->
@@ -436,6 +453,8 @@ node /org/freedesktop/portable1 {
     <variablelist class="dbus-method" generated="True" extra-ref="GetMetadataWithExtensions()"/>
 
     <variablelist class="dbus-method" generated="True" extra-ref="GetState()"/>
+
+    <variablelist class="dbus-method" generated="True" extra-ref="GetStateWithExtensions()"/>
 
     <variablelist class="dbus-method" generated="True" extra-ref="Attach()"/>
 
@@ -540,10 +559,5 @@ node /org/freedesktop/portable1 {
     </refsect2>
   </refsect1>
 
-  <refsect1>
-    <title>Versioning</title>
-
-    <para>These D-Bus interfaces follow <ulink url="http://0pointer.de/blog/projects/versioning-dbus.html">
-    the usual interface versioning guidelines</ulink>.</para>
-  </refsect1>
+  <xi:include href="org.freedesktop.locale1.xml" xpointer="versioning"/>
 </refentry>

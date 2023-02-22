@@ -53,11 +53,10 @@ static void patch_realtime(
                 const struct stat *st,
                 unsigned long long *realtime) {
 
-        usec_t x, crtime = 0;
+        usec_t x;
 
-        /* The timestamp was determined by the file name, but let's
-         * see if the file might actually be older than the file name
-         * suggested... */
+        /* The timestamp was determined by the file name, but let's see if the file might actually be older
+         * than the file name suggested... */
 
         assert(fd >= 0);
         assert(fn);
@@ -65,26 +64,23 @@ static void patch_realtime(
         assert(realtime);
 
         x = timespec_load(&st->st_ctim);
-        if (x > 0 && x != USEC_INFINITY && x < *realtime)
+        if (timestamp_is_set(x) && x < *realtime)
                 *realtime = x;
 
         x = timespec_load(&st->st_atim);
-        if (x > 0 && x != USEC_INFINITY && x < *realtime)
+        if (timestamp_is_set(x) && x < *realtime)
                 *realtime = x;
 
         x = timespec_load(&st->st_mtim);
-        if (x > 0 && x != USEC_INFINITY && x < *realtime)
+        if (timestamp_is_set(x) && x < *realtime)
                 *realtime = x;
 
-        /* Let's read the original creation time, if possible. Ideally
-         * we'd just query the creation time the FS might provide, but
-         * unfortunately there's currently no sane API to query
-         * it. Hence let's implement this manually... */
+        /* Let's read the original creation time, if possible. Ideally we'd just query the creation time the
+         * FS might provide, but unfortunately there's currently no sane API to query it. Hence let's
+         * implement this manually... */
 
-        if (fd_getcrtime_at(fd, fn, &crtime, 0) >= 0) {
-                if (crtime < *realtime)
-                        *realtime = crtime;
-        }
+        if (fd_getcrtime_at(fd, fn, AT_SYMLINK_FOLLOW, &x) >= 0 && x < *realtime)
+                *realtime = x;
 }
 
 static int journal_file_empty(int dir_fd, const char *name) {
@@ -131,8 +127,6 @@ int journal_directory_vacuum(
         _cleanup_closedir_ DIR *d = NULL;
         struct vacuum_info *list = NULL;
         usec_t retention_limit = 0;
-        char sbytes[FORMAT_BYTES_MAX];
-        struct dirent *de;
         int r;
 
         assert(directory);
@@ -148,7 +142,6 @@ int journal_directory_vacuum(
                 return -errno;
 
         FOREACH_DIRENT_ALL(de, d, r = -errno; goto finish) {
-
                 unsigned long long seqnum = 0, realtime;
                 _cleanup_free_ char *p = NULL;
                 sd_id128_t seqnum_id;
@@ -254,7 +247,7 @@ int journal_directory_vacuum(
                         if (r >= 0) {
 
                                 log_full(verbose ? LOG_INFO : LOG_DEBUG,
-                                         "Deleted empty archived journal %s/%s (%s).", directory, p, format_bytes(sbytes, sizeof(sbytes), size));
+                                         "Deleted empty archived journal %s/%s (%s).", directory, p, FORMAT_BYTES(size));
 
                                 freed += size;
                         } else if (r != -ENOENT)
@@ -296,7 +289,8 @@ int journal_directory_vacuum(
 
                 r = unlinkat_deallocate(dirfd(d), list[i].filename, 0);
                 if (r >= 0) {
-                        log_full(verbose ? LOG_INFO : LOG_DEBUG, "Deleted archived journal %s/%s (%s).", directory, list[i].filename, format_bytes(sbytes, sizeof(sbytes), list[i].usage));
+                        log_full(verbose ? LOG_INFO : LOG_DEBUG, "Deleted archived journal %s/%s (%s).",
+                                 directory, list[i].filename, FORMAT_BYTES(list[i].usage));
                         freed += list[i].usage;
 
                         if (list[i].usage < sum)
@@ -318,7 +312,8 @@ finish:
                 free(list[i].filename);
         free(list);
 
-        log_full(verbose ? LOG_INFO : LOG_DEBUG, "Vacuuming done, freed %s of archived journals from %s.", format_bytes(sbytes, sizeof(sbytes), freed), directory);
+        log_full(verbose ? LOG_INFO : LOG_DEBUG, "Vacuuming done, freed %s of archived journals from %s.",
+                 FORMAT_BYTES(freed), directory);
 
         return r;
 }

@@ -11,14 +11,15 @@
 #include "set.h"
 
 typedef struct NetMatch {
-        Set *mac;
-        Set *permanent_mac;
+        Set *hw_addr;
+        Set *permanent_hw_addr;
         char **path;
         char **driver;
-        char **iftype;
+        char **iftype; /* udev's DEVTYPE field or ARPHRD_XXX, e.g. ether, wlan. */
+        char **kind;   /* IFLA_INFO_KIND attribute, e.g. gre, gretap, erspan. */
         char **ifname;
         char **property;
-        char **wifi_iftype;
+        char **wlan_iftype;
         char **ssid;
         Set *bssid;
 } NetMatch;
@@ -29,13 +30,14 @@ bool net_match_is_empty(const NetMatch *match);
 int net_match_config(
                 const NetMatch *match,
                 sd_device *device,
-                const struct ether_addr *mac,
-                const struct ether_addr *permanent_mac,
+                const struct hw_addr_data *hw_addr,
+                const struct hw_addr_data *permanent_hw_addr,
                 const char *driver,
                 unsigned short iftype,
+                const char *kind,
                 const char *ifname,
                 char * const *alternative_names,
-                enum nl80211_iftype wifi_iftype,
+                enum nl80211_iftype wlan_iftype,
                 const char *ssid,
                 const struct ether_addr *bssid);
 

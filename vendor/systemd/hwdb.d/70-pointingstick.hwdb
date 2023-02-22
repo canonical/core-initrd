@@ -7,10 +7,6 @@
 # The lookup keys are composed in:
 #   60-evdev.rules
 #
-# Note: The format of the "evdev:" prefix match key is a contract between the
-# rules file and the hardware data, it might change in later revisions to
-# support more or better matches, it is not necessarily a stable ABI.
-#
 # Supported hardware matches are:
 #  - Generic input devices match:
 #      evdev:input:bZZZZvYYYYpXXXXeWWWW-VVVV
@@ -43,6 +39,7 @@
 #   udevadm info /dev/input/eventXX.
 #
 # Allowed properties are:
+#   ID_INPUT_POINTINGSTICK
 #   POINTINGSTICK_CONST_ACCEL (deprecated)
 #   POINTINGSTICK_SENSITIVITY
 #
@@ -77,6 +74,12 @@
 #
 
 # Sort by brand, model
+
+##########################################
+# Generic
+##########################################
+evdev:name:*[tT]rack[pP]oint*:*
+ ID_INPUT_POINTINGSTICK=1
 
 #########################################
 # Dell

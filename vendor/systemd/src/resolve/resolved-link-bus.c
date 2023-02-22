@@ -51,7 +51,6 @@ static int property_get_dns_internal(
                 bool extended) {
 
         Link *l = userdata;
-        DnsServer *s;
         int r;
 
         assert(reply);
@@ -144,7 +143,6 @@ static int property_get_domains(
                 sd_bus_error *error) {
 
         Link *l = userdata;
-        DnsSearchDomain *d;
         int r;
 
         assert(reply);
@@ -642,6 +640,7 @@ int bus_link_method_set_dns_over_tls(sd_bus_message *message, void *userdata, sd
 
         if (l->dns_over_tls_mode != mode) {
                 link_set_dns_over_tls_mode(l, mode);
+                link_allocate_scopes(l);
 
                 (void) link_save_user(l);
 
@@ -690,6 +689,7 @@ int bus_link_method_set_dnssec(sd_bus_message *message, void *userdata, sd_bus_e
 
         if (l->dnssec_mode != mode) {
                 link_set_dnssec_mode(l, mode);
+                link_allocate_scopes(l);
 
                 (void) link_save_user(l);
 
@@ -706,7 +706,6 @@ int bus_link_method_set_dnssec_negative_trust_anchors(sd_bus_message *message, v
         _cleanup_free_ char *j = NULL;
         Link *l = userdata;
         int r;
-        char **i;
 
         assert(message);
         assert(l);

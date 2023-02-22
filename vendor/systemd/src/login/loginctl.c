@@ -123,7 +123,7 @@ static int list_sessions(int argc, char *argv[], void *userdata) {
         assert(bus);
         assert(argv);
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = bus_call_method(bus, bus_login_mgr, "ListSessions", &error, &reply, NULL);
         if (r < 0)
@@ -197,7 +197,7 @@ static int list_users(int argc, char *argv[], void *userdata) {
         assert(bus);
         assert(argv);
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = bus_call_method(bus, bus_login_mgr, "ListUsers", &error, &reply, NULL);
         if (r < 0)
@@ -247,7 +247,7 @@ static int list_seats(int argc, char *argv[], void *userdata) {
         assert(bus);
         assert(argv);
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = bus_call_method(bus, bus_login_mgr, "ListSeats", &error, &reply, NULL);
         if (r < 0)
@@ -450,9 +450,6 @@ static int print_session_status_info(sd_bus *bus, const char *path, bool *new_li
 
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
-        char since1[FORMAT_TIMESTAMP_RELATIVE_MAX];
-        char since2[FORMAT_TIMESTAMP_MAX];
-        const char *s1, *s2;
         SessionStatusInfo i = {};
         int r;
 
@@ -472,13 +469,10 @@ static int print_session_status_info(sd_bus *bus, const char *path, bool *new_li
         else
                 printf("%"PRIu32"\n", i.uid);
 
-        s1 = format_timestamp_relative(since1, sizeof(since1), i.timestamp.realtime);
-        s2 = format_timestamp(since2, sizeof(since2), i.timestamp.realtime);
-
-        if (s1)
-                printf("\t   Since: %s; %s\n", s2, s1);
-        else if (s2)
-                printf("\t   Since: %s\n", s2);
+        if (timestamp_is_set(i.timestamp.realtime))
+                printf("\t   Since: %s; %s\n",
+                       FORMAT_TIMESTAMP(i.timestamp.realtime),
+                       FORMAT_TIMESTAMP_RELATIVE(i.timestamp.realtime));
 
         if (i.leader > 0) {
                 _cleanup_free_ char *t = NULL;
@@ -581,9 +575,6 @@ static int print_user_status_info(sd_bus *bus, const char *path, bool *new_line)
 
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
-        char since1[FORMAT_TIMESTAMP_RELATIVE_MAX];
-        char since2[FORMAT_TIMESTAMP_MAX];
-        const char *s1, *s2;
         _cleanup_(user_status_info_clear) UserStatusInfo i = {};
         int r;
 
@@ -601,19 +592,15 @@ static int print_user_status_info(sd_bus *bus, const char *path, bool *new_line)
         else
                 printf("%"PRIu32"\n", i.uid);
 
-        s1 = format_timestamp_relative(since1, sizeof(since1), i.timestamp.realtime);
-        s2 = format_timestamp(since2, sizeof(since2), i.timestamp.realtime);
-
-        if (s1)
-                printf("\t   Since: %s; %s\n", s2, s1);
-        else if (s2)
-                printf("\t   Since: %s\n", s2);
+        if (timestamp_is_set(i.timestamp.realtime))
+                printf("\t   Since: %s; %s\n",
+                       FORMAT_TIMESTAMP(i.timestamp.realtime),
+                       FORMAT_TIMESTAMP_RELATIVE(i.timestamp.realtime));
 
         if (!isempty(i.state))
                 printf("\t   State: %s\n", i.state);
 
         if (!strv_isempty(i.sessions)) {
-                char **l;
                 printf("\tSessions:");
 
                 STRV_FOREACH(l, i.sessions)
@@ -674,7 +661,6 @@ static int print_seat_status_info(sd_bus *bus, const char *path, bool *new_line)
         printf("%s\n", strna(i.id));
 
         if (!strv_isempty(i.sessions)) {
-                char **l;
                 printf("\tSessions:");
 
                 STRV_FOREACH(l, i.sessions) {
@@ -822,7 +808,7 @@ static int show_session(int argc, char *argv[], void *userdata) {
 
         properties = !strstr(argv[0], "status");
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         if (argc <= 1) {
                 /* If no argument is specified inspect the manager itself */
@@ -859,7 +845,7 @@ static int show_user(int argc, char *argv[], void *userdata) {
 
         properties = !strstr(argv[0], "status");
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         if (argc <= 1) {
                 /* If no argument is specified inspect the manager itself */
@@ -916,7 +902,7 @@ static int show_seat(int argc, char *argv[], void *userdata) {
 
         properties = !strstr(argv[0], "status");
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         if (argc <= 1) {
                 /* If no argument is specified inspect the manager itself */
@@ -1231,7 +1217,7 @@ static int help(int argc, char *argv[], void *userdata) {
         _cleanup_free_ char *link = NULL;
         int r;
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = terminal_urlify_man("loginctl", "1", &link);
         if (r < 0)
@@ -1424,7 +1410,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         return 1;
@@ -1480,7 +1466,7 @@ static int run(int argc, char *argv[]) {
 
         r = bus_connect_transport(arg_transport, arg_host, false, &bus);
         if (r < 0)
-                return bus_log_connect_error(r);
+                return bus_log_connect_error(r, arg_transport);
 
         (void) sd_bus_set_allow_interactive_authorization(bus, arg_ask_password);
 

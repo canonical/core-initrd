@@ -117,7 +117,7 @@ static void dns_cache_item_unlink_and_free(DnsCache *c, DnsCacheItem *i) {
 }
 
 static bool dns_cache_remove_by_rr(DnsCache *c, DnsResourceRecord *rr) {
-        DnsCacheItem *first, *i;
+        DnsCacheItem *first;
         int r;
 
         first = hashmap_get(c->by_key, rr->key);
@@ -135,7 +135,7 @@ static bool dns_cache_remove_by_rr(DnsCache *c, DnsResourceRecord *rr) {
 }
 
 static bool dns_cache_remove_by_key(DnsCache *c, DnsResourceKey *key) {
-        DnsCacheItem *first, *i, *n;
+        DnsCacheItem *first;
 
         assert(c);
         assert(key);
@@ -144,7 +144,7 @@ static bool dns_cache_remove_by_key(DnsCache *c, DnsResourceKey *key) {
         if (!first)
                 return false;
 
-        LIST_FOREACH_SAFE(by_key, i, n, first) {
+        LIST_FOREACH(by_key, i, first) {
                 prioq_remove(c->by_expiry, i, &i->prioq_idx);
                 dns_cache_item_free(i);
         }
@@ -214,7 +214,7 @@ void dns_cache_prune(DnsCache *c) {
                         break;
 
                 if (t <= 0)
-                        t = now(clock_boottime_or_monotonic());
+                        t = now(CLOCK_BOOTTIME);
 
                 if (i->until > t)
                         break;
@@ -301,12 +301,10 @@ static int dns_cache_link_item(DnsCache *c, DnsCacheItem *i) {
 }
 
 static DnsCacheItem* dns_cache_get(DnsCache *c, DnsResourceRecord *rr) {
-        DnsCacheItem *i;
-
         assert(c);
         assert(rr);
 
-        LIST_FOREACH(by_key, i, hashmap_get(c->by_key, rr->key))
+        LIST_FOREACH(by_key, i, (DnsCacheItem*) hashmap_get(c->by_key, rr->key))
                 if (i->rr && dns_resource_record_equal(i->rr, rr) > 0)
                         return i;
 
@@ -380,20 +378,13 @@ static void dns_cache_item_update_positive(
 
                 assert_se(hashmap_replace(c->by_key, rr->key, i) >= 0);
 
-        dns_resource_record_ref(rr);
-        dns_resource_record_unref(i->rr);
-        i->rr = rr;
+        DNS_RR_REPLACE(i->rr, dns_resource_record_ref(rr));
 
-        dns_resource_key_unref(i->key);
-        i->key = dns_resource_key_ref(rr->key);
+        DNS_RESOURCE_KEY_REPLACE(i->key, dns_resource_key_ref(rr->key));
 
-        dns_answer_ref(answer);
-        dns_answer_unref(i->answer);
-        i->answer = answer;
+        DNS_ANSWER_REPLACE(i->answer, dns_answer_ref(answer));
 
-        dns_packet_ref(full_packet);
-        dns_packet_unref(i->full_packet);
-        i->full_packet = full_packet;
+        DNS_PACKET_REPLACE(i->full_packet, dns_packet_ref(full_packet));
 
         i->until = calculate_until(rr, min_ttl, UINT32_MAX, timestamp, false);
         i->query_flags = query_flags & CACHEABLE_QUERY_FLAGS;
@@ -504,7 +495,6 @@ static int dns_cache_put_positive(
 
         if (DEBUG_LOGGING) {
                 _cleanup_free_ char *t = NULL;
-                char ifname[IF_NAMESIZE + 1];
 
                 (void) in_addr_to_string(i->owner_family, &i->owner_address, &t);
 
@@ -514,7 +504,7 @@ static int dns_cache_put_positive(
                           i->shared_owner ? " shared" : "",
                           dns_resource_key_to_string(i->key, key_str, sizeof key_str),
                           (i->until - timestamp) / USEC_PER_SEC,
-                          i->ifindex == 0 ? "*" : strna(format_ifname(i->ifindex, ifname)),
+                          i->ifindex == 0 ? "*" : FORMAT_IFNAME(i->ifindex),
                           af_to_name_short(i->owner_family),
                           strna(t));
         }
@@ -738,7 +728,7 @@ int dns_cache_put(
         /* Make some space for our new entries */
         dns_cache_make_space(c, cache_keys);
 
-        timestamp = now(clock_boottime_or_monotonic());
+        timestamp = now(CLOCK_BOOTTIME);
 
         /* Second, add in positive entries for all contained RRs */
         DNS_ANSWER_FOREACH_ITEM(item, answer) {
@@ -988,7 +978,7 @@ int dns_cache_lookup(
         unsigned n = 0;
         int r;
         bool nxdomain = false;
-        DnsCacheItem *j, *first, *nsec = NULL;
+        DnsCacheItem *first, *nsec = NULL;
         bool have_authenticated = false, have_non_authenticated = false, have_confidential = false, have_non_confidential = false;
         usec_t current = 0;
         int found_rcode = -1;
@@ -1019,7 +1009,7 @@ int dns_cache_lookup(
         if (FLAGS_SET(query_flags, SD_RESOLVED_CLAMP_TTL)) {
                 /* 'current' is always passed to answer_add_clamp_ttl(), but is only used conditionally.
                  * We'll do the same assert there to make sure that it was initialized properly. */
-                current = now(clock_boottime_or_monotonic());
+                current = now(CLOCK_BOOTTIME);
                 assert(current > 0);
         }
 
@@ -1116,7 +1106,7 @@ int dns_cache_lookup(
 
         if (found_rcode >= 0) {
                 log_debug("RCODE %s cache hit for %s",
-                          dns_rcode_to_string(found_rcode),
+                          FORMAT_DNS_RCODE(found_rcode),
                           dns_resource_key_to_string(key, key_str, sizeof(key_str)));
 
                 if (ret_rcode)
@@ -1224,7 +1214,7 @@ miss:
 }
 
 int dns_cache_check_conflicts(DnsCache *cache, DnsResourceRecord *rr, int owner_family, const union in_addr_union *owner_address) {
-        DnsCacheItem *i, *first;
+        DnsCacheItem *first;
         bool same_owner = true;
 
         assert(cache);
@@ -1259,17 +1249,16 @@ int dns_cache_check_conflicts(DnsCache *cache, DnsResourceRecord *rr, int owner_
         return 1;
 }
 
-int dns_cache_export_shared_to_packet(DnsCache *cache, DnsPacket *p) {
+int dns_cache_export_shared_to_packet(DnsCache *cache, DnsPacket *p, usec_t ts, unsigned max_rr) {
         unsigned ancount = 0;
         DnsCacheItem *i;
         int r;
 
         assert(cache);
         assert(p);
+        assert(p->protocol == DNS_PROTOCOL_MDNS);
 
-        HASHMAP_FOREACH(i, cache->by_key) {
-                DnsCacheItem *j;
-
+        HASHMAP_FOREACH(i, cache->by_key)
                 LIST_FOREACH(by_key, j, i) {
                         if (!j->rr)
                                 continue;
@@ -1277,11 +1266,19 @@ int dns_cache_export_shared_to_packet(DnsCache *cache, DnsPacket *p) {
                         if (!j->shared_owner)
                                 continue;
 
+                        /* RFC6762 7.1: Don't append records with less than half the TTL remaining
+                         * as known answers. */
+                        if (usec_sub_unsigned(j->until, ts) < j->rr->ttl * USEC_PER_SEC / 2)
+                                continue;
+
                         r = dns_packet_append_rr(p, j->rr, 0, NULL, NULL);
-                        if (r == -EMSGSIZE && p->protocol == DNS_PROTOCOL_MDNS) {
-                                /* For mDNS, if we're unable to stuff all known answers into the given packet,
-                                 * allocate a new one, push the RR into that one and link it to the current one.
-                                 */
+                        if (r == -EMSGSIZE) {
+                                if (max_rr == 0)
+                                        /* If max_rr == 0, do not allocate more packets. */
+                                        goto finalize;
+
+                                /* If we're unable to stuff all known answers into the given packet, allocate
+                                 * a new one, push the RR into that one and link it to the current one. */
 
                                 DNS_PACKET_HEADER(p)->ancount = htobe16(ancount);
                                 ancount = 0;
@@ -1299,9 +1296,21 @@ int dns_cache_export_shared_to_packet(DnsCache *cache, DnsPacket *p) {
                                 return r;
 
                         ancount++;
-                }
-        }
+                        if (max_rr > 0 && ancount >= max_rr) {
+                                DNS_PACKET_HEADER(p)->ancount = htobe16(ancount);
+                                ancount = 0;
 
+                                r = dns_packet_new_query(&p->more, p->protocol, 0, true);
+                                if (r < 0)
+                                        return r;
+
+                                p = p->more;
+
+                                max_rr = UINT_MAX;
+                        }
+                }
+
+finalize:
         DNS_PACKET_HEADER(p)->ancount = htobe16(ancount);
 
         return 0;
@@ -1316,9 +1325,7 @@ void dns_cache_dump(DnsCache *cache, FILE *f) {
         if (!f)
                 f = stdout;
 
-        HASHMAP_FOREACH(i, cache->by_key) {
-                DnsCacheItem *j;
-
+        HASHMAP_FOREACH(i, cache->by_key)
                 LIST_FOREACH(by_key, j, i) {
 
                         fputc('\t', f);
@@ -1342,7 +1349,6 @@ void dns_cache_dump(DnsCache *cache, FILE *f) {
                                 fputc('\n', f);
                         }
                 }
-        }
 }
 
 bool dns_cache_is_empty(DnsCache *cache) {

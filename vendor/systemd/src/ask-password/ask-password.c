@@ -188,7 +188,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         if (isempty(emoji) || streq(emoji, "auto"))
@@ -223,7 +223,6 @@ static int parse_argv(int argc, char *argv[]) {
 static int run(int argc, char *argv[]) {
         _cleanup_strv_free_erase_ char **l = NULL;
         usec_t timeout;
-        char **p;
         int r;
 
         log_show_color(true);

@@ -247,7 +247,7 @@ int get_user_creds(
                 else if (FLAGS_SET(flags, USER_CREDS_ALLOW_MISSING) && !gid && !home && !shell) {
 
                         /* If the specified user is a numeric UID and it isn't in the user database, and the caller
-                         * passed USER_CREDS_ALLOW_MISSING and was only interested in the UID, then juts return that
+                         * passed USER_CREDS_ALLOW_MISSING and was only interested in the UID, then just return that
                          * and don't complain. */
 
                         if (uid)
@@ -680,10 +680,7 @@ int reset_uid_gid(void) {
         if (setresgid(0, 0, 0) < 0)
                 return -errno;
 
-        if (setresuid(0, 0, 0) < 0)
-                return -errno;
-
-        return 0;
+        return RET_NERRNO(setresuid(0, 0, 0));
 }
 
 int take_etc_passwd_lock(const char *root) {
@@ -797,7 +794,7 @@ bool valid_user_group_name(const char *u, ValidUserFlags flags) {
                 /* Compare with strict result and warn if result doesn't match */
                 if (FLAGS_SET(flags, VALID_USER_WARN) && !valid_user_group_name(u, 0))
                         log_struct(LOG_NOTICE,
-                                   "MESSAGE=Accepting user/group name '%s', which does not match strict user/group name rules.", u,
+                                   LOG_MESSAGE("Accepting user/group name '%s', which does not match strict user/group name rules.", u),
                                    "USER_GROUP_NAME=%s", u,
                                    "MESSAGE_ID=" SD_MESSAGE_UNSAFE_USER_NAME_STR);
 
@@ -943,10 +940,7 @@ int maybe_setgroups(size_t size, const gid_t *list) {
                 }
         }
 
-        if (setgroups(size, list) < 0)
-                return -errno;
-
-        return 0;
+        return RET_NERRNO(setgroups(size, list));
 }
 
 bool synthesize_nobody(void) {
@@ -1084,4 +1078,15 @@ int is_this_me(const char *username) {
                 return r;
 
         return uid == getuid();
+}
+
+const char *get_home_root(void) {
+        const char *e;
+
+        /* For debug purposes allow overriding where we look for home dirs */
+        e = secure_getenv("SYSTEMD_HOME_ROOT");
+        if (e && path_is_absolute(e) && path_is_normalized(e))
+                return e;
+
+        return "/home";
 }

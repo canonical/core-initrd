@@ -37,6 +37,7 @@ Tests: networkd-test.py
 Tests-Directory: test
 Depends: systemd,
   udev,
+  systemd-resolved,
   libpam-systemd,
   libnss-systemd,
   acl,
@@ -48,7 +49,7 @@ Depends: systemd,
   systemd-sysv,
   policykit-1,
   dnsmasq-base
-Restrictions: needs-root, isolation-container
+Restrictions: needs-root, isolation-container, breaks-testbed
 
 Tests: build-login
 Depends: systemd,
@@ -85,7 +86,7 @@ Depends: systemd-sysv,
   apparmor,
   pkg-config,
   python3
-Restrictions: needs-root, isolation-container, breaks-testbed
+Restrictions: needs-root, isolation-container, breaks-testbed, allow-stderr
 
 Tests: udev
 Depends: systemd-tests,
@@ -99,6 +100,10 @@ Restrictions: needs-root, allow-stderr, isolation-machine, skippable
 Tests: unit-tests
 Depends: systemd-tests,
   libpam-systemd,
+  libnss-myhostname,
+  libnss-mymachines,
+  libnss-resolve,
+  libnss-systemd,
   udev,
   tree,
   perl,
@@ -114,6 +119,7 @@ Depends: systemd-tests,
   zstd,
   libtss2-dev [!i386],
   libfido2-dev,
+  libdw-dev,
 Restrictions: needs-root, isolation-container, breaks-testbed
 
 Tests: tests-in-lxd
@@ -132,7 +138,12 @@ Depends: systemd-tests,
   systemd-coredump,
   systemd-timesyncd,
   systemd-oomd,
-  systemd-repart,
+  systemd-homed,
+  systemd-resolved,
+  libnss-myhostname,
+  libnss-mymachines,
+  libnss-resolve,
+  libnss-systemd,
   attr,
   tree,
   perl,
@@ -144,6 +155,7 @@ Depends: systemd-tests,
   dmeventd,
   kbd,
   cryptsetup-bin,
+  cryptsetup-initramfs,
   net-tools,
   isc-dhcp-client,
   iputils-ping,
@@ -169,8 +181,17 @@ Depends: systemd-tests,
   squashfs-tools,
   vim-tiny,
   dosfstools,
+  libdw-dev,
+  libelf-dev,
+  dbus-user-session,
   libtss2-dev [!i386],
   libfido2-dev,
+  python3-pexpect,
+  screen,
+  swtpm,
+  tpm2-tools,
+  libgcc-s1,
+  openssl,
 Restrictions: needs-root, allow-stderr, isolation-machine
 
 Tests: boot-smoke

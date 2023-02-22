@@ -15,10 +15,10 @@ Closes: #810748
  2 files changed, 9 insertions(+), 3 deletions(-)
 
 diff --git a/src/fstab-generator/fstab-generator.c b/src/fstab-generator/fstab-generator.c
-index b6582c9..e1a1200 100644
+index 75523d0..3590cb7 100644
 --- a/src/fstab-generator/fstab-generator.c
 +++ b/src/fstab-generator/fstab-generator.c
-@@ -357,6 +357,7 @@ static int add_mount(
+@@ -358,6 +358,7 @@ static int add_mount(
          _cleanup_strv_free_ char **wanted_by = NULL, **required_by = NULL;
          _cleanup_fclose_ FILE *f = NULL;
          int r;
@@ -44,7 +44,7 @@ index b6582c9..e1a1200 100644
  
          r = generator_write_blockdev_dependency(f, what);
 diff --git a/units/systemd-fsck-root.service.in b/units/systemd-fsck-root.service.in
-index cfdb086..36f3981 100644
+index 4b1cd43..07590fd 100644
 --- a/units/systemd-fsck-root.service.in
 +++ b/units/systemd-fsck-root.service.in
 @@ -16,6 +16,7 @@ Before=local-fs.target shutdown.target
@@ -52,6 +52,6 @@ index cfdb086..36f3981 100644
  After=systemd-fsckd.socket
  ConditionPathIsReadWrite=!/
 +ConditionPathExists=!/run/initramfs/fsck-root
+ OnFailure=emergency.target
+ OnFailureJobMode=replace-irreversibly
  
- [Service]
- Type=oneshot

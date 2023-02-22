@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 in_files = [
-        ['macros.systemd',      rpmmacrosdir != 'no'],
-        ['triggers.systemd',    false],
-        ['triggers.systemd.sh', false]]
+        ['macros.systemd',        rpmmacrosdir != 'no', rpmmacrosdir],
+
+        # we conditionalize on rpmmacrosdir, but install into rootlibexecdir
+        ['systemd-update-helper', rpmmacrosdir != 'no', rootlibexecdir],
+
+        ['triggers.systemd',      false],
+        ['triggers.systemd.sh',   false]]
 
 # The last two don't get installed anywhere, one of them needs to included in
 # the rpm spec file definition instead.
@@ -14,9 +18,8 @@ foreach tuple : in_files
                 file,
                 input : file + '.in',
                 output : file,
-                command : [meson_render_jinja2, config_h, '@INPUT@'],
-                capture : true,
+                command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'],
                 install : tuple[1],
-                install_dir : rpmmacrosdir,
+                install_dir : tuple.length() > 2 ? tuple[2] : '',
                 build_by_default : true)
 endforeach

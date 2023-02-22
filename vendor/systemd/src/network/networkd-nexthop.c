@@ -12,9 +12,10 @@
 #include "networkd-network.h"
 #include "networkd-nexthop.h"
 #include "networkd-queue.h"
-#include "networkd-route.h"
+#include "networkd-route-util.h"
 #include "parse-util.h"
 #include "set.h"
+#include "stdio-util.h"
 #include "string-util.h"
 
 NextHop *nexthop_free(NextHop *nexthop) {
@@ -26,11 +27,10 @@ NextHop *nexthop_free(NextHop *nexthop) {
                 hashmap_remove(nexthop->network->nexthops_by_section, nexthop->section);
         }
 
-        network_config_section_free(nexthop->section);
+        config_section_free(nexthop->section);
 
         if (nexthop->link) {
                 set_remove(nexthop->link->nexthops, nexthop);
-                set_remove(nexthop->link->nexthops_foreign, nexthop);
 
                 if (nexthop->link->manager && nexthop->id > 0)
                         hashmap_remove(nexthop->link->manager->nexthops_by_id, UINT32_TO_PTR(nexthop->id));
@@ -38,7 +38,6 @@ NextHop *nexthop_free(NextHop *nexthop) {
 
         if (nexthop->manager) {
                 set_remove(nexthop->manager->nexthops, nexthop);
-                set_remove(nexthop->manager->nexthops_foreign, nexthop);
 
                 if (nexthop->id > 0)
                         hashmap_remove(nexthop->manager->nexthops_by_id, UINT32_TO_PTR(nexthop->id));
@@ -49,7 +48,7 @@ NextHop *nexthop_free(NextHop *nexthop) {
         return mfree(nexthop);
 }
 
-DEFINE_NETWORK_SECTION_FUNCTIONS(NextHop, nexthop_free);
+DEFINE_SECTION_CLEANUP_FUNCTIONS(NextHop, nexthop_free);
 
 static int nexthop_new(NextHop **ret) {
         _cleanup_(nexthop_freep) NextHop *nexthop = NULL;
@@ -69,7 +68,7 @@ static int nexthop_new(NextHop **ret) {
 }
 
 static int nexthop_new_static(Network *network, const char *filename, unsigned section_line, NextHop **ret) {
-        _cleanup_(network_config_section_freep) NetworkConfigSection *n = NULL;
+        _cleanup_(config_section_freep) ConfigSection *n = NULL;
         _cleanup_(nexthop_freep) NextHop *nexthop = NULL;
         int r;
 
@@ -78,7 +77,7 @@ static int nexthop_new_static(Network *network, const char *filename, unsigned s
         assert(filename);
         assert(section_line > 0);
 
-        r = network_config_section_new(filename, section_line, &n);
+        r = config_section_new(filename, section_line, &n);
         if (r < 0)
                 return r;
 
@@ -95,8 +94,9 @@ static int nexthop_new_static(Network *network, const char *filename, unsigned s
         nexthop->protocol = RTPROT_STATIC;
         nexthop->network = network;
         nexthop->section = TAKE_PTR(n);
+        nexthop->source = NETWORK_CONFIG_SOURCE_STATIC;
 
-        r = hashmap_ensure_put(&network->nexthops_by_section, &network_config_hash_ops, nexthop->section, nexthop);
+        r = hashmap_ensure_put(&network->nexthops_by_section, &config_section_hash_ops, nexthop->section, nexthop);
         if (r < 0)
                 return r;
 
@@ -104,7 +104,7 @@ static int nexthop_new_static(Network *network, const char *filename, unsigned s
         return 0;
 }
 
-void nexthop_hash_func(const NextHop *nexthop, struct siphash *state) {
+static void nexthop_hash_func(const NextHop *nexthop, struct siphash *state) {
         assert(nexthop);
 
         siphash24_compress(&nexthop->protocol, sizeof(nexthop->protocol), state);
@@ -124,7 +124,7 @@ void nexthop_hash_func(const NextHop *nexthop, struct siphash *state) {
         }
 }
 
-int nexthop_compare_func(const NextHop *a, const NextHop *b) {
+static int nexthop_compare_func(const NextHop *a, const NextHop *b) {
         int r;
 
         r = CMP(a->protocol, b->protocol);
@@ -149,7 +149,7 @@ int nexthop_compare_func(const NextHop *a, const NextHop *b) {
         return 0;
 }
 
-DEFINE_HASH_OPS_WITH_KEY_DESTRUCTOR(
+DEFINE_PRIVATE_HASH_OPS_WITH_KEY_DESTRUCTOR(
                 nexthop_hash_ops,
                 NextHop,
                 nexthop_hash_func,
@@ -220,155 +220,133 @@ int manager_get_nexthop_by_id(Manager *manager, uint32_t id, NextHop **ret) {
         return 0;
 }
 
-static int nexthop_get(Manager *manager, Link *link, const NextHop *in, NextHop **ret) {
-        NextHop *existing;
+static bool nexthop_owned_by_link(const NextHop *nexthop) {
+        return !nexthop->blackhole && hashmap_isempty(nexthop->group);
+}
 
-        assert(manager || link);
+static int nexthop_get(Manager *manager, Link *link, NextHop *in, NextHop **ret) {
+        NextHop *nexthop;
+        Set *nexthops;
+
         assert(in);
 
-        existing = set_get(link ? link->nexthops : manager->nexthops, in);
-        if (existing) {
-                if (ret)
-                        *ret = existing;
-                return 1;
+        if (nexthop_owned_by_link(in)) {
+                if (!link)
+                        return -ENOENT;
+
+                nexthops = link->nexthops;
+        } else {
+                if (!manager)
+                        return -ENOENT;
+
+                nexthops = manager->nexthops;
         }
 
-        existing = set_get(link ? link->nexthops_foreign : manager->nexthops_foreign, in);
-        if (existing) {
+        nexthop = set_get(nexthops, in);
+        if (nexthop) {
                 if (ret)
-                        *ret = existing;
+                        *ret = nexthop;
+                return 0;
+        }
+
+        if (in->id > 0)
+                return -ENOENT;
+
+        /* Also find nexthop configured without ID. */
+        SET_FOREACH(nexthop, nexthops) {
+                uint32_t id;
+                bool found;
+
+                id = nexthop->id;
+                nexthop->id = 0;
+                found = nexthop_equal(nexthop, in);
+                nexthop->id = id;
+
+                if (!found)
+                        continue;
+
+                if (ret)
+                        *ret = nexthop;
                 return 0;
         }
 
         return -ENOENT;
 }
 
-static int nexthop_add_internal(Manager *manager, Link *link, Set **nexthops, const NextHop *in, NextHop **ret) {
-        _cleanup_(nexthop_freep) NextHop *nexthop = NULL;
+static int nexthop_add(Manager *manager, Link *link, NextHop *nexthop) {
         int r;
 
-        assert(manager || link);
-        assert(nexthops);
-        assert(in);
-
-        r = nexthop_dup(in, &nexthop);
-        if (r < 0)
-                return r;
-
-        r = set_ensure_put(nexthops, &nexthop_hash_ops, nexthop);
-        if (r < 0)
-                return r;
-        if (r == 0)
-                return -EEXIST;
-
-        nexthop->link = link;
-        nexthop->manager = manager;
-
-        if (ret)
-                *ret = nexthop;
-
-        TAKE_PTR(nexthop);
-        return 0;
-}
-
-static int nexthop_add_foreign(Manager *manager, Link *link, const NextHop *in, NextHop **ret) {
-        assert(manager || link);
-        return nexthop_add_internal(manager, link, link ? &link->nexthops_foreign : &manager->nexthops_foreign, in, ret);
-}
-
-static bool nexthop_has_link(const NextHop *nexthop) {
-        return !nexthop->blackhole && hashmap_isempty(nexthop->group);
-}
-
-static int nexthop_add(Link *link, const NextHop *in, NextHop **ret) {
-        bool by_manager;
-        NextHop *nexthop;
-        int r;
-
-        assert(link);
-        assert(in);
-
-        by_manager = !nexthop_has_link(in);
-
-        if (by_manager)
-                r = nexthop_get(link->manager, NULL, in, &nexthop);
-        else
-                r = nexthop_get(NULL, link, in, &nexthop);
-        if (r == -ENOENT) {
-                /* NextHop does not exist, create a new one */
-                r = nexthop_add_internal(link->manager,
-                                         by_manager ? NULL : link,
-                                         by_manager ? &link->manager->nexthops : &link->nexthops,
-                                         in, &nexthop);
-                if (r < 0)
-                        return r;
-        } else if (r == 0) {
-                /* Take over a foreign nexthop */
-                r = set_ensure_put(by_manager ? &link->manager->nexthops : &link->nexthops,
-                                   &nexthop_hash_ops, nexthop);
-                if (r < 0)
-                        return r;
-
-                set_remove(by_manager ? link->manager->nexthops_foreign : link->nexthops_foreign, nexthop);
-        } else if (r == 1) {
-                /* NextHop exists, do nothing */
-                ;
-        } else
-                return r;
-
-        if (ret)
-                *ret = nexthop;
-        return 0;
-}
-
-static int nexthop_update(Manager *manager, Link *link, NextHop *nexthop, const NextHop *in) {
-        Set *nexthops;
-        int r;
-
-        /* link may be NULL. */
-
-        assert(manager);
         assert(nexthop);
-        assert(in);
-        assert(in->id > 0);
+        assert(nexthop->id > 0);
 
-        /* This updates nexthop ID if necessary, and register the nexthop to Manager. */
+        if (nexthop_owned_by_link(nexthop)) {
+                assert(link);
 
-        if (nexthop->id > 0) {
-                if (nexthop->id == in->id)
-                        goto set_manager;
-                return -EINVAL;
+                r = set_ensure_put(&link->nexthops, &nexthop_hash_ops, nexthop);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        return -EEXIST;
+
+                nexthop->link = link;
+
+                manager = link->manager;
+        } else {
+                assert(manager);
+
+                r = set_ensure_put(&manager->nexthops, &nexthop_hash_ops, nexthop);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        return -EEXIST;
+
+                nexthop->manager = manager;
         }
 
-        nexthops = link ? link->nexthops : manager->nexthops;
-
-        nexthop = set_remove(nexthops, nexthop);
-        if (!nexthop)
-                return -ENOENT;
-
-        nexthop->id = in->id;
-
-        r = set_put(nexthops, nexthop);
-        if (r <= 0) {
-                int k;
-
-                /* On failure, revert the change. */
-                nexthop->id = 0;
-                k = set_put(nexthops, nexthop);
-                if (k <= 0) {
-                        nexthop_free(nexthop);
-                        return k < 0 ? k : -EEXIST;
-                }
-
-                return r < 0 ? r : -EEXIST;
-        }
-
-set_manager:
         return hashmap_ensure_put(&manager->nexthops_by_id, NULL, UINT32_TO_PTR(nexthop->id), nexthop);
 }
 
-static void log_nexthop_debug(const NextHop *nexthop, uint32_t id, const char *str, const Link *link) {
-        _cleanup_free_ char *gw = NULL, *new_id = NULL, *group = NULL;
+static int nexthop_acquire_id(Manager *manager, NextHop *nexthop) {
+        _cleanup_set_free_ Set *ids = NULL;
+        Network *network;
+        uint32_t id;
+        int r;
+
+        assert(manager);
+        assert(nexthop);
+
+        if (nexthop->id > 0)
+                return 0;
+
+        /* Find the lowest unused ID. */
+
+        ORDERED_HASHMAP_FOREACH(network, manager->networks) {
+                NextHop *tmp;
+
+                HASHMAP_FOREACH(tmp, network->nexthops_by_section) {
+                        if (tmp->id == 0)
+                                continue;
+
+                        r = set_ensure_put(&ids, NULL, UINT32_TO_PTR(tmp->id));
+                        if (r < 0)
+                                return r;
+                }
+        }
+
+        for (id = 1; id < UINT32_MAX; id++) {
+                if (manager_get_nexthop_by_id(manager, id, NULL) >= 0)
+                        continue;
+                if (set_contains(ids, UINT32_TO_PTR(id)))
+                        continue;
+                break;
+        }
+
+        nexthop->id = id;
+        return 0;
+}
+
+static void log_nexthop_debug(const NextHop *nexthop, const char *str, const Link *link) {
+        _cleanup_free_ char *state = NULL, *gw = NULL, *group = NULL, *flags = NULL;
         struct nexthop_grp *nhg;
 
         assert(nexthop);
@@ -379,28 +357,26 @@ static void log_nexthop_debug(const NextHop *nexthop, uint32_t id, const char *s
         if (!DEBUG_LOGGING)
                 return;
 
-        if (nexthop->id != id)
-                (void) asprintf(&new_id, "→%"PRIu32, id);
-
+        (void) network_config_state_to_string_alloc(nexthop->state, &state);
         (void) in_addr_to_string(nexthop->family, &nexthop->gw, &gw);
+        (void) route_flags_to_string_alloc(nexthop->flags, &flags);
 
         HASHMAP_FOREACH(nhg, nexthop->group)
                 (void) strextendf_with_separator(&group, ",", "%"PRIu32":%"PRIu32, nhg->id, nhg->weight+1);
 
-        log_link_debug(link, "%s nexthop: id: %"PRIu32"%s, gw: %s, blackhole: %s, group: %s",
-                       str, nexthop->id, strempty(new_id), strna(gw), yes_no(nexthop->blackhole), strna(group));
+        log_link_debug(link, "%s %s nexthop (%s): id: %"PRIu32", gw: %s, blackhole: %s, group: %s, flags: %s",
+                       str, strna(network_config_source_to_string(nexthop->source)), strna(state),
+                       nexthop->id, strna(gw), yes_no(nexthop->blackhole), strna(group), strna(flags));
 }
 
-static int link_nexthop_remove_handler(sd_netlink *rtnl, sd_netlink_message *m, Link *link) {
+static int nexthop_remove_handler(sd_netlink *rtnl, sd_netlink_message *m, Link *link) {
         int r;
 
         assert(m);
-        assert(link);
-        assert(link->nexthop_remove_messages > 0);
 
-        link->nexthop_remove_messages--;
+        /* link may be NULL. */
 
-        if (IN_SET(link->state, LINK_STATE_FAILED, LINK_STATE_LINGER))
+        if (link && IN_SET(link->state, LINK_STATE_FAILED, LINK_STATE_LINGER))
                 return 1;
 
         r = sd_netlink_message_get_errno(m);
@@ -410,37 +386,25 @@ static int link_nexthop_remove_handler(sd_netlink *rtnl, sd_netlink_message *m, 
         return 1;
 }
 
-static int manager_nexthop_remove_handler(sd_netlink *rtnl, sd_netlink_message *m, Manager *manager) {
-        int r;
-
-        assert(m);
-        assert(manager);
-        assert(manager->nexthop_remove_messages > 0);
-
-        manager->nexthop_remove_messages--;
-
-        r = sd_netlink_message_get_errno(m);
-        if (r < 0 && r != -ENOENT)
-                log_message_warning_errno(m, r, "Could not drop nexthop, ignoring");
-
-        return 1;
-}
-
-static int nexthop_remove(const NextHop *nexthop, Manager *manager, Link *link) {
+static int nexthop_remove(NextHop *nexthop) {
         _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *req = NULL;
+        Manager *manager;
+        Link *link;
         int r;
 
         assert(nexthop);
-        assert(manager);
+        assert(nexthop->manager || (nexthop->link && nexthop->link->manager));
 
         /* link may be NULL. */
+        link = nexthop->link;
+        manager = nexthop->manager ?: nexthop->link->manager;
 
         if (nexthop->id == 0) {
                 log_link_debug(link, "Cannot remove nexthop without valid ID, ignoring.");
                 return 0;
         }
 
-        log_nexthop_debug(nexthop, nexthop->id, "Removing", link);
+        log_nexthop_debug(nexthop, "Removing", link);
 
         r = sd_rtnl_message_new_nexthop(manager->rtnl, &req, RTM_DELNEXTHOP, AF_UNSPEC, RTPROT_UNSPEC);
         if (r < 0)
@@ -450,53 +414,39 @@ static int nexthop_remove(const NextHop *nexthop, Manager *manager, Link *link) 
         if (r < 0)
                 return log_link_error_errno(link, r, "Could not append NHA_ID attribute: %m");
 
-        if (link)
-                r = netlink_call_async(manager->rtnl, NULL, req, link_nexthop_remove_handler,
-                                       link_netlink_destroy_callback, link);
-        else
-                r = netlink_call_async(manager->rtnl, NULL, req, manager_nexthop_remove_handler,
-                                       NULL, manager);
+        r = netlink_call_async(manager->rtnl, NULL, req, nexthop_remove_handler,
+                               link ? link_netlink_destroy_callback : NULL, link);
         if (r < 0)
                 return log_link_error_errno(link, r, "Could not send rtnetlink message: %m");
 
         link_ref(link); /* link may be NULL, link_ref() is OK with that */
 
-        if (link)
-                link->nexthop_remove_messages++;
-        else
-                manager->nexthop_remove_messages++;
-
+        nexthop_enter_removing(nexthop);
         return 0;
 }
 
-static int nexthop_configure(
-                const NextHop *nexthop,
-                Link *link,
-                link_netlink_message_handler_t callback,
-                NextHop **ret) {
-
-        _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *req = NULL;
+static int nexthop_configure(NextHop *nexthop, Link *link, Request *req) {
+        _cleanup_(sd_netlink_message_unrefp) sd_netlink_message *m = NULL;
         int r;
 
+        assert(nexthop);
+        assert(IN_SET(nexthop->family, AF_UNSPEC, AF_INET, AF_INET6));
         assert(link);
         assert(link->manager);
         assert(link->manager->rtnl);
         assert(link->ifindex > 0);
-        assert(IN_SET(nexthop->family, AF_UNSPEC, AF_INET, AF_INET6));
-        assert(callback);
+        assert(req);
 
-        log_nexthop_debug(nexthop, nexthop->id, "Configuring", link);
+        log_nexthop_debug(nexthop, "Configuring", link);
 
-        r = sd_rtnl_message_new_nexthop(link->manager->rtnl, &req,
-                                        RTM_NEWNEXTHOP, nexthop->family,
-                                        nexthop->protocol);
+        r = sd_rtnl_message_new_nexthop(link->manager->rtnl, &m, RTM_NEWNEXTHOP, nexthop->family, nexthop->protocol);
         if (r < 0)
-                return log_link_error_errno(link, r, "Could not create RTM_NEWNEXTHOP message: %m");
+                return r;
 
         if (nexthop->id > 0) {
-                r = sd_netlink_message_append_u32(req, NHA_ID, nexthop->id);
+                r = sd_netlink_message_append_u32(m, NHA_ID, nexthop->id);
                 if (r < 0)
-                        return log_link_error_errno(link, r, "Could not append NHA_ID attribute: %m");
+                        return r;
         }
 
         if (!hashmap_isempty(nexthop->group)) {
@@ -511,56 +461,38 @@ static int nexthop_configure(
                 HASHMAP_FOREACH(nhg, nexthop->group)
                         *p++ = *nhg;
 
-                r = sd_netlink_message_append_data(req, NHA_GROUP, group, sizeof(struct nexthop_grp) * hashmap_size(nexthop->group));
+                r = sd_netlink_message_append_data(m, NHA_GROUP, group, sizeof(struct nexthop_grp) * hashmap_size(nexthop->group));
                 if (r < 0)
-                        return log_link_error_errno(link, r, "Could not append NHA_GROUP attribute: %m");
+                        return r;
 
         } else if (nexthop->blackhole) {
-                r = sd_netlink_message_append_flag(req, NHA_BLACKHOLE);
+                r = sd_netlink_message_append_flag(m, NHA_BLACKHOLE);
                 if (r < 0)
-                        return log_link_error_errno(link, r, "Could not append NHA_BLACKHOLE attribute: %m");
+                        return r;
         } else {
-                r = sd_netlink_message_append_u32(req, NHA_OIF, link->ifindex);
+                r = sd_netlink_message_append_u32(m, NHA_OIF, link->ifindex);
                 if (r < 0)
-                        return log_link_error_errno(link, r, "Could not append NHA_OIF attribute: %m");
+                        return r;
 
                 if (in_addr_is_set(nexthop->family, &nexthop->gw)) {
-                        r = netlink_message_append_in_addr_union(req, NHA_GATEWAY, nexthop->family, &nexthop->gw);
+                        r = netlink_message_append_in_addr_union(m, NHA_GATEWAY, nexthop->family, &nexthop->gw);
                         if (r < 0)
-                                return log_link_error_errno(link, r, "Could not append NHA_GATEWAY attribute: %m");
+                                return r;
 
-                        if (nexthop->onlink > 0) {
-                                r = sd_rtnl_message_nexthop_set_flags(req, RTNH_F_ONLINK);
-                                if (r < 0)
-                                        return log_link_error_errno(link, r, "Failed to set RTNH_F_ONLINK flag: %m");
-                        }
+                        r = sd_rtnl_message_nexthop_set_flags(m, nexthop->flags & RTNH_F_ONLINK);
+                        if (r < 0)
+                                return r;
                 }
         }
 
-        r = nexthop_add(link, nexthop, ret);
-        if (r < 0)
-                return log_link_error_errno(link, r, "Could not add nexthop: %m");
-
-        r = netlink_call_async(link->manager->rtnl, NULL, req, callback,
-                               link_netlink_destroy_callback, link);
-        if (r < 0)
-                return log_link_error_errno(link, r, "Could not send rtnetlink message: %m");
-
-        link_ref(link);
-
-        return r;
+        return request_call_netlink_async(link->manager->rtnl, m, req);
 }
 
-static int static_nexthop_handler(sd_netlink *rtnl, sd_netlink_message *m, Link *link) {
+static int static_nexthop_handler(sd_netlink *rtnl, sd_netlink_message *m, Request *req, Link *link, NextHop *nexthop) {
         int r;
 
+        assert(m);
         assert(link);
-        assert(link->static_nexthop_messages > 0);
-
-        link->static_nexthop_messages--;
-
-        if (IN_SET(link->state, LINK_STATE_FAILED, LINK_STATE_LINGER))
-                return 1;
 
         r = sd_netlink_message_get_errno(m);
         if (r < 0 && r != -EEXIST) {
@@ -578,20 +510,109 @@ static int static_nexthop_handler(sd_netlink *rtnl, sd_netlink_message *m, Link 
         return 1;
 }
 
-static int link_request_nexthop(
-                Link *link,
-                NextHop *nexthop,
-                bool consume_object,
-                unsigned *message_counter,
-                link_netlink_message_handler_t netlink_handler,
-                Request **ret) {
+static bool nexthop_is_ready_to_configure(Link *link, const NextHop *nexthop) {
+        struct nexthop_grp *nhg;
 
         assert(link);
         assert(nexthop);
 
-        log_nexthop_debug(nexthop, nexthop->id, "Requesting", link);
-        return link_queue_request(link, REQUEST_TYPE_NEXTHOP, nexthop, consume_object,
-                                  message_counter, netlink_handler, ret);
+        if (!link_is_ready_to_configure(link, false))
+                return false;
+
+        if (nexthop_owned_by_link(nexthop)) {
+                /* TODO: fdb nexthop does not require IFF_UP. The conditions below needs to be updated
+                 * when fdb nexthop support is added. See rtm_to_nh_config() in net/ipv4/nexthop.c of
+                 * kernel. */
+                if (link->set_flags_messages > 0)
+                        return false;
+                if (!FLAGS_SET(link->flags, IFF_UP))
+                        return false;
+        }
+
+        /* All group members must be configured first. */
+        HASHMAP_FOREACH(nhg, nexthop->group) {
+                NextHop *g;
+
+                if (manager_get_nexthop_by_id(link->manager, nhg->id, &g) < 0)
+                        return false;
+
+                if (!nexthop_exists(g))
+                        return false;
+        }
+
+        if (nexthop->id == 0) {
+                Request *req;
+
+                ORDERED_SET_FOREACH(req, link->manager->request_queue) {
+                        if (req->type != REQUEST_TYPE_NEXTHOP)
+                                continue;
+                        if (((NextHop*) req->userdata)->id != 0)
+                                return false; /* first configure nexthop with id. */
+                }
+        }
+
+        return gateway_is_ready(link, FLAGS_SET(nexthop->flags, RTNH_F_ONLINK), nexthop->family, &nexthop->gw);
+}
+
+static int nexthop_process_request(Request *req, Link *link, NextHop *nexthop) {
+        int r;
+
+        assert(req);
+        assert(link);
+        assert(nexthop);
+
+        if (!nexthop_is_ready_to_configure(link, nexthop))
+                return 0;
+
+        r = nexthop_configure(nexthop, link, req);
+        if (r < 0)
+                return log_link_warning_errno(link, r, "Failed to configure nexthop");
+
+        nexthop_enter_configuring(nexthop);
+        return 1;
+}
+
+static int link_request_nexthop(Link *link, NextHop *nexthop) {
+        NextHop *existing;
+        int r;
+
+        assert(link);
+        assert(nexthop);
+        assert(nexthop->source != NETWORK_CONFIG_SOURCE_FOREIGN);
+
+        if (nexthop_get(link->manager, link, nexthop, &existing) < 0) {
+                _cleanup_(nexthop_freep) NextHop *tmp = NULL;
+
+                r = nexthop_dup(nexthop, &tmp);
+                if (r < 0)
+                        return r;
+
+                r = nexthop_acquire_id(link->manager, tmp);
+                if (r < 0)
+                        return r;
+
+                r = nexthop_add(link->manager, link, tmp);
+                if (r < 0)
+                        return r;
+
+                existing = TAKE_PTR(tmp);
+        } else
+                existing->source = nexthop->source;
+
+        log_nexthop_debug(existing, "Requesting", link);
+        r = link_queue_request_safe(link, REQUEST_TYPE_NEXTHOP,
+                                    existing, NULL,
+                                    nexthop_hash_func,
+                                    nexthop_compare_func,
+                                    nexthop_process_request,
+                                    &link->static_nexthop_messages,
+                                    static_nexthop_handler,
+                                    NULL);
+        if (r <= 0)
+                return r;
+
+        nexthop_enter_requesting(existing);
+        return 1;
 }
 
 int link_request_static_nexthops(Link *link, bool only_ipv4) {
@@ -607,8 +628,7 @@ int link_request_static_nexthops(Link *link, bool only_ipv4) {
                 if (only_ipv4 && nh->family != AF_INET)
                         continue;
 
-                r = link_request_nexthop(link, nh, false, &link->static_nexthop_messages,
-                                         static_nexthop_handler, NULL);
+                r = link_request_nexthop(link, nh);
                 if (r < 0)
                         return log_link_warning_errno(link, r, "Could not request nexthop: %m");
         }
@@ -624,71 +644,62 @@ int link_request_static_nexthops(Link *link, bool only_ipv4) {
         return 0;
 }
 
-static bool link_has_nexthop(const Link *link, const NextHop *nexthop) {
-        NextHop *net_nexthop;
-
-        assert(link);
-        assert(nexthop);
-
-        if (!link->network)
-                return false;
-
-        HASHMAP_FOREACH(net_nexthop, link->network->nexthops_by_section)
-                if (nexthop_equal(net_nexthop, nexthop))
-                        return true;
-
-        return false;
-}
-
-static bool links_have_nexthop(const Manager *manager, const NextHop *nexthop, const Link *except) {
+static void manager_mark_nexthops(Manager *manager, bool foreign, const Link *except) {
+        NextHop *nexthop;
         Link *link;
 
         assert(manager);
 
-        HASHMAP_FOREACH(link, manager->links_by_index) {
-                if (link == except)
-                        continue;
-
-                if (link_has_nexthop(link, nexthop))
-                        return true;
-        }
-
-        return false;
-}
-
-static int manager_drop_nexthops_internal(Manager *manager, bool foreign, const Link *except) {
-        NextHop *nexthop;
-        Set *nexthops;
-        int k, r = 0;
-
-        assert(manager);
-
-        nexthops = foreign ? manager->nexthops_foreign : manager->nexthops;
-        SET_FOREACH(nexthop, nexthops) {
+        /* First, mark all nexthops. */
+        SET_FOREACH(nexthop, manager->nexthops) {
                 /* do not touch nexthop created by the kernel */
                 if (nexthop->protocol == RTPROT_KERNEL)
                         continue;
 
-                /* The nexthop will be configured later, or already configured by a link. */
-                if (links_have_nexthop(manager, nexthop, except))
+                /* When 'foreign' is true, mark only foreign nexthops, and vice versa. */
+                if (foreign != (nexthop->source == NETWORK_CONFIG_SOURCE_FOREIGN))
                         continue;
 
-                /* The existing links do not have the nexthop. Let's drop this now. It may be
-                 * re-configured later. */
-                k = nexthop_remove(nexthop, manager, NULL);
+                /* Ignore nexthops not assigned yet or already removed. */
+                if (!nexthop_exists(nexthop))
+                        continue;
+
+                nexthop_mark(nexthop);
+        }
+
+        /* Then, unmark all nexthops requested by active links. */
+        HASHMAP_FOREACH(link, manager->links_by_index) {
+                if (link == except)
+                        continue;
+
+                if (!IN_SET(link->state, LINK_STATE_CONFIGURING, LINK_STATE_CONFIGURED))
+                        continue;
+
+                HASHMAP_FOREACH(nexthop, link->network->nexthops_by_section) {
+                        NextHop *existing;
+
+                        if (nexthop_get(manager, NULL, nexthop, &existing) >= 0)
+                                nexthop_unmark(existing);
+                }
+        }
+}
+
+static int manager_drop_marked_nexthops(Manager *manager) {
+        NextHop *nexthop;
+        int k, r = 0;
+
+        assert(manager);
+
+        SET_FOREACH(nexthop, manager->nexthops) {
+                if (!nexthop_is_marked(nexthop))
+                        continue;
+
+                k = nexthop_remove(nexthop);
                 if (k < 0 && r >= 0)
                         r = k;
         }
 
         return r;
-}
-
-static int manager_drop_foreign_nexthops(Manager *manager) {
-        return manager_drop_nexthops_internal(manager, true, NULL);
-}
-
-static int manager_drop_nexthops(Manager *manager, const Link *except) {
-        return manager_drop_nexthops_internal(manager, false, except);
 }
 
 int link_drop_foreign_nexthops(Link *link) {
@@ -697,28 +708,53 @@ int link_drop_foreign_nexthops(Link *link) {
 
         assert(link);
         assert(link->manager);
+        assert(link->network);
 
-        SET_FOREACH(nexthop, link->nexthops_foreign) {
+        /* First, mark all nexthops. */
+        SET_FOREACH(nexthop, link->nexthops) {
                 /* do not touch nexthop created by the kernel */
                 if (nexthop->protocol == RTPROT_KERNEL)
                         continue;
 
-                if (link_has_nexthop(link, nexthop))
-                        k = nexthop_add(link, nexthop, NULL);
-                else
-                        k = nexthop_remove(nexthop, link->manager, link);
+                /* Do not remove nexthops we configured. */
+                if (nexthop->source != NETWORK_CONFIG_SOURCE_FOREIGN)
+                        continue;
+
+                /* Ignore nexthops not assigned yet or already removed. */
+                if (!nexthop_exists(nexthop))
+                        continue;
+
+                nexthop_mark(nexthop);
+        }
+
+        /* Then, unmark all nexthops requested by active links. */
+        HASHMAP_FOREACH(nexthop, link->network->nexthops_by_section) {
+                NextHop *existing;
+
+                if (nexthop_get(NULL, link, nexthop, &existing) >= 0)
+                        nexthop_unmark(existing);
+        }
+
+        /* Finally, remove all marked rules. */
+        SET_FOREACH(nexthop, link->nexthops) {
+                if (!nexthop_is_marked(nexthop))
+                        continue;
+
+                k = nexthop_remove(nexthop);
                 if (k < 0 && r >= 0)
                         r = k;
         }
 
-        k = manager_drop_foreign_nexthops(link->manager);
+        manager_mark_nexthops(link->manager, /* foreign = */ true, NULL);
+
+        k = manager_drop_marked_nexthops(link->manager);
         if (k < 0 && r >= 0)
                 r = k;
 
         return r;
 }
 
-int link_drop_nexthops(Link *link) {
+int link_drop_managed_nexthops(Link *link) {
         NextHop *nexthop;
         int k, r = 0;
 
@@ -730,96 +766,44 @@ int link_drop_nexthops(Link *link) {
                 if (nexthop->protocol == RTPROT_KERNEL)
                         continue;
 
-                k = nexthop_remove(nexthop, link->manager, link);
+                /* Do not touch addresses managed by kernel or other tools. */
+                if (nexthop->source == NETWORK_CONFIG_SOURCE_FOREIGN)
+                        continue;
+
+                /* Ignore nexthops not assigned yet or already removing. */
+                if (!nexthop_exists(nexthop))
+                        continue;
+
+                k = nexthop_remove(nexthop);
                 if (k < 0 && r >= 0)
                         r = k;
         }
 
-        k = manager_drop_nexthops(link->manager, link);
+        manager_mark_nexthops(link->manager, /* foreign = */ false, link);
+
+        k = manager_drop_marked_nexthops(link->manager);
         if (k < 0 && r >= 0)
                 r = k;
 
         return r;
 }
 
-static bool nexthop_is_ready_to_configure(Link *link, const NextHop *nexthop) {
-        struct nexthop_grp *nhg;
+void link_foreignize_nexthops(Link *link) {
+        NextHop *nexthop;
 
         assert(link);
-        assert(nexthop);
 
-        if (!link_is_ready_to_configure(link, false))
-                return false;
+        SET_FOREACH(nexthop, link->nexthops)
+                nexthop->source = NETWORK_CONFIG_SOURCE_FOREIGN;
 
-        if (!nexthop_has_link(nexthop)) {
-                if (link->manager->nexthop_remove_messages > 0)
-                        return false;
-        } else {
-                Link *l;
+        manager_mark_nexthops(link->manager, /* foreign = */ false, link);
 
-                /* TODO: fdb nexthop does not require IFF_UP. The conditions below needs to be updated
-                 * when fdb nexthop support is added. See rtm_to_nh_config() in net/ipv4/nexthop.c of
-                 * kernel. */
-                if (link->set_flags_messages > 0)
-                        return false;
-                if (!FLAGS_SET(link->flags, IFF_UP))
-                        return false;
+        SET_FOREACH(nexthop, link->manager->nexthops) {
+                if (!nexthop_is_marked(nexthop))
+                        continue;
 
-                HASHMAP_FOREACH(l, link->manager->links_by_index) {
-                        if (l->address_remove_messages > 0)
-                                return false;
-                        if (l->nexthop_remove_messages > 0)
-                                return false;
-                        if (l->route_remove_messages > 0)
-                                return false;
-                }
+                nexthop->source = NETWORK_CONFIG_SOURCE_FOREIGN;
         }
-
-        /* All group members must be configured first. */
-        HASHMAP_FOREACH(nhg, nexthop->group)
-                if (manager_get_nexthop_by_id(link->manager, nhg->id, NULL) < 0)
-                        return false;
-
-        if (nexthop->id == 0) {
-                Request *req;
-
-                ORDERED_SET_FOREACH(req, link->manager->request_queue) {
-                        if (req->type != REQUEST_TYPE_NEXTHOP)
-                                continue;
-                        if (req->nexthop->id != 0)
-                                return false; /* first configure nexthop with id. */
-                }
-        }
-
-        return gateway_is_ready(link, nexthop->onlink, nexthop->family, &nexthop->gw);
-}
-
-int request_process_nexthop(Request *req) {
-        NextHop *ret;
-        int r;
-
-        assert(req);
-        assert(req->link);
-        assert(req->nexthop);
-        assert(req->type == REQUEST_TYPE_NEXTHOP);
-
-        if (!nexthop_is_ready_to_configure(req->link, req->nexthop))
-                return 0;
-
-        r = nexthop_configure(req->nexthop, req->link, req->netlink_handler, &ret);
-        if (r < 0)
-                return r;
-
-        /* To prevent a double decrement on failure in after_configure(). */
-        req->message_counter = NULL;
-
-        if (req->after_configure) {
-                r = req->after_configure(req, ret);
-                if (r < 0)
-                        return r;
-        }
-
-        return 1;
 }
 
 int manager_rtnl_process_nexthop(sd_netlink *rtnl, sd_netlink_message *message, Manager *m) {
@@ -887,6 +871,12 @@ int manager_rtnl_process_nexthop(sd_netlink *rtnl, sd_netlink_message *message, 
         r = sd_rtnl_message_nexthop_get_protocol(message, &tmp->protocol);
         if (r < 0) {
                 log_link_warning_errno(link, r, "rtnl: could not get nexthop protocol, ignoring: %m");
+                return 0;
+        }
+
+        r = sd_rtnl_message_nexthop_get_flags(message, &tmp->flags);
+        if (r < 0) {
+                log_link_warning_errno(link, r, "rtnl: could not get nexthop flags, ignoring: %m");
                 return 0;
         }
 
@@ -963,49 +953,45 @@ int manager_rtnl_process_nexthop(sd_netlink *rtnl, sd_netlink_message *message, 
 
         /* All blackhole or group nexthops are managed by Manager. Note that the linux kernel does not
          * set NHA_OID attribute when NHA_BLACKHOLE or NHA_GROUP is set. Just for safety. */
-        if (!nexthop_has_link(tmp))
+        if (!nexthop_owned_by_link(tmp))
                 link = NULL;
 
-        r = nexthop_get(m, link, tmp, &nexthop);
-        if (r < 0) {
-                uint32_t id;
-
-                /* The nexthop may be created without setting NHA_ID. */
-
-                id = tmp->id;
-                tmp->id = 0;
-
-                (void) nexthop_get(m, link, tmp, &nexthop);
-
-                tmp->id = id;
-        }
+        (void) nexthop_get(m, link, tmp, &nexthop);
 
         switch (type) {
         case RTM_NEWNEXTHOP:
-                if (nexthop)
-                        log_nexthop_debug(nexthop, tmp->id, "Received remembered", link);
-                else {
-                        log_nexthop_debug(tmp, tmp->id, "Remembering foreign", link);
-                        r = nexthop_add_foreign(m, link, tmp, &nexthop);
+                if (nexthop) {
+                        nexthop->flags = tmp->flags;
+                        nexthop_enter_configured(nexthop);
+                        log_nexthop_debug(tmp, "Received remembered", link);
+                } else {
+                        nexthop_enter_configured(tmp);
+                        log_nexthop_debug(tmp, "Remembering", link);
+
+                        r = nexthop_add(m, link, tmp);
                         if (r < 0) {
                                 log_link_warning_errno(link, r, "Could not remember foreign nexthop, ignoring: %m");
                                 return 0;
                         }
+
+                        TAKE_PTR(tmp);
                 }
 
-                r = nexthop_update(m, link, nexthop, tmp);
-                if (r < 0) {
-                        log_link_warning_errno(link, r, "Could not update nexthop, ignoring: %m");
-                        return 0;
-                }
                 break;
         case RTM_DELNEXTHOP:
-                log_nexthop_debug(tmp, tmp->id, nexthop ? "Forgetting" : "Kernel removed unknown", link);
-                nexthop_free(nexthop);
+                if (nexthop) {
+                        nexthop_enter_removed(nexthop);
+                        if (nexthop->state == 0) {
+                                log_nexthop_debug(nexthop, "Forgetting", link);
+                                nexthop_free(nexthop);
+                        } else
+                                log_nexthop_debug(nexthop, "Removed", link);
+                } else
+                        log_nexthop_debug(tmp, "Kernel removed unknown", link);
                 break;
 
         default:
-                assert_not_reached("Received invalid RTNL message type");
+                assert_not_reached();
         }
 
         return 1;
@@ -1052,6 +1038,9 @@ static int nexthop_section_verify(NextHop *nh) {
                             nh->section->filename);
                 nh->onlink = true;
         }
+
+        if (nh->onlink >= 0)
+                SET_FLAG(nh->flags, RTNH_F_ONLINK, nh->onlink);
 
         return 0;
 }
@@ -1212,7 +1201,7 @@ int config_parse_nexthop_family(
                 return 0;
         }
 
-        switch(a) {
+        switch (a) {
         case ADDRESS_FAMILY_IPV4:
                 n->family = AF_INET;
                 break;
@@ -1220,7 +1209,7 @@ int config_parse_nexthop_family(
                 n->family = AF_INET6;
                 break;
         default:
-                assert_not_reached("Invalid family.");
+                assert_not_reached();
         }
 
         TAKE_PTR(n);

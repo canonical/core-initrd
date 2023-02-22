@@ -32,14 +32,14 @@ libtimesyncd_core = static_library(
         'timesyncd-core',
         sources,
         include_directories : includes,
-        link_with : [timesyncd_link_with])
+        link_with : timesyncd_link_with,
+        build_by_default : false)
 
 custom_target(
         'timesyncd.conf',
         input : 'timesyncd.conf.in',
         output : 'timesyncd.conf',
-        command : [meson_render_jinja2, config_h, '@INPUT@'],
-        capture : true,
+        command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'],
         install : conf.get('ENABLE_TIMESYNCD') == 1 and install_sysconfdir_samples,
         install_dir : pkgsysconfdir)
 
@@ -50,12 +50,14 @@ if conf.get('ENABLE_TIMESYNCD') == 1
                      install_dir : dbussystemservicedir)
         install_data('80-systemd-timesync.list',
                      install_dir : ntpservicelistdir)
+        install_data('org.freedesktop.timesync1.policy',
+                     install_dir : polkitpolicydir)
 endif
 
 ############################################################
 
 tests += [
-        [['src/timesync/test-timesync.c'],
+        [files('test-timesync.c'),
          [libtimesyncd_core,
           libshared],
          [libm]],

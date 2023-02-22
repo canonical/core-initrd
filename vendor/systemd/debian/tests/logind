@@ -50,17 +50,21 @@ test_suspend_on_lid() {
     # cleanup handler
     trap 'rm -f /run/udev/rules.d/70-logindtest-*.rules; udevadm control --reload;
           kill $KILL_PID;
-          rm /run/systemd/system/systemd-suspend.service;
+          rm /run/systemd/system/systemd-suspend.service.d/override.conf;
           if [ -d /sys/module/scsi_debug ]; then rmmod scsi_debug 2>/dev/null || (sleep 2; rmmod scsi_debug ) || true; fi' \
                   EXIT INT QUIT TERM PIPE
 
     # watch what's going on
-    journalctl -f -u systemd-logind.service &
+    journalctl -f -u systemd-logind.service -u systemd-suspend.service &
     KILL_PID="$KILL_PID $!"
 
     # create fake suspend
-    UNIT=$(systemctl show -pFragmentPath --value systemd-suspend.service)
-    sed '/^ExecStart=/ s_=.*$_=/bin/touch /run/suspend.flag_' $UNIT > /run/systemd/system/systemd-suspend.service
+    mkdir -p /run/systemd/system/systemd-suspend.service.d
+    cat >/run/systemd/system/systemd-suspend.service.d/override.conf <<EOF
+[Service]
+ExecStart=
+ExecStart=touch /run/suspend.flag
+EOF
     sync
     systemctl daemon-reload
 
@@ -78,6 +82,8 @@ test_suspend_on_lid() {
     done
     O=${O%/device/name}
     LID_DEV=/dev/${O#/sys/class/}
+    udevadm info --wait-for-initialization=10s $LID_DEV
+    udevadm settle
 
     # close lid
     evemu-event $LID_DEV --sync --type 5 --code 0 --value 1

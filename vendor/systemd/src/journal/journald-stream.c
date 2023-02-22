@@ -36,6 +36,7 @@
 #include "syslog-util.h"
 #include "tmpfile-util.h"
 #include "unit-name.h"
+#include "user-util.h"
 
 #define STDOUT_STREAMS_MAX 4096
 
@@ -444,7 +445,7 @@ static int stdout_stream_line(StdoutStream *s, char *p, LineBreak line_break) {
                 return stdout_stream_log(s, orig, line_break);
         }
 
-        assert_not_reached("Unknown stream state");
+        assert_not_reached();
 }
 
 static int stdout_stream_found(
@@ -587,7 +588,7 @@ static int stdout_stream_process(sd_event_source *es, int fd, uint32_t revents, 
 
         l = recvmsg(s->fd, &msghdr, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
         if (l < 0) {
-                if (IN_SET(errno, EINTR, EAGAIN))
+                if (ERRNO_IS_TRANSIENT(errno))
                         return 0;
 
                 log_warning_errno(errno, "Failed to read from stream: %m");
@@ -658,6 +659,7 @@ int stdout_stream_install(Server *s, int fd, StdoutStream **ret) {
         *stream = (StdoutStream) {
                 .fd = -1,
                 .priority = LOG_INFO,
+                .ucred = UCRED_INVALID,
         };
 
         xsprintf(stream->id_field, "_STREAM_ID=" SD_ID128_FORMAT_STR, SD_ID128_FORMAT_VAL(id));
@@ -722,9 +724,9 @@ static int stdout_stream_new(sd_event_source *es, int listen_fd, uint32_t revent
         }
 
         if (s->n_stdout_streams >= STDOUT_STREAMS_MAX) {
-                struct ucred u;
+                struct ucred u = UCRED_INVALID;
 
-                r = getpeercred(fd, &u);
+                (void) getpeercred(fd, &u);
 
                 /* By closing fd here we make sure that the client won't wait too long for journald to
                  * gather all the data it adds to the error message to find out that the connection has
@@ -732,7 +734,7 @@ static int stdout_stream_new(sd_event_source *es, int listen_fd, uint32_t revent
                  */
                 fd = safe_close(fd);
 
-                server_driver_message(s, r < 0 ? 0 : u.pid, NULL, LOG_MESSAGE("Too many stdout streams, refusing connection."), NULL);
+                server_driver_message(s, u.pid, NULL, LOG_MESSAGE("Too many stdout streams, refusing connection."), NULL);
                 return 0;
         }
 
@@ -846,7 +848,6 @@ static int stdout_stream_restore(Server *s, const char *fname, int fd) {
 
 int server_restore_streams(Server *s, FDSet *fds) {
         _cleanup_closedir_ DIR *d = NULL;
-        struct dirent *de;
         const char *path;
         int r;
 

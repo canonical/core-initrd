@@ -1,0 +1,282 @@
+From: Nick Rosbrook <nick.rosbrook@canonical.com>
+Date: Tue, 21 Jun 2022 10:52:39 -0400
+Subject: test: increase QEMU_MEM for some tests
+
+These tests have a tendency to fail with OOM on the autopkgtest
+infrastructure. Increase QEMU_MEM to try and alleviate that.
+---
+ test/TEST-08-ISSUE-2730/test.sh         | 1 +
+ test/TEST-09-ISSUE-2691/test.sh         | 1 +
+ test/TEST-11-ISSUE-3166/test.sh         | 1 +
+ test/TEST-13-NSPAWN-SMOKE/test.sh       | 2 ++
+ test/TEST-14-MACHINE-ID/test.sh         | 2 ++
+ test/TEST-17-UDEV/test.sh               | 1 +
+ test/TEST-19-DELEGATE/test.sh           | 1 +
+ test/TEST-24-CRYPTSETUP/test.sh         | 1 +
+ test/TEST-29-PORTABLE/test.sh           | 2 ++
+ test/TEST-30-ONCLOCKCHANGE/test.sh      | 2 ++
+ test/TEST-31-DEVICE-ENUMERATION/test.sh | 1 +
+ test/TEST-32-OOMPOLICY/test.sh          | 1 +
+ test/TEST-36-NUMAPOLICY/test.sh         | 2 ++
+ test/TEST-38-FREEZER/test.sh            | 2 ++
+ test/TEST-50-DISSECT/test.sh            | 1 +
+ test/TEST-53-ISSUE-16347/test.sh        | 2 ++
+ test/TEST-58-REPART/test.sh             | 2 ++
+ test/TEST-61-UNITTESTS-QEMU/test.sh     | 2 ++
+ test/TEST-62-RESTRICT-IFACES/test.sh    | 2 ++
+ test/TEST-66-DEVICE-ISOLATION/test.sh   | 2 ++
+ test/TEST-67-INTEGRITY/test.sh          | 1 +
+ test/TEST-70-TPM2/test.sh               | 1 +
+ 22 files changed, 33 insertions(+)
+
+diff --git a/test/TEST-08-ISSUE-2730/test.sh b/test/TEST-08-ISSUE-2730/test.sh
+index 83557f2..5d76ee0 100755
+--- a/test/TEST-08-ISSUE-2730/test.sh
++++ b/test/TEST-08-ISSUE-2730/test.sh
+@@ -10,6 +10,7 @@ TEST_NO_NSPAWN=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ QEMU_TIMEOUT=300
++QEMU_MEM="1024M"
+ TEST_FORCE_NEWIMAGE=1
+ 
+ do_test "$@"
+diff --git a/test/TEST-09-ISSUE-2691/test.sh b/test/TEST-09-ISSUE-2691/test.sh
+index 1c995f4..94c1fc7 100755
+--- a/test/TEST-09-ISSUE-2691/test.sh
++++ b/test/TEST-09-ISSUE-2691/test.sh
+@@ -9,5 +9,6 @@ TEST_NO_NSPAWN=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ QEMU_TIMEOUT=300
++QEMU_MEM="1024M"
+ 
+ do_test "$@"
+diff --git a/test/TEST-11-ISSUE-3166/test.sh b/test/TEST-11-ISSUE-3166/test.sh
+index 9adccc1..577be97 100755
+--- a/test/TEST-11-ISSUE-3166/test.sh
++++ b/test/TEST-11-ISSUE-3166/test.sh
+@@ -9,5 +9,6 @@ TEST_NO_NSPAWN=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ QEMU_TIMEOUT=300
++QEMU_MEM="1024M"
+ 
+ do_test "$@"
+diff --git a/test/TEST-13-NSPAWN-SMOKE/test.sh b/test/TEST-13-NSPAWN-SMOKE/test.sh
+index 3d1e504..f3c4d72 100755
+--- a/test/TEST-13-NSPAWN-SMOKE/test.sh
++++ b/test/TEST-13-NSPAWN-SMOKE/test.sh
+@@ -27,4 +27,6 @@ test_append_files() {
+     )
+ }
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-14-MACHINE-ID/test.sh b/test/TEST-14-MACHINE-ID/test.sh
+index afaa4cf..bd2b3a5 100755
+--- a/test/TEST-14-MACHINE-ID/test.sh
++++ b/test/TEST-14-MACHINE-ID/test.sh
+@@ -13,4 +13,6 @@ test_append_files() {
+     printf "556f48e837bc4424a710fa2e2c9d3e3c\ne3d\n" >"${1:?}/etc/machine-id"
+ }
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-17-UDEV/test.sh b/test/TEST-17-UDEV/test.sh
+index 079ecfd..921b69f 100755
+--- a/test/TEST-17-UDEV/test.sh
++++ b/test/TEST-17-UDEV/test.sh
+@@ -10,5 +10,6 @@ TEST_NO_NSPAWN=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ QEMU_TIMEOUT=800
++QEMU_MEM="1024M"
+ 
+ do_test "$@"
+diff --git a/test/TEST-19-DELEGATE/test.sh b/test/TEST-19-DELEGATE/test.sh
+index 5623708..7592932 100755
+--- a/test/TEST-19-DELEGATE/test.sh
++++ b/test/TEST-19-DELEGATE/test.sh
+@@ -9,6 +9,7 @@ TEST_NO_NSPAWN=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ QEMU_TIMEOUT=600
++QEMU_MEM="1024M"
+ UNIFIED_CGROUP_HIERARCHY=yes
+ 
+ do_test "$@"
+diff --git a/test/TEST-24-CRYPTSETUP/test.sh b/test/TEST-24-CRYPTSETUP/test.sh
+index b81b811..481d6f7 100755
+--- a/test/TEST-24-CRYPTSETUP/test.sh
++++ b/test/TEST-24-CRYPTSETUP/test.sh
+@@ -14,6 +14,7 @@ PART_UUID="deadbeef-dead-dead-beef-000000000000"
+ DM_NAME="test24_varcrypt"
+ KERNEL_APPEND+=" rd.luks=1 luks.name=$PART_UUID=$DM_NAME luks.key=$PART_UUID=/keyfile:LABEL=varcrypt_keydev"
+ QEMU_OPTIONS+=" -drive format=raw,cache=unsafe,file=${STATEDIR:?}/keydev.img"
++QEMU_MEM="1024M"
+ 
+ check_result_qemu() {
+     local ret=1
+diff --git a/test/TEST-29-PORTABLE/test.sh b/test/TEST-29-PORTABLE/test.sh
+index 7727e7b..2b968b5 100755
+--- a/test/TEST-29-PORTABLE/test.sh
++++ b/test/TEST-29-PORTABLE/test.sh
+@@ -27,4 +27,6 @@ test_append_files() {
+     )
+ }
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-30-ONCLOCKCHANGE/test.sh b/test/TEST-30-ONCLOCKCHANGE/test.sh
+index 69dbdb2..66fdb39 100755
+--- a/test/TEST-30-ONCLOCKCHANGE/test.sh
++++ b/test/TEST-30-ONCLOCKCHANGE/test.sh
+@@ -8,4 +8,6 @@ TEST_NO_NSPAWN=1
+ # shellcheck source=test/test-functions
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-31-DEVICE-ENUMERATION/test.sh b/test/TEST-31-DEVICE-ENUMERATION/test.sh
+index 01dd874..da4c99e 100755
+--- a/test/TEST-31-DEVICE-ENUMERATION/test.sh
++++ b/test/TEST-31-DEVICE-ENUMERATION/test.sh
+@@ -9,5 +9,6 @@ TEST_NO_NSPAWN=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ QEMU_TIMEOUT=300
++QEMU_MEM="1024M"
+ 
+ do_test "$@"
+diff --git a/test/TEST-32-OOMPOLICY/test.sh b/test/TEST-32-OOMPOLICY/test.sh
+index 78c4e648..0cad078 100755
+--- a/test/TEST-32-OOMPOLICY/test.sh
++++ b/test/TEST-32-OOMPOLICY/test.sh
+@@ -9,5 +9,6 @@ TEST_NO_NSPAWN=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ UNIFIED_CGROUP_HIERARCHY=yes
++QEMU_MEM="1024M"
+ 
+ do_test "$@"
+diff --git a/test/TEST-36-NUMAPOLICY/test.sh b/test/TEST-36-NUMAPOLICY/test.sh
+index 5f38bf1..0bd1ec5 100755
+--- a/test/TEST-36-NUMAPOLICY/test.sh
++++ b/test/TEST-36-NUMAPOLICY/test.sh
+@@ -8,6 +8,8 @@ TEST_NO_NSPAWN=1
+ # shellcheck source=test/test-functions
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ if qemu_min_version "5.2.0"; then
+     QEMU_OPTIONS="-object memory-backend-ram,id=mem0,size=${QEMU_MEM:?} -numa node,memdev=mem0,nodeid=0"
+ else
+diff --git a/test/TEST-38-FREEZER/test.sh b/test/TEST-38-FREEZER/test.sh
+index da7bfc6..8d4d0f0 100755
+--- a/test/TEST-38-FREEZER/test.sh
++++ b/test/TEST-38-FREEZER/test.sh
+@@ -8,4 +8,6 @@ TEST_NO_NSPAWN=1
+ # shellcheck source=test/test-functions
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-50-DISSECT/test.sh b/test/TEST-50-DISSECT/test.sh
+index c6cd42d..85745b8 100755
+--- a/test/TEST-50-DISSECT/test.sh
++++ b/test/TEST-50-DISSECT/test.sh
+@@ -13,6 +13,7 @@ TEST_INSTALL_VERITY_MINIMAL=1
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
+ QEMU_TIMEOUT=1200
++QEMU_MEM="1024M"
+ 
+ command -v mksquashfs >/dev/null 2>&1 || exit 0
+ command -v veritysetup >/dev/null 2>&1 || exit 0
+diff --git a/test/TEST-53-ISSUE-16347/test.sh b/test/TEST-53-ISSUE-16347/test.sh
+index 7f44c66..64d1543 100755
+--- a/test/TEST-53-ISSUE-16347/test.sh
++++ b/test/TEST-53-ISSUE-16347/test.sh
+@@ -10,4 +10,6 @@ QEMU_OPTIONS="-rtc base=$(date -u +%Y-%m-%dT%H:%M:%S -d '+3 days')"
+ # shellcheck source=test/test-functions
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-58-REPART/test.sh b/test/TEST-58-REPART/test.sh
+index 362236c..a22b048 100755
+--- a/test/TEST-58-REPART/test.sh
++++ b/test/TEST-58-REPART/test.sh
+@@ -8,4 +8,6 @@ TEST_NO_NSPAWN=1
+ # shellcheck source=test/test-functions
+ . "$TEST_BASE_DIR/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-61-UNITTESTS-QEMU/test.sh b/test/TEST-61-UNITTESTS-QEMU/test.sh
+index 45c5f71..683f088 100755
+--- a/test/TEST-61-UNITTESTS-QEMU/test.sh
++++ b/test/TEST-61-UNITTESTS-QEMU/test.sh
+@@ -17,6 +17,8 @@ $KERNEL_APPEND
+ # shellcheck source=test/test-functions
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ check_result_nspawn() {
+     check_result_nspawn_unittests "${1}"
+ }
+diff --git a/test/TEST-62-RESTRICT-IFACES/test.sh b/test/TEST-62-RESTRICT-IFACES/test.sh
+index db8290b..8e65388 100755
+--- a/test/TEST-62-RESTRICT-IFACES/test.sh
++++ b/test/TEST-62-RESTRICT-IFACES/test.sh
+@@ -8,4 +8,6 @@ TEST_NO_NSPAWN=1
+ # shellcheck source=test/test-functions
+ . "$TEST_BASE_DIR/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-66-DEVICE-ISOLATION/test.sh b/test/TEST-66-DEVICE-ISOLATION/test.sh
+index 28eed2c..78dfed8 100755
+--- a/test/TEST-66-DEVICE-ISOLATION/test.sh
++++ b/test/TEST-66-DEVICE-ISOLATION/test.sh
+@@ -8,4 +8,6 @@ TEST_NO_NSPAWN=1
+ # shellcheck source=test/test-functions
+ . "${TEST_BASE_DIR:?}/test-functions"
+ 
++QEMU_MEM="1024M"
++
+ do_test "$@"
+diff --git a/test/TEST-67-INTEGRITY/test.sh b/test/TEST-67-INTEGRITY/test.sh
+index b3bc144..94b135b 100755
+--- a/test/TEST-67-INTEGRITY/test.sh
++++ b/test/TEST-67-INTEGRITY/test.sh
+@@ -6,6 +6,7 @@ TEST_DESCRIPTION="dm-integrity test"
+ 
+ TEST_NO_NSPAWN=1
+ QEMU_TIMEOUT=600
++QEMU_MEM="1024M"
+ 
+ # shellcheck source=test/test-functions
+ . "${TEST_BASE_DIR:?}/test-functions"
+diff --git a/test/TEST-70-TPM2/test.sh b/test/TEST-70-TPM2/test.sh
+index d716614..60e8dda 100755
+--- a/test/TEST-70-TPM2/test.sh
++++ b/test/TEST-70-TPM2/test.sh
+@@ -36,5 +36,6 @@ tpmstate=$(mktemp -d)
+ swtpm socket --tpm2 --tpmstate dir="$tpmstate" --ctrl type=unixio,path="$tpmstate/sock" &
+ trap 'kill %%; rm -rf $tpmstate' SIGINT EXIT
+ QEMU_OPTIONS="-chardev socket,id=chrtpm,path=$tpmstate/sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device $tpmdevice,tpmdev=tpm0"
++QEMU_MEM="1024M"
+ 
+ do_test "$@"

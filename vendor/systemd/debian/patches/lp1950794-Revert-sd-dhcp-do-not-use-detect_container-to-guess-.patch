@@ -8,19 +8,20 @@ This reverts commit 0299deab53d2a087727a5d04c1500c322c48b63e.
  src/libsystemd-network/dhcp-identifier.c | 5 ++---
  1 file changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/src/libsystemd-network/dhcp-identifier.c b/src/libsystemd-network/dhcp-identifier.c
-index 3313e53..d7813de 100644
 --- a/src/libsystemd-network/dhcp-identifier.c
 +++ b/src/libsystemd-network/dhcp-identifier.c
-@@ -12,7 +12,6 @@
- #include "network-util.h"
+@@ -11,9 +11,9 @@
+ #include "netif-util.h"
  #include "siphash24.h"
  #include "sparse-endian.h"
 -#include "stat-util.h"
- #include "stdio-util.h"
+ #include "string-table.h"
  #include "udev-util.h"
- #include "virt.h"
-@@ -172,8 +171,8 @@ int dhcp_identifier_set_iaid(
++#include "virt.h"
+ 
+ #define HASH_KEY       SD_ID128_MAKE(80,11,8c,c2,fe,4a,03,ee,3e,d6,0c,6f,36,39,14,09)
+ #define APPLICATION_ID SD_ID128_MAKE(a5,0a,d1,12,bf,60,45,77,a2,fb,74,1a,b1,95,5b,03)
+@@ -213,8 +213,8 @@
          uint64_t id;
          int r;
  

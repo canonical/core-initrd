@@ -2,13 +2,14 @@
 title: Hacking on systemd
 category: Contributing
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 # Hacking on systemd
 
 We welcome all contributions to systemd. If you notice a bug or a missing
-feature, please feel invited to fix it, and submit your work as a GitHub Pull
-Request (PR) at https://github.com/systemd/systemd/pull/new.
+feature, please feel invited to fix it, and submit your work as a
+[GitHub Pull Request (PR)](https://github.com/systemd/systemd/pull/new).
 
 Please make sure to follow our [Coding Style](CODING_STYLE.md) when submitting
 patches. Also have a look at our [Contribution Guidelines](CONTRIBUTING.md).
@@ -26,31 +27,29 @@ Please also have a look at our list of [code quality tools](CODE_QUALITY.md) we
 have setup for systemd, to ensure our codebase stays in good shape.
 
 Please always test your work before submitting a PR. For many of the components
-of systemd testing is straight-forward as you can simply compile systemd and
+of systemd testing is straightforward as you can simply compile systemd and
 run the relevant tool from the build directory.
 
-For some components (most importantly, systemd/PID1 itself) this is not
+For some components (most importantly, systemd/PID 1 itself) this is not
 possible, however. In order to simplify testing for cases like this we provide
-a set of `mkosi` build files directly in the source tree. `mkosi` is a tool for
-building clean OS images from an upstream distribution in combination with a
-fresh build of the project in the local working directory. To make use of this,
-please acquire `mkosi` from https://github.com/systemd/mkosi first, unless your
-distribution has packaged it already and you can get it from there. After the
-tool is installed, symlink the settings file for your distribution of choice
-from .mkosi/ to mkosi.default in the project root directory (note that the
-package manager for this distro needs to be installed on your host system).
-After doing that, it is sufficient to type `mkosi` in the systemd project
-directory to generate a disk image `image.raw` you can boot either in
-`systemd-nspawn` or in an UEFI-capable VM:
+a set of `mkosi` build files directly in the source tree.
+[mkosi](https://github.com/systemd/mkosi) is a tool for building clean OS images
+from an upstream distribution in combination with a fresh build of the project
+in the local working directory. To make use of this, please install the
+`mkosi` package (if not packaged for your distro, it can be downloaded from
+the [GitHub repository](https://github.com/systemd/mkosi). `mkosi` will build an
+image for the host distro by default. It is sufficient to type `mkosi` in the
+systemd project directory to generate a disk image `image.raw` you can boot either
+in `systemd-nspawn` or in an UEFI-capable VM:
 
-```
-# mkosi boot
+```sh
+$ mkosi boot
 ```
 
 or:
 
-```
-# mkosi qemu
+```sh
+$ mkosi qemu
 ```
 
 Every time you rerun the `mkosi` command a fresh image is built, incorporating
@@ -73,33 +72,39 @@ Cache=<full-path-to-package-manager-cache> # (e.g. /var/cache/dnf)
 
 If you want to do a local build without mkosi, most distributions also provide
 very simple and convenient ways to install all development packages necessary
-to build systemd. For example, on Fedora the following command line should be
-sufficient to install all of systemd's build dependencies:
+to build systemd:
 
-```
-# dnf builddep systemd
+```sh
+# Fedora
+$ sudo dnf builddep systemd
+# Debian/Ubuntu
+$ sudo apt-get build-dep systemd
+# Arch
+$ sudo pacman install asp
+$ asp checkout systemd
+$ cd systemd/trunk
+$ makepkg -seoc
 ```
 
 Putting this all together, here's a series of commands for preparing a patch
-for systemd (this example is for Fedora):
+for systemd:
 
 ```sh
-$ sudo dnf builddep systemd               # install build dependencies
-$ sudo dnf install mkosi                  # install tool to quickly build images
+# Install build dependencies (see above)
+# Install a recent version of mkosi (either via your distro's package manager if
+# available there or from the github repository otherwise)
 $ git clone https://github.com/systemd/systemd.git
 $ cd systemd
-$ vim src/core/main.c                     # or wherever you'd like to make your changes
-$ meson build                             # configure the build
-$ meson compile -C build                  # build it locally, see if everything compiles fine
-$ meson test -C build                     # run some simple regression tests
-$ ln -s .mkosi/mkosi.fedora mkosi.default # Configure mkosi to build a fedora image
-$ sudo mkosi                              # build a test image
-$ sudo mkosi boot                         # boot up the test image
-$ git add -p                              # interactively put together your patch
-$ git commit                              # commit it
-$ git push REMOTE HEAD:refs/heads/BRANCH
-                                          # where REMOTE is your "fork" on GitHub
-                                          # and BRANCH is a branch name.
+$ git checkout -b <BRANCH>        # where BRANCH is the name of the branch
+$ vim src/core/main.c             # or wherever you'd like to make your changes
+$ meson build                     # configure the build
+$ ninja -C build                  # build it locally, see if everything compiles fine
+$ meson test -C build             # run some simple regression tests
+$ sudo mkosi                      # build a test image
+$ sudo mkosi boot                 # boot up the test image
+$ git add -p                      # interactively put together your patch
+$ git commit                      # commit it
+$ git push -u <REMOTE>            # where REMOTE is your "fork" on GitHub
 ```
 
 And after that, head over to your repo on GitHub and click "Compare & pull request"
@@ -245,3 +250,123 @@ the cached images are initialized (`mkosi -i`).
 
 Now, your editor will start clangd in the mkosi build image and all of clangd's features will work as
 expected.
+
+## Debugging systemd with mkosi + vscode
+
+To simplify debugging systemd when testing changes using mkosi, we're going to show how to attach
+[VSCode](https://code.visualstudio.com/)'s debugger to an instance of systemd running in a mkosi image
+(either using QEMU or systemd-nspawn).
+
+To allow VSCode's debugger to attach to systemd running in a mkosi image, we have to make sure it can access
+the container/virtual machine spawned by mkosi where systemd is running. mkosi makes this possible via a
+handy SSH option that makes the generated image accessible via SSH when booted. The easiest way to set the
+option is to create a file 20-local.conf in mkosi.default.d/ and add the following contents:
+
+```
+[Host]
+Ssh=yes
+```
+
+Next, make sure systemd-networkd is running on the host system so that it can configure the network interface
+connecting the host system to the container/VM spawned by mkosi. Once systemd-networkd is running, you should
+be able to connect to a running mkosi image by executing `mkosi ssh` in the systemd repo directory.
+
+Now we need to configure VSCode. First, make sure the C/C++ extension is installed. If you're already using
+a different extension for code completion and other IDE features for C in VSCode, make sure to disable the
+corresponding parts of the C/C++ extension in your VSCode user settings by adding the following entries:
+
+```json
+"C_Cpp.formatting": "Disabled",
+"C_Cpp.intelliSenseEngine": "Disabled",
+"C_Cpp.enhancedColorization": "Disabled",
+"C_Cpp.suggestSnippets": false,
+```
+
+With the extension set up, we can create the launch.json file in the .vscode/ directory to tell the VSCode
+debugger how to attach to the systemd instance running in our mkosi container/VM. Create the file and add the
+following contents:
+
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cppdbg",
+            "program": "/usr/lib/systemd/systemd",
+            "processId": "${command:pickRemoteProcess}",
+            "request": "attach",
+            "name": "systemd",
+            "pipeTransport": {
+                "pipeProgram": "mkosi",
+                "pipeArgs": [
+                    "-C",
+                    "/path/to/systemd/repo/directory/on/host/system/",
+                    "ssh"
+                ],
+                "debuggerPath": "/usr/bin/gdb"
+            },
+            "MIMode": "gdb",
+            "sourceFileMap": {
+                "/root/build/../src": {
+                    "editorPath": "${workspaceFolder}",
+                    "useForBreakpoints": false
+                },
+                "/root/build/*": {
+                    "editorPath": "${workspaceFolder}/mkosi.builddir",
+                    "useForBreakpoints": false
+                }
+            }
+        }
+    ]
+}
+```
+
+Now that the debugger knows how to connect to our process in the container/VM and we've set up the necessary
+source mappings, go to the "Run and Debug" window and run the "systemd" debug configuration. If everything
+goes well, the debugger should now be attached to the systemd instance running in the container/VM. You can
+attach breakpoints from the editor and enjoy all the other features of VSCode's debugger.
+
+To debug systemd components other than PID 1, set "program" to the full path of the component you want to
+debug and set "processId" to "${command:pickProcess}". Now, when starting the debugger, VSCode will ask you
+the PID of the process you want to debug. Run `systemctl show --property MainPID --value <component>` in the
+container to figure out the PID and enter it when asked and VSCode will attach to that process instead.
+
+## Debugging systemd-boot
+
+During boot, systemd-boot and the stub loader will output a message like `systemd-boot@0x0A,0x0B`,
+providing the location of the text and data sections. These location can then be used to attach
+to a QEMU session (provided it was run with `-s`) with these gdb commands:
+
+```
+    (gdb) file build/src/boot/efi/systemd-bootx64.efi
+    (gdb) add-symbol-file build/src/boot/efi/systemd_boot.so 0x0A -s .data 0x0B
+    (gdb) set architecture i386:x86-64
+    (gdb) target remote :1234
+```
+
+This process can be automated by using the `debug-sd-boot.sh` script in the tools folder. If run
+without arguments it will provide usage information.
+
+If the debugger is too slow to attach to examine an early boot code passage, we can uncomment the
+call to `debug_break()` inside of `efi_main()`. As soon as the debugger has control we can then run
+`set variable wait = 0` or `return` to continue. Once the debugger has attached, setting breakpoints
+will work like usual.
+
+To debug systemd-boot in an IDE such as VSCode we can use a launch configuration like this:
+```json
+{
+    "name": "systemd-boot",
+    "type": "cppdbg",
+    "request": "launch",
+    "program": "${workspaceFolder}/build/src/boot/efi/systemd-bootx64.efi",
+    "cwd": "${workspaceFolder}",
+    "MIMode": "gdb",
+    "miDebuggerServerAddress": ":1234",
+    "setupCommands": [
+        { "text": "shell mkfifo /tmp/sdboot.{in,out}" },
+        { "text": "shell qemu-system-x86_64 [...] -s -serial pipe:/tmp/sdboot" },
+        { "text": "shell ${workspaceFolder}/tools/debug-sd-boot.sh ${workspaceFolder}/build/src/boot/efi/systemd-bootx64.efi /tmp/sdboot.out systemd-boot.gdb" },
+        { "text": "source /tmp/systemd-boot.gdb" },
+    ]
+}
+```

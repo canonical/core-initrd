@@ -1,0 +1,11 @@
+etc/systemd/homed.conf
+lib/*/security/pam_systemd_home.so
+lib/systemd/systemd-homed
+lib/systemd/systemd-homework
+lib/systemd/system/systemd-homed.service
+lib/systemd/system/systemd-homed-activate.service
+usr/bin/homectl
+usr/share/dbus-1/*/*home*
+usr/share/polkit-1/actions/org.freedesktop.home1.policy
+usr/share/bash-completion/completions/homectl
+../extra/pam-configs/systemd-homed usr/share/pam-configs/

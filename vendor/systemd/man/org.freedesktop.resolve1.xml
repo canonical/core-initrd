@@ -506,7 +506,7 @@ node /org/freedesktop/resolve1 {
         <filename>/etc/hosts</filename>. Moreover, it is set for all LLMNR or mDNS RRs which originate from
         the local host. Applications that require authenticated RR data for operation should check this flag
         before trusting the data. Note that <filename>systemd-resolved</filename> will never return
-        invalidated data, hence this flag simply allows to discern the cases where data is known to be
+        invalidated data, hence this flag simply allows one to discern the cases where data is known to be
         trusted, or where there is proof that the data is "rightfully" unauthenticated (which includes cases
         where the underlying protocol or server does not support authenticating data).</para>
 
@@ -891,10 +891,5 @@ $ gdbus introspect --system \
     </example>
   </refsect1>
 
-  <refsect1>
-    <title>Versioning</title>
-
-    <para>These D-Bus interfaces follow <ulink url="http://0pointer.de/blog/projects/versioning-dbus.html">
-    the usual interface versioning guidelines</ulink>.</para>
-  </refsect1>
+  <xi:include href="org.freedesktop.locale1.xml" xpointer="versioning"/>
 </refentry>

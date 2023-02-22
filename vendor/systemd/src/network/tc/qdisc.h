@@ -3,10 +3,11 @@
 #pragma once
 
 #include "conf-parser.h"
-#include "networkd-link.h"
-#include "networkd-network.h"
 #include "networkd-util.h"
-#include "tc.h"
+
+typedef struct Link Link;
+typedef struct Manager Manager;
+typedef struct Network Network;
 
 typedef enum QDiscKind {
         QDISC_KIND_BFIFO,
@@ -35,12 +36,12 @@ typedef enum QDiscKind {
 } QDiscKind;
 
 typedef struct QDisc {
-        TrafficControl meta;
-
-        NetworkConfigSection *section;
+        Link *link;
         Network *network;
+        ConfigSection *section;
+        NetworkConfigSource source;
+        NetworkConfigState state;
 
-        int family;
         uint32_t handle;
         uint32_t parent;
 
@@ -53,7 +54,6 @@ typedef struct QDiscVTable {
         const char *tca_kind;
         /* called in qdisc_new() */
         int (*init)(QDisc *qdisc);
-        int (*fill_tca_kind)(Link *link, QDisc *qdisc, sd_netlink_message *m);
         int (*fill_message)(Link *link, QDisc *qdisc, sd_netlink_message *m);
         int (*verify)(QDisc *qdisc);
 } QDiscVTable;
@@ -71,18 +71,20 @@ extern const QDiscVTable * const qdisc_vtable[_QDISC_KIND_MAX];
                 return (MixedCase*) q;                                    \
         }
 
-/* For casting the various qdisc kinds into a qdisc */
-#define QDISC(q) (&(q)->meta)
+DEFINE_NETWORK_CONFIG_STATE_FUNCTIONS(QDisc, qdisc);
 
 QDisc* qdisc_free(QDisc *qdisc);
 int qdisc_new_static(QDiscKind kind, Network *network, const char *filename, unsigned section_line, QDisc **ret);
 
-int qdisc_configure(Link *link, QDisc *qdisc);
-int qdisc_section_verify(QDisc *qdisc, bool *has_root, bool *has_clsact);
+int link_find_qdisc(Link *link, uint32_t handle, uint32_t parent, const char *kind, QDisc **qdisc);
 
-DEFINE_NETWORK_SECTION_FUNCTIONS(QDisc, qdisc_free);
+int link_request_qdisc(Link *link, QDisc *qdisc);
 
-DEFINE_TC_CAST(QDISC, QDisc);
+void network_drop_invalid_qdisc(Network *network);
+
+int manager_rtnl_process_qdisc(sd_netlink *rtnl, sd_netlink_message *message, Manager *m);
+
+DEFINE_SECTION_CLEANUP_FUNCTIONS(QDisc, qdisc_free);
 
 CONFIG_PARSER_PROTOTYPE(config_parse_qdisc_parent);
 CONFIG_PARSER_PROTOTYPE(config_parse_qdisc_handle);

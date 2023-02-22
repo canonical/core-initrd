@@ -7,8 +7,8 @@
 
 #include "sd-event.h"
 
-#include "fs-util.h"
 #include "hashmap.h"
+#include "inotify-util.h"
 #include "list.h"
 #include "prioq.h"
 #include "ratelimit.h"
@@ -71,6 +71,7 @@ struct sd_event_source {
         uint64_t prepare_iteration;
 
         sd_event_destroy_t destroy_callback;
+        sd_event_handler_t ratelimit_expire_callback;
 
         LIST_FIELDS(sd_event_source, sources);
 

@@ -90,6 +90,20 @@
     <variablelist class='unit-directives'>
 
       <varlistentry>
+        <term><varname>ExecSearchPath=</varname></term>
+
+        <listitem><para>Takes a colon separated list of absolute paths relative to which the executable
+        used by the <varname>Exec*=</varname> (e.g. <varname>ExecStart=</varname>,
+        <varname>ExecStop=</varname>, etc.) properties can be found. <varname>ExecSearchPath=</varname>
+        overrides <varname>$PATH</varname> if <varname>$PATH</varname> is not supplied by the user through
+        <varname>Environment=</varname>, <varname>EnvironmentFile=</varname> or
+        <varname>PassEnvironment=</varname>. Assigning an empty string removes previous assignments
+        and setting <varname>ExecSearchPath=</varname> to a value multiple times will append
+        to the previous setting.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><varname>WorkingDirectory=</varname></term>
 
         <listitem><para>Takes a directory path relative to the service's root directory specified by
@@ -131,7 +145,7 @@
           <programlisting>BindReadOnlyPaths=/dev/log /run/systemd/journal/socket /run/systemd/journal/stdout</programlisting>
         </example>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -262,9 +276,7 @@
 
         <para>In order to allow propagating mounts at runtime in a safe manner, <filename>/run/systemd/propagate</filename>
         on the host will be used to set up new mounts, and <filename>/run/host/incoming/</filename> in the private namespace
-        will be used as an intermediate step to store them before being moved to the final mount point.</para>
-
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        will be used as an intermediate step to store them before being moved to the final mount point.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -350,9 +362,7 @@
         <varname>InaccessiblePaths=</varname>, or under <filename>/home/</filename> and other protected
         directories if <varname>ProtectHome=yes</varname> is
         specified. <varname>TemporaryFileSystem=</varname> with <literal>:ro</literal> or
-        <varname>ProtectHome=tmpfs</varname> should be used instead.</para>
-
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <varname>ProtectHome=tmpfs</varname> should be used instead.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -428,6 +438,11 @@
         paths. If the empty string is assigned, the entire list of mount paths defined prior to this is
         reset.</para>
 
+        <para>Each image must carry a <filename>/usr/lib/extension-release.d/extension-release.IMAGE</filename>
+        file, with the appropriate metadata which matches <varname>RootImage=</varname>/<varname>RootDirectory=</varname>
+        or the host. See:
+        <citerefentry><refentrytitle>os-release</refentrytitle><manvolnum>5</manvolnum></citerefentry>.</para>
+
         <para>When <varname>DevicePolicy=</varname> is set to <literal>closed</literal> or
         <literal>strict</literal>, or set to <literal>auto</literal> and <varname>DeviceAllow=</varname> is
         set, then this setting adds <filename>/dev/loop-control</filename> with <constant>rw</constant> mode,
@@ -439,6 +454,37 @@
         <varname>DevicePolicy=</varname>.</para>
 
         <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>ExtensionDirectories=</varname></term>
+
+        <listitem><para>This setting is similar to <varname>BindReadOnlyPaths=</varname> in that it mounts a file
+        system hierarchy from a directory, but instead of providing a destination path, an overlay will be set
+        up. This option expects a whitespace separated list of source directories.</para>
+
+        <para>A read-only OverlayFS will be set up on top of <filename>/usr/</filename> and
+        <filename>/opt/</filename> hierarchies. The order in which the directories are listed will determine
+        the order in which the overlay is laid down: directories specified first to last will result in overlayfs
+        layers bottom to top.</para>
+
+        <para>Each directory listed in <varname>ExtensionDirectories=</varname> may be prefixed with <literal>-</literal>,
+        in which case it will be ignored when its source path does not exist. Any mounts created with this option are
+        specific to the unit, and are not visible in the host's mount table.</para>
+
+        <para>These settings may be used more than once, each usage appends to the unit's list of directories
+        paths. If the empty string is assigned, the entire list of mount paths defined prior to this is
+        reset.</para>
+
+        <para>Each directory must contain a <filename>/usr/lib/extension-release.d/extension-release.IMAGE</filename>
+        file, with the appropriate metadata which matches <varname>RootImage=</varname>/<varname>RootDirectory=</varname>
+        or the host. See:
+        <citerefentry><refentrytitle>os-release</refentrytitle><manvolnum>5</manvolnum></citerefentry>.</para>
+
+        <para>Note that usage from user units requires overlayfs support in unprivileged user namespaces,
+        which was first introduced in kernel v5.11.</para>
+
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
     </variablelist>
   </refsect1>
@@ -583,7 +629,7 @@
   <refsect1>
     <title>Capabilities</title>
 
-    <xi:include href="system-only.xml" xpointer="plural"/>
+    <xi:include href="system-or-user-ns.xml" xpointer="plural"/>
 
     <variablelist class='unit-directives'>
 
@@ -711,10 +757,13 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
 
         <listitem><para>Set the SELinux security context of the executed process. If set, this will override the
         automated domain transition. However, the policy still needs to authorize the transition. This directive is
-        ignored if SELinux is disabled. If prefixed by <literal>-</literal>, all errors will be ignored. This does not
-        affect commands prefixed with <literal>+</literal>.  See <citerefentry
-        project='die-net'><refentrytitle>setexeccon</refentrytitle><manvolnum>3</manvolnum></citerefentry> for
-        details.</para></listitem>
+        ignored if SELinux is disabled. If prefixed by <literal>-</literal>, failing to set the SELinux
+        security context will be ignored, but it's still possible that the subsequent
+        <function>execve()</function> may fail if the policy doesn't allow the transition for the
+        non-overridden context. This does not affect commands prefixed with <literal>+</literal>.  See
+        <citerefentry
+        project='die-net'><refentrytitle>setexeccon</refentrytitle><manvolnum>3</manvolnum></citerefentry>
+        for details.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -770,13 +819,13 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
 
         <listitem><para>Set soft and hard limits on various resources for executed processes. See
         <citerefentry><refentrytitle>setrlimit</refentrytitle><manvolnum>2</manvolnum></citerefentry> for
-        details on the resource limit concept. Resource limits may be specified in two formats: either as
-        single value to set a specific soft and hard limit to the same value, or as colon-separated pair
-        <option>soft:hard</option> to set both limits individually (e.g. <literal>LimitAS=4G:16G</literal>).
-        Use the string <option>infinity</option> to configure no limit on a specific resource. The
-        multiplicative suffixes K, M, G, T, P and E (to the base 1024) may be used for resource limits
-        measured in bytes (e.g. <literal>LimitAS=16G</literal>). For the limits referring to time values, the
-        usual time units ms, s, min, h and so on may be used (see
+        details on the process resource limit concept. Process resource limits may be specified in two formats:
+        either as single value to set a specific soft and hard limit to the same value, or as colon-separated
+        pair <option>soft:hard</option> to set both limits individually
+        (e.g. <literal>LimitAS=4G:16G</literal>).  Use the string <option>infinity</option> to configure no
+        limit on a specific resource. The multiplicative suffixes K, M, G, T, P and E (to the base 1024) may
+        be used for resource limits measured in bytes (e.g. <literal>LimitAS=16G</literal>). For the limits
+        referring to time values, the usual time units ms, s, min, h and so on may be used (see
         <citerefentry><refentrytitle>systemd.time</refentrytitle><manvolnum>7</manvolnum></citerefentry> for
         details). Note that if no time unit is specified for <varname>LimitCPU=</varname> the default unit of
         seconds is implied, while for <varname>LimitRTTIME=</varname> the default unit of microseconds is
@@ -796,6 +845,14 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
         over these per-process limits, as they apply to services as a whole, may be altered dynamically at
         runtime, and are generally more expressive. For example, <varname>MemoryMax=</varname> is a more
         powerful (and working) replacement for <varname>LimitRSS=</varname>.</para>
+
+        <para>Note that <varname>LimitNPROC=</varname> will limit the number of processes from one (real) UID and
+        not the number of processes started (forked) by the service. Therefore the limit is cumulative for all
+        processes running under the same UID. Please also note that the <varname>LimitNPROC=</varname> will not be
+        enforced if the service is running as root (and not dropping privileges). Due to these limitations,
+        <varname>TasksMax=</varname> (see <citerefentry><refentrytitle>systemd.resource-control</refentrytitle>
+        <manvolnum>5</manvolnum></citerefentry>) is typically a better choice than <varname>LimitNPROC=</varname>.
+        </para>
 
         <para>Resource limits not configured explicitly for a unit default to the value configured in the various
         <varname>DefaultLimitCPU=</varname>, <varname>DefaultLimitFSIZE=</varname>, … options available in
@@ -818,15 +875,17 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
         <table>
           <title>Resource limit directives, their equivalent <command>ulimit</command> shell commands and the unit used</title>
 
-          <tgroup cols='3'>
+          <tgroup cols='4'>
             <colspec colname='directive' />
             <colspec colname='equivalent' />
             <colspec colname='unit' />
+            <colspec colname='notes' />
             <thead>
               <row>
                 <entry>Directive</entry>
                 <entry><command>ulimit</command> equivalent</entry>
                 <entry>Unit</entry>
+                <entry>Notes</entry>
               </row>
             </thead>
             <tbody>
@@ -834,81 +893,97 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
                 <entry>LimitCPU=</entry>
                 <entry>ulimit -t</entry>
                 <entry>Seconds</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitFSIZE=</entry>
                 <entry>ulimit -f</entry>
                 <entry>Bytes</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitDATA=</entry>
                 <entry>ulimit -d</entry>
                 <entry>Bytes</entry>
+                <entry>Don't use. This limits the allowed address range, not memory use! Defaults to unlimited and should not be lowered. To limit memory use, see <varname>MemoryMax=</varname> in <citerefentry><refentrytitle>systemd.resource-control</refentrytitle><manvolnum>5</manvolnum></citerefentry>.</entry>
               </row>
               <row>
                 <entry>LimitSTACK=</entry>
                 <entry>ulimit -s</entry>
                 <entry>Bytes</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitCORE=</entry>
                 <entry>ulimit -c</entry>
                 <entry>Bytes</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitRSS=</entry>
                 <entry>ulimit -m</entry>
                 <entry>Bytes</entry>
+                <entry>Don't use. No effect on Linux.</entry>
               </row>
               <row>
                 <entry>LimitNOFILE=</entry>
                 <entry>ulimit -n</entry>
                 <entry>Number of File Descriptors</entry>
+                <entry>Don't use. Be careful when raising the soft limit above 1024, since <function>select()</function> cannot function with file descriptors above 1023 on Linux. Nowadays, the hard limit defaults to 524288, a very high value compared to historical defaults. Typically applications should increase their soft limit to the hard limit on their own, if they are OK with working with file descriptors above 1023, i.e. do not use <function>select()</function>. Note that file descriptors are nowadays accounted like any other form of memory, thus there should not be any need to lower the hard limit. Use <varname>MemoryMax=</varname> to control overall service memory use, including file descriptor memory.</entry>
               </row>
               <row>
                 <entry>LimitAS=</entry>
                 <entry>ulimit -v</entry>
                 <entry>Bytes</entry>
+                <entry>Don't use. This limits the allowed address range, not memory use! Defaults to unlimited and should not be lowered. To limit memory use, see <varname>MemoryMax=</varname> in <citerefentry><refentrytitle>systemd.resource-control</refentrytitle><manvolnum>5</manvolnum></citerefentry>.</entry>
               </row>
               <row>
                 <entry>LimitNPROC=</entry>
                 <entry>ulimit -u</entry>
                 <entry>Number of Processes</entry>
+                <entry>This limit is enforced based on the number of processes belonging to the user. Typically it's better to track processes per service, i.e. use <varname>TasksMax=</varname>, see <citerefentry><refentrytitle>systemd.resource-control</refentrytitle><manvolnum>5</manvolnum></citerefentry>.</entry>
               </row>
               <row>
                 <entry>LimitMEMLOCK=</entry>
                 <entry>ulimit -l</entry>
                 <entry>Bytes</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitLOCKS=</entry>
                 <entry>ulimit -x</entry>
                 <entry>Number of Locks</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitSIGPENDING=</entry>
                 <entry>ulimit -i</entry>
                 <entry>Number of Queued Signals</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitMSGQUEUE=</entry>
                 <entry>ulimit -q</entry>
                 <entry>Bytes</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitNICE=</entry>
                 <entry>ulimit -e</entry>
                 <entry>Nice Level</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitRTPRIO=</entry>
                 <entry>ulimit -r</entry>
                 <entry>Realtime Priority</entry>
+                <entry>-</entry>
               </row>
               <row>
                 <entry>LimitRTTIME=</entry>
-                <entry>No equivalent</entry>
+                <entry>ulimit -R</entry>
                 <entry>Microseconds</entry>
+                <entry>-</entry>
               </row>
             </tbody>
           </tgroup>
@@ -990,7 +1065,7 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
         normally at 0.</para>
 
         <para>Use the <varname>OOMPolicy=</varname> setting of service units to configure how the service
-        manager shall react to the kernel OOM killer terminating a process of the service.  See
+        manager shall react to the kernel OOM killer or <command>systemd-oomd</command> terminating a process of the service.  See
         <citerefentry><refentrytitle>systemd.service</refentrytitle><manvolnum>5</manvolnum></citerefentry>
         for details.</para></listitem>
       </varlistentry>
@@ -1118,10 +1193,11 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
       <varlistentry>
         <term><varname>IOSchedulingClass=</varname></term>
 
-        <listitem><para>Sets the I/O scheduling class for executed processes. Takes an integer between 0 and 3 or one
-        of the strings <option>none</option>, <option>realtime</option>, <option>best-effort</option> or
-        <option>idle</option>. If the empty string is assigned to this option, all prior assignments to both
-        <varname>IOSchedulingClass=</varname> and <varname>IOSchedulingPriority=</varname> have no effect. See
+        <listitem><para>Sets the I/O scheduling class for executed processes. Takes one of the strings
+        <option>realtime</option>, <option>best-effort</option> or <option>idle</option>. The kernel's
+        default scheduling class is <option>best-effort</option> at a priority of 4. If the empty string is
+        assigned to this option, all prior assignments to both <varname>IOSchedulingClass=</varname> and
+        <varname>IOSchedulingPriority=</varname> have no effect. See
         <citerefentry><refentrytitle>ioprio_set</refentrytitle><manvolnum>2</manvolnum></citerefentry> for
         details.</para></listitem>
       </varlistentry>
@@ -1134,7 +1210,8 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
         bandwidth is made available to the unit's processes, larger values mean less bandwidth. The available
         priorities depend on the selected I/O scheduling class (see above). If the empty string is assigned
         to this option, all prior assignments to both <varname>IOSchedulingClass=</varname> and
-        <varname>IOSchedulingPriority=</varname> have no effect.  See
+        <varname>IOSchedulingPriority=</varname> have no effect. For the kernel's default scheduling class
+        (<option>best-effort</option>) this defaults to 4. See
         <citerefentry><refentrytitle>ioprio_set</refentrytitle><manvolnum>2</manvolnum></citerefentry> for
         details.</para></listitem>
       </varlistentry>
@@ -1207,7 +1284,7 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
         <varname>DynamicUser=</varname> is set. This setting cannot ensure protection in all cases. In
         general it has the same limitations as <varname>ReadOnlyPaths=</varname>, see below.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1308,6 +1385,13 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
         configuration or lifetime guarantees, please consider using
         <citerefentry><refentrytitle>tmpfiles.d</refentrytitle><manvolnum>5</manvolnum></citerefentry>.</para>
 
+        <para><varname>RuntimeDirectory=</varname>, <varname>StateDirectory=</varname>, <varname>CacheDirectory=</varname>
+        and <varname>LogsDirectory=</varname>  optionally support a second parameter, separated by <literal>:</literal>.
+        The second parameter will be interpreted as a destination path that will be created as a symlink to the directory.
+        The symlinks will be created after any <varname>BindPaths=</varname> or <varname>TemporaryFileSystem=</varname>
+        options have been set up, to make ephemeral symlinking possible. The same source can have multiple symlinks, by
+        using the same first parameter, but a different second parameter.</para></listitem>
+
         <para>The directories defined by these options are always created under the standard paths used by systemd
         (<filename>/var/</filename>, <filename>/run/</filename>, <filename>/etc/</filename>, …). If the service needs
         directories in a different location, a different mechanism has to be used to create them.</para>
@@ -1336,7 +1420,13 @@ CapabilityBoundingSet=~CAP_B CAP_C</programlisting>
         <programlisting>RuntimeDirectory=foo/bar
 StateDirectory=aaa/bbb ccc</programlisting>
         then the environment variable <literal>RUNTIME_DIRECTORY</literal> is set with <literal>/run/foo/bar</literal>, and
-        <literal>STATE_DIRECTORY</literal> is set with <literal>/var/lib/aaa/bbb:/var/lib/ccc</literal>.</para></listitem>
+        <literal>STATE_DIRECTORY</literal> is set with <literal>/var/lib/aaa/bbb:/var/lib/ccc</literal>.</para>
+
+        <para>Example: if a system service unit has the following,
+        <programlisting>RuntimeDirectory=foo:bar foo:baz</programlisting>
+        the service manager creates <filename index='false'>/run/foo</filename> (if it does not exist), and
+        <filename index='false'>/run/bar</filename> plus <filename index='false'>/run/baz</filename> as symlinks to
+        <filename index='false'>/run/foo</filename>.</para>
       </varlistentry>
 
       <varlistentry>
@@ -1448,7 +1538,7 @@ NoExecPaths=/
 ExecPaths=/usr/sbin/my_daemon /usr/lib /usr/lib64
 </programlisting></para>
 
-        <xi:include href="system-only.xml" xpointer="plural"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="plural"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1473,7 +1563,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         then the invoked processes by the unit cannot see any files or directories under <filename>/var/</filename> except for
         <filename>/var/lib/systemd</filename> or its contents.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1501,39 +1591,46 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         available), and the unit should be written in a way that does not solely rely on this setting for
         security.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
         <term><varname>PrivateDevices=</varname></term>
 
-        <listitem><para>Takes a boolean argument. If true, sets up a new <filename>/dev/</filename> mount for the
-        executed processes and only adds API pseudo devices such as <filename>/dev/null</filename>,
-        <filename>/dev/zero</filename> or <filename>/dev/random</filename> (as well as the pseudo TTY subsystem) to it,
-        but no physical devices such as <filename>/dev/sda</filename>, system memory <filename>/dev/mem</filename>,
-        system ports <filename>/dev/port</filename> and others. This is useful to securely turn off physical device
-        access by the executed process. Defaults to false. Enabling this option will install a system call filter to
-        block low-level I/O system calls that are grouped in the <varname>@raw-io</varname> set, will also remove
-        <constant>CAP_MKNOD</constant> and <constant>CAP_SYS_RAWIO</constant> from the capability bounding set for the
-        unit (see above), and set <varname>DevicePolicy=closed</varname> (see
+        <listitem><para>Takes a boolean argument. If true, sets up a new <filename>/dev/</filename> mount for
+        the executed processes and only adds API pseudo devices such as <filename>/dev/null</filename>,
+        <filename>/dev/zero</filename> or <filename>/dev/random</filename> (as well as the pseudo TTY
+        subsystem) to it, but no physical devices such as <filename>/dev/sda</filename>, system memory
+        <filename>/dev/mem</filename>, system ports <filename>/dev/port</filename> and others. This is useful
+        to turn off physical device access by the executed process. Defaults to false.</para>
+
+        <para>Enabling this option will install a system call filter to block low-level I/O system calls that
+        are grouped in the <varname>@raw-io</varname> set, remove <constant>CAP_MKNOD</constant> and
+        <constant>CAP_SYS_RAWIO</constant> from the capability bounding set for the unit, and set
+        <varname>DevicePolicy=closed</varname> (see
         <citerefentry><refentrytitle>systemd.resource-control</refentrytitle><manvolnum>5</manvolnum></citerefentry>
-        for details). Note that using this setting will disconnect propagation of mounts from the service to the host
-        (propagation in the opposite direction continues to work). This means that this setting may not be used for
-        services which shall be able to install mount points in the main mount namespace. The new
-        <filename>/dev/</filename> will be mounted read-only and 'noexec'. The latter may break old programs which try
-        to set up executable memory by using
+        for details). Note that using this setting will disconnect propagation of mounts from the service to
+        the host (propagation in the opposite direction continues to work). This means that this setting may
+        not be used for services which shall be able to install mount points in the main mount namespace. The
+        new <filename>/dev/</filename> will be mounted read-only and 'noexec'. The latter may break old
+        programs which try to set up executable memory by using
         <citerefentry><refentrytitle>mmap</refentrytitle><manvolnum>2</manvolnum></citerefentry> of
-        <filename>/dev/zero</filename> instead of using <constant>MAP_ANON</constant>. For this setting the same
-        restrictions regarding mount propagation and privileges apply as for <varname>ReadOnlyPaths=</varname> and
-        related calls, see above. If turned on and if running in user mode, or in system mode, but without the
-        <constant>CAP_SYS_ADMIN</constant> capability (e.g. setting <varname>User=</varname>),
-        <varname>NoNewPrivileges=yes</varname> is implied.</para>
+        <filename>/dev/zero</filename> instead of using <constant>MAP_ANON</constant>. For this setting the
+        same restrictions regarding mount propagation and privileges apply as for
+        <varname>ReadOnlyPaths=</varname> and related calls, see above. If turned on and if running in user
+        mode, or in system mode, but without the <constant>CAP_SYS_ADMIN</constant> capability (e.g. setting
+        <varname>User=</varname>), <varname>NoNewPrivileges=yes</varname> is implied.</para>
 
-        <para>Note that the implementation of this setting might be impossible (for example if mount namespaces are not
-        available), and the unit should be written in a way that does not solely rely on this setting for
-        security.</para>
+        <para>Note that the implementation of this setting might be impossible (for example if mount
+        namespaces are not available), and the unit should be written in a way that does not solely rely on
+        this setting for security.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/>
+
+        <para>When access to some but not all devices must be possible, the <varname>DeviceAllow=</varname>
+        setting might be used instead. See
+        <citerefentry><refentrytitle>systemd.resource-control</refentrytitle><manvolnum>5</manvolnum></citerefentry>.
+        </para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1562,7 +1659,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         <varname>JoinsNamespaceOf=</varname> to listen on sockets inside of network namespaces of other
         services.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1581,7 +1678,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         <para>When this option is used on a socket unit any sockets bound on behalf of this unit will be
         bound within the specified network namespace.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1612,7 +1709,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         not available), and the unit should be written in a way that does not solely rely on this setting for
         security.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1628,7 +1725,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         <varname>IPCNamespacePath=</varname> configured, as otherwise the network namespace of those
         units is reused.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1682,7 +1779,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         capability (e.g. services for which <varname>User=</varname> is set),
         <varname>NoNewPrivileges=yes</varname> is implied.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1699,7 +1796,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         doesn't have the <constant>CAP_SYS_ADMIN</constant> capability (e.g. services for which
         <varname>User=</varname> is set), <varname>NoNewPrivileges=yes</varname> is implied.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1723,7 +1820,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         inaccessible. If <varname>ProtectKernelTunables=</varname> is set,
         <varname>MountAPIVFS=yes</varname> is implied.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1744,7 +1841,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         but the unit doesn't have the <constant>CAP_SYS_ADMIN</constant> capability (e.g. services for
         which <varname>User=</varname> is set), <varname>NoNewPrivileges=yes</varname> is implied.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1763,7 +1860,7 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         capability (e.g. services for which <varname>User=</varname> is set),
         <varname>NoNewPrivileges=yes</varname> is implied.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1814,6 +1911,98 @@ BindReadOnlyPaths=/var/lib/systemd</programlisting>
         used for local communication, including for
         <citerefentry><refentrytitle>syslog</refentrytitle><manvolnum>2</manvolnum></citerefentry>
         logging.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>RestrictFileSystems=</varname></term>
+
+        <listitem><para>Restricts the set of filesystems processes of this unit can open files on. Takes a space-separated
+        list of filesystem names. Any filesystem listed is made accessible to the unit's processes, access to filesystem
+        types not listed is prohibited (allow-listing). If the first character of the list is <literal>~</literal>, the
+        effect is inverted: access to the filesystems listed is prohibited (deny-listing). If the empty string is assigned,
+        access to filesystems is not restricted.</para>
+
+        <para>If you specify both types of this option (i.e. allow-listing and deny-listing), the first encountered will take
+        precedence and will dictate the default action (allow access to the filesystem or deny it). Then the next occurrences
+        of this option will add or delete the listed filesystems from the set of the restricted filesystems, depending on its
+        type and the default action.</para>
+
+        <para>Example: if a unit has the following,
+        <programlisting>RestrictFileSystems=ext4 tmpfs
+RestrictFileSystems=ext2 ext4</programlisting>
+        then access to <constant>ext4</constant>, <constant>tmpfs</constant>, and <constant>ext2</constant> is allowed
+        and access to other filesystems is denied.</para>
+
+        <para>Example: if a unit has the following,
+        <programlisting>RestrictFileSystems=ext4 tmpfs
+RestrictFileSystems=~ext4</programlisting>
+        then only access <constant>tmpfs</constant> is allowed.</para>
+
+        <para>Example: if a unit has the following,
+        <programlisting>RestrictFileSystems=~ext4 tmpfs
+RestrictFileSystems=ext4</programlisting>
+        then only access to <constant>tmpfs</constant> is denied.</para>
+
+        <para>As the number of possible filesystems is large, predefined sets of filesystems are provided.  A set
+        starts with <literal>@</literal> character, followed by name of the set.</para>
+
+        <table>
+          <title>Currently predefined filesystem sets</title>
+
+          <tgroup cols='2'>
+            <colspec colname='set' />
+            <colspec colname='description' />
+            <thead>
+              <row>
+                <entry>Set</entry>
+                <entry>Description</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>@basic-api</entry>
+                <entry>Basic filesystem API.</entry>
+              </row>
+              <row>
+                <entry>@auxiliary-api</entry>
+                <entry>Auxiliary filesystem API.</entry>
+              </row>
+              <row>
+                <entry>@common-block</entry>
+                <entry>Common block device filesystems.</entry>
+              </row>
+              <row>
+                <entry>@historical-block</entry>
+                <entry>Historical block device filesystems.</entry>
+              </row>
+              <row>
+                <entry>@network</entry>
+                <entry>Well-known network filesystems.</entry>
+              </row>
+              <row>
+                <entry>@privileged-api</entry>
+                <entry>Privileged filesystem API.</entry>
+              </row>
+              <row>
+                <entry>@temporary</entry>
+                <entry>Temporary filesystems: tmpfs, ramfs.</entry>
+              </row>
+              <row>
+                <entry>@known</entry>
+                <entry>All known filesystems defined by the kernel. This list is defined statically in systemd based on a kernel version that was available when this systemd version was released. It will become progressively more out-of-date as the kernel is updated.</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+
+        <para>Use
+        <citerefentry><refentrytitle>systemd-analyze</refentrytitle><manvolnum>1</manvolnum></citerefentry>'s
+        <command>filesystems</command> command to retrieve a list of filesystems defined on the local
+        system.</para>
+
+        <para>Note that this setting might not be supported on some systems (for example if the LSM eBPF hook is
+        not enabled in the underlying kernel or if not using the unified control group hierarchy). In that case this setting
+        has no effect.</para></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -1975,7 +2164,7 @@ RestrictNamespaces=~cgroup net</programlisting>
         option. Hence it is primarily useful to explicitly request this behaviour if none of the other settings are
         used.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
       <varlistentry>
@@ -2005,7 +2194,7 @@ RestrictNamespaces=~cgroup net</programlisting>
         <para>Usually, it is best to leave this setting unmodified, and use higher level file system namespacing
         options instead, in particular <varname>PrivateMounts=</varname>, see above.</para>
 
-        <xi:include href="system-only.xml" xpointer="singular"/></listitem>
+        <xi:include href="system-or-user-ns.xml" xpointer="singular"/></listitem>
       </varlistentry>
 
     </variablelist>
@@ -2339,25 +2528,47 @@ SystemCallErrorNumber=EPERM</programlisting>
         clients via D-Bus IPC, and generally not understood as being data that requires protection. Moreover,
         environment variables are propagated down the process tree, including across security boundaries
         (such as setuid/setgid executables), and hence might leak to processes that should not have access to
-        the secret data. Use <varname>LoadCredential=</varname> (see below) to pass data to unit processes
+        the secret data. Use <varname>LoadCredential=</varname>, <varname>LoadCredentialEncrypted=</varname>
+        or <varname>SetCredentialEncrypted=</varname> (see below) to pass data to unit processes
         securely.</para></listitem>
       </varlistentry>
 
       <varlistentry>
         <term><varname>EnvironmentFile=</varname></term>
 
-        <listitem><para>Similar to <varname>Environment=</varname> but reads the environment variables from a text
-        file. The text file should contain new-line-separated variable assignments.  Empty lines, lines without an
-        <literal>=</literal> separator, or lines starting with ; or # will be ignored, which may be used for
-        commenting. A line ending with a backslash will be concatenated with the following one, allowing multiline
-        variable definitions. The parser strips leading and trailing whitespace from the values of assignments, unless
-        you use double quotes (").</para>
+        <listitem><para>Similar to <varname>Environment=</varname> but reads the environment variables from a text file.
+        The text file should contain newline-separated variable assignments.  Empty lines, lines without an
+        <literal>=</literal> separator, or lines starting with <literal>;</literal> or <literal>#</literal> will be
+        ignored, which may be used for commenting. The file must be UTF-8 encoded. Valid characters are <ulink
+        url="https://www.unicode.org/glossary/#unicode_scalar_value">unicode scalar values</ulink> other than <ulink
+        url="https://www.unicode.org/glossary/#noncharacter">noncharacters</ulink>, U+0000 NUL, and U+FEFF <ulink
+        url="https://www.unicode.org/glossary/#byte_order_mark">byte order mark</ulink>. Control codes other than NUL
+        are allowed.</para>
 
-        <para><ulink url="https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences">C escapes</ulink>
-        are supported, but not
-        <ulink url="https://en.wikipedia.org/wiki/Control_character#In_ASCII">most control characters</ulink>.
-        <literal>\t</literal> and <literal>\n</literal> can be used to insert tabs and newlines within
-        <varname>EnvironmentFile=</varname>.</para>
+        <para>In the file, an unquoted value after the <literal>=</literal> is parsed with the same backslash-escape
+        rules as <ulink
+        url="https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02_01">unquoted
+        text</ulink> in a POSIX shell, but unlike in a shell, interior whitespace is preserved and quotes after the
+        first non-whitespace character are preserved. Leading and trailing whitespace (space, tab, carriage return) is
+        discarded, but interior whitespace within the line is preserved verbatim. A line ending with a backslash will be
+        continued to the following one, with the newline itself discarded. A backslash
+        <literal>\</literal> followed by any character other than newline will preserve the following character, so that
+        <literal>\\</literal> will become the value <literal>\</literal>.</para>
+
+        <para>In the file, a <literal>'</literal>-quoted value after the <literal>=</literal> can span multiple lines
+        and contain any character verbatim other than single quote, like <ulink
+        url="https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02_02">single-quoted
+        text</ulink> in a POSIX shell. No backslash-escape sequences are recognized. Leading and trailing whitespace
+        outside of the single quotes is discarded.</para>
+
+        <para>In the file, a <literal>"</literal>-quoted value after the <literal>=</literal> can span multiple lines,
+        and the same escape sequences are recognized as in <ulink
+        url="https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02_03">double-quoted
+        text</ulink> of a POSIX shell. Backslash (<literal>\</literal>) followed by any of <literal>"\`$</literal> will
+        preserve that character. A backslash followed by newline is a line continuation, and the newline itself is
+        discarded. A backslash followed by any other character is ignored; both the backslash and the following
+        character are preserved verbatim. Leading and trailing whitespace outside of the double quotes is
+        discarded.</para>
 
         <para>The argument passed should be an absolute filename or wildcard expression, optionally prefixed with
         <literal>-</literal>, which indicates that if the file does not exist, it will not be read and no error or
@@ -2389,12 +2600,6 @@ SystemCallErrorNumber=EPERM</programlisting>
 
         <para>Variables set for invoked processes due to this setting are subject to being overridden by those
         configured with <varname>Environment=</varname> or <varname>EnvironmentFile=</varname>.</para>
-
-        <para><ulink url="https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences">C escapes</ulink>
-        are supported, but not
-        <ulink url="https://en.wikipedia.org/wiki/Control_character#In_ASCII">most control characters</ulink>.
-        <literal>\t</literal> and <literal>\n</literal> can be used to insert tabs and newlines within
-        <varname>EnvironmentFile=</varname>.</para>
 
         <para>Example:
         <programlisting>PassEnvironment=VAR1 VAR2 VAR3</programlisting>
@@ -2539,8 +2744,8 @@ SystemCallErrorNumber=EPERM</programlisting>
         <varname>StandardInput=</varname>, see above. If <replaceable>path</replaceable> refers to a regular file
         on the filesystem, it is opened (created if it doesn't exist yet) for writing at the beginning of the file,
         but without truncating it.
-        If standard input and output are directed to the same file path, it is opened only once, for reading as well
-        as writing and duplicated. This is particularly useful when the specified path refers to an
+        If standard input and output are directed to the same file path, it is opened only once — for reading as well
+        as writing — and duplicated. This is particularly useful when the specified path refers to an
         <constant>AF_UNIX</constant> socket in the file system, as in that case only a
         single stream connection is created for both input and output.</para>
 
@@ -2566,16 +2771,17 @@ SystemCallErrorNumber=EPERM</programlisting>
         <para><option>socket</option> connects standard output to a socket acquired via socket activation. The
         semantics are similar to the same option of <varname>StandardInput=</varname>, see above.</para>
 
-        <para>The <option>fd:<replaceable>name</replaceable></option> option connects standard output to a specific,
-        named file descriptor provided by a socket unit.  A name may be specified as part of this option, following a
-        <literal>:</literal> character (e.g. <literal>fd:foobar</literal>).  If no name is specified, the name
+        <para>The <option>fd:<replaceable>name</replaceable></option> option connects standard output to a
+        specific, named file descriptor provided by a socket unit.  A name may be specified as part of this
+        option, following a <literal>:</literal> character
+        (e.g. <literal>fd:<replaceable>foobar</replaceable></literal>). If no name is specified, the name
         <literal>stdout</literal> is implied (i.e. <literal>fd</literal> is equivalent to
-        <literal>fd:stdout</literal>).  At least one socket unit defining the specified name must be provided via the
-        <varname>Sockets=</varname> option, and the file descriptor name may differ from the name of its containing
-        socket unit.  If multiple matches are found, the first one will be used.  See
+        <literal>fd:stdout</literal>). At least one socket unit defining the specified name must be provided
+        via the <varname>Sockets=</varname> option, and the file descriptor name may differ from the name of
+        its containing socket unit. If multiple matches are found, the first one will be used. See
         <varname>FileDescriptorName=</varname> in
-        <citerefentry><refentrytitle>systemd.socket</refentrytitle><manvolnum>5</manvolnum></citerefentry> for more
-        details about named descriptors and their ordering.</para>
+        <citerefentry><refentrytitle>systemd.socket</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+        for more details about named descriptors and their ordering.</para>
 
         <para>If the standard output (or error output, see below) of a unit is connected to the journal or
         the kernel log buffer, the unit will implicitly gain a dependency of type <varname>After=</varname>
@@ -2586,7 +2792,11 @@ SystemCallErrorNumber=EPERM</programlisting>
         writing text to stderr will not work. To mitigate this use the construct <command>echo "hello"
         >&amp;2</command> instead, which is mostly equivalent and avoids this pitfall.</para>
 
-        <para>This setting defaults to the value set with <varname>DefaultStandardOutput=</varname> in
+        <para>If <varname>StandardInput=</varname> is set to one of <option>tty</option>, <option>tty-force</option>,
+        <option>tty-fail</option>, <option>socket</option>, or <option>fd:<replaceable>name</replaceable></option>, this
+        setting defaults to <option>inherit</option>.</para>
+
+        <para>In other cases, this setting defaults to the value set with <varname>DefaultStandardOutput=</varname> in
         <citerefentry><refentrytitle>systemd-system.conf</refentrytitle><manvolnum>5</manvolnum></citerefentry>, which
         defaults to <option>journal</option>. Note that setting this parameter might result in additional dependencies
         to be added to the unit (see above).</para></listitem>
@@ -2640,11 +2850,13 @@ SystemCallErrorNumber=EPERM</programlisting>
 
         <programlisting>…
 StandardInput=data
-StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy4KSWNrIGtpZWtl \
-                  LCBzdGF1bmUsIHd1bmRyZSBtaXIsCnVmZiBlZW1hbCBqZWh0IHNlIHVmZiBkaWUgVMO8ci4KTmFu \
-                  dSwgZGVuayBpY2ssIGljayBkZW5rIG5hbnUhCkpldHogaXNzZSB1ZmYsIGVyc2NodCB3YXIgc2Ug \
-                  enUhCkljayBqZWhlIHJhdXMgdW5kIGJsaWNrZSDigJQKdW5kIHdlciBzdGVodCBkcmF1w59lbj8g \
-                  SWNrZSEK
+StandardInputData=V2XigLJyZSBubyBzdHJhbmdlcnMgdG8gbG92ZQpZb3Uga25vdyB0aGUgcnVsZXMgYW5kIHNvIGRv \
+                  IEkKQSBmdWxsIGNvbW1pdG1lbnQncyB3aGF0IEnigLJtIHRoaW5raW5nIG9mCllvdSB3b3VsZG4n \
+                  dCBnZXQgdGhpcyBmcm9tIGFueSBvdGhlciBndXkKSSBqdXN0IHdhbm5hIHRlbGwgeW91IGhvdyBJ \
+                  J20gZmVlbGluZwpHb3R0YSBtYWtlIHlvdSB1bmRlcnN0YW5kCgpOZXZlciBnb25uYSBnaXZlIHlv \
+                  dSB1cApOZXZlciBnb25uYSBsZXQgeW91IGRvd24KTmV2ZXIgZ29ubmEgcnVuIGFyb3VuZCBhbmQg \
+                  ZGVzZXJ0IHlvdQpOZXZlciBnb25uYSBtYWtlIHlvdSBjcnkKTmV2ZXIgZ29ubmEgc2F5IGdvb2Ri \
+                  eWUKTmV2ZXIgZ29ubmEgdGVsbCBhIGxpZSBhbmQgaHVydCB5b3UK
 …</programlisting></listitem>
       </varlistentry>
 
@@ -2817,6 +3029,14 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
       </varlistentry>
 
       <varlistentry>
+        <term><varname>TTYRows=</varname></term>
+        <term><varname>TTYColumns=</varname></term>
+
+        <listitem><para>Configure the size of the TTY specified with <varname>TTYPath=</varname>. If unset or
+        set to the empty string, the kernel default is used.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><varname>TTYVTDisallocate=</varname></term>
 
         <listitem><para>If the terminal device specified with <varname>TTYPath=</varname> is a virtual console
@@ -2833,6 +3053,7 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
 
       <varlistentry>
         <term><varname>LoadCredential=</varname><replaceable>ID</replaceable><optional>:<replaceable>PATH</replaceable></optional></term>
+        <term><varname>LoadCredentialEncrypted=</varname><replaceable>ID</replaceable><optional>:<replaceable>PATH</replaceable></optional></term>
 
         <listitem><para>Pass a credential to the unit. Credentials are limited-size binary or textual objects
         that may be passed to unit processes. They are primarily used for passing cryptographic keys (both
@@ -2850,16 +3071,45 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
         is absolute it is opened as regular file and the credential data is read from it. If the absolute
         path refers to an <constant>AF_UNIX</constant> stream socket in the file system a connection is made
         to it (only once at unit start-up) and the credential data read from the connection, providing an
-        easy IPC integration point for dynamically providing credentials from other services. If the
-        specified path is not absolute and itself qualifies as valid credential identifier it is understood
-        to refer to a credential that the service manager itself received via the
-        <varname>$CREDENTIALS_DIRECTORY</varname> environment variable, which may be used to propagate
-        credentials from an invoking environment (e.g. a container manager that invoked the service manager)
-        into a service. The contents of the file/socket may be arbitrary binary or textual data, including
-        newline characters and <constant>NUL</constant> bytes. If the file system path is omitted it is
-        chosen identical to the credential name, i.e. this is a terse way do declare credentials to inherit
-        from the service manager into a service. This option may be used multiple times, each time defining
-        an additional credential to pass to the unit.</para>
+        easy IPC integration point for dynamically transferring credentials from other services.</para>
+
+        <para>If the specified path is not absolute and itself qualifies as valid credential identifier it is
+        attempted to find a credential that the service manager itself received under the specified name —
+        which may be used to propagate credentials from an invoking environment (e.g. a container manager
+        that invoked the service manager) into a service. If no matching system credential is found, the
+        directories <filename>/etc/credstore/</filename>, <filename>/run/credstore/</filename> and
+        <filename>/usr/lib/credstore/</filename> are searched for files under the credential's name — which
+        hence are recommended locations for credential data on disk. If
+        <varname>LoadCredentialEncrypted=</varname> is used <filename>/run/credstore.encrypted/</filename>,
+        <filename>/etc/credstore.encrypted/</filename>, and
+        <filename>/usr/lib/credstore.encrypted/</filename> are searched as well.</para>
+
+        <para>If the file system path is omitted it is chosen identical to the credential name, i.e. this is
+        a terse way to declare credentials to inherit from the service manager into a service. This option
+        may be used multiple times, each time defining an additional credential to pass to the unit.</para>
+
+        <para>If an absolute path referring to a directory is specified, every file in that directory
+        (recursively) will be loaded as a separate credential. The ID for each credential will be the
+        provided ID suffixed with <literal>_$FILENAME</literal> (e.g., <literal>Key_file1</literal>). When
+        loading from a directory, symlinks will be ignored.</para>
+
+        <para>The contents of the file/socket may be arbitrary binary or textual data, including newline
+        characters and <constant>NUL</constant> bytes.</para>
+
+        <para>The <varname>LoadCredentialEncrypted=</varname> setting is identical to
+        <varname>LoadCredential=</varname>, except that the credential data is decrypted and authenticated
+        before being passed on to the executed processes. Specifically, the referenced path should refer to a
+        file or socket with an encrypted credential, as implemented by
+        <citerefentry><refentrytitle>systemd-creds</refentrytitle><manvolnum>1</manvolnum></citerefentry>. This
+        credential is loaded, decrypted, authenticated and then passed to the application in plaintext form,
+        in the same way a regular credential specified via <varname>LoadCredential=</varname> would be. A
+        credential configured this way may be symmetrically encrypted/authenticated with a secret key derived
+        from the system's TPM2 security chip, or with a secret key stored in
+        <filename>/var/lib/systemd/credentials.secret</filename>, or with both. Using encrypted and
+        authenticated credentials improves security as credentials are not stored in plaintext and only
+        authenticated and decrypted into plaintext the moment a service requiring them is started. Moreover,
+        credentials may be bound to the local hardware and installations, so that they cannot easily be
+        analyzed offline, or be generated externally.</para>
 
         <para>The credential files/IPC sockets must be accessible to the service manager, but don't have to
         be directly accessible to the unit's processes: the credential data is read and copied into separate,
@@ -2870,9 +3120,22 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
 
         <para>In order to reference the path a credential may be read from within a
         <varname>ExecStart=</varname> command line use <literal>${CREDENTIALS_DIRECTORY}/mycred</literal>,
-        e.g. <literal>ExecStart=cat ${CREDENTIALS_DIRECTORY}/mycred</literal>.</para>
+        e.g. <literal>ExecStart=cat ${CREDENTIALS_DIRECTORY}/mycred</literal>. In order to reference the path
+        a credential may be read from within a <varname>Environment=</varname> line use
+        <literal>%d/mycred</literal>, e.g. <literal>Environment=MYCREDPATH=%d/mycred</literal>.</para>
 
         <para>Currently, an accumulated credential size limit of 1 MB per unit is enforced.</para>
+
+        <para>The service manager itself may receive system credentials that can be propagated to services
+        from a hosting container manager or VM hypervisor. See the <ulink
+        url="https://systemd.io/CONTAINER_INTERFACE">Container Interface</ulink> documentation for details
+        about the former. For the latter, use the <command>qemu</command> <literal>fw_cfg</literal> node
+        <literal>opt/io.systemd.credentials/</literal>. Example qemu switch: <literal>-fw_cfg
+        name=opt/io.systemd.credentials/mycred,string=supersecret</literal>. They may also be specified on
+        the kernel command line using the <literal>systemd.set_credential=</literal> switch (see
+        <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>)
+        and from the UEFI firmware environment via
+        <citerefentry><refentrytitle>systemd-stub</refentrytitle><manvolnum>7</manvolnum></citerefentry>.</para>
 
         <para>If referencing an <constant>AF_UNIX</constant> stream socket to connect to, the connection will
         originate from an abstract namespace socket, that includes information about the unit and the
@@ -2887,11 +3150,15 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
         ID requested. Example: <literal>\0adf9d86b6eda275e/unit/foobar.service/credx</literal> in case the
         credential <literal>credx</literal> is requested for a unit <literal>foobar.service</literal>. This
         functionality is useful for using a single listening socket to serve credentials to multiple
-        consumers.</para></listitem>
+        consumers.</para>
+
+        <para>For further information see <ulink url="https://systemd.io/CREDENTIALS">System and Service
+        Credentials</ulink> documentation.</para></listitem>
       </varlistentry>
 
       <varlistentry>
         <term><varname>SetCredential=</varname><replaceable>ID</replaceable>:<replaceable>VALUE</replaceable></term>
+        <term><varname>SetCredentialEncrypted=</varname><replaceable>ID</replaceable>:<replaceable>VALUE</replaceable></term>
 
         <listitem><para>The <varname>SetCredential=</varname> setting is similar to
         <varname>LoadCredential=</varname> but accepts a literal value to use as data for the credential,
@@ -2901,6 +3168,14 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
         <varname>LoadCredential=</varname>. In order to embed binary data into the credential data use
         C-style escaping (i.e. <literal>\n</literal> to embed a newline, or <literal>\x00</literal> to embed
         a <constant>NUL</constant> byte).</para>
+
+        <para>The <varname>SetCredentialEncrypted=</varname> setting is identical to
+        <varname>SetCredential=</varname> but expects an encrypted credential in literal form as value. This
+        allows embedding confidential credentials securely directly in unit files. Use
+        <citerefentry><refentrytitle>systemd-creds</refentrytitle><manvolnum>1</manvolnum></citerefentry>'
+        <option>-p</option> switch to generate suitable <varname>SetCredentialEncrypted=</varname> lines
+        directly from plaintext credentials. For further details see
+        <varname>LoadCredentialEncrypted=</varname> above.</para>
 
         <para>If a credential of the same ID is listed in both <varname>LoadCredential=</varname> and
         <varname>SetCredential=</varname>, the latter will act as default if the former cannot be
@@ -2997,7 +3272,7 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
     configuration, with just a few environment variables. The user manager inherits environment variables as
     any other system service, but in addition may receive additional environment variables from PAM, and,
     typically, additional imported variables when the user starts a graphical session. It is recommended to
-    keep the environment blocks in both the system and user managers managers lean. Importing all variables
+    keep the environment blocks in both the system and user managers lean. Importing all variables
     inherited by the graphical session or by one of the user shells is strongly discouraged.</para>
 
     <para>Hint: <command>systemd-run -P env</command> and <command>systemd-run --user -P env</command> print
@@ -3195,7 +3470,7 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
         <varlistentry>
           <term><varname>$SERVICE_RESULT</varname></term>
 
-          <listitem><para>Only defined for the service unit type, this environment variable is passed to all
+          <listitem><para>Only used for the service unit type. This environment variable is passed to all
           <varname>ExecStop=</varname> and <varname>ExecStopPost=</varname> processes, and encodes the service
           "result". Currently, the following values are defined:</para>
 
@@ -3263,7 +3538,7 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
           <term><varname>$EXIT_CODE</varname></term>
           <term><varname>$EXIT_STATUS</varname></term>
 
-          <listitem><para>Only defined for the service unit type, these environment variables are passed to all
+          <listitem><para>Only defined for the service unit type. These environment variables are passed to all
           <varname>ExecStop=</varname>, <varname>ExecStopPost=</varname> processes and contain exit status/code
           information of the main process of the service. For the precise definition of the exit code and status, see
           <citerefentry><refentrytitle>wait</refentrytitle><manvolnum>2</manvolnum></citerefentry>. <varname>$EXIT_CODE</varname>
@@ -3373,6 +3648,31 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
               </tbody>
             </tgroup>
           </table></listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><varname>$MONITOR_SERVICE_RESULT</varname></term>
+          <term><varname>$MONITOR_EXIT_CODE</varname></term>
+          <term><varname>$MONITOR_EXIT_STATUS</varname></term>
+          <term><varname>$MONITOR_INVOCATION_ID</varname></term>
+          <term><varname>$MONITOR_UNIT</varname></term>
+
+          <listitem><para>Only defined for the service unit type. Those environment variables are passed to
+          all <varname>ExecStart=</varname> and <varname>ExecStartPre=</varname> processes which run in
+          services triggered by <varname>OnFailure=</varname> or <varname>OnSuccess=</varname> dependencies.
+          </para>
+
+          <para>Variables <varname>$MONITOR_SERVICE_RESULT</varname>, <varname>$MONITOR_EXIT_CODE</varname>
+          and <varname>$MONITOR_EXIT_STATUS</varname> take the same values as for
+          <varname>ExecStop=</varname> and <varname>ExecStopPost=</varname> processes. Variables
+          <varname>$MONITOR_INVOCATION_ID</varname> and <varname>$MONITOR_UNIT</varname> are set to the
+          invocation id and unit name of the service which triggered the dependency.</para>
+
+          <para>Note that when multiple services trigger the same unit, those variables will be
+          <emphasis>not</emphasis> be passed. Consider using a template handler unit for that case instead:
+          <literal>OnFailure=<replaceable>handler</replaceable>@%n.service</literal> for non-templated units,
+          or <literal>OnFailure=<replaceable>handler</replaceable>@%p-%i.service</literal> for templated
+          units.</para></listitem>
         </varlistentry>
 
         <varlistentry>
@@ -3710,6 +4010,11 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
             <entry><constant>EXIT_CREDENTIALS</constant></entry>
             <entry>Failed to set up unit's credentials. See <varname>LoadCredential=</varname> and <varname>SetCredential=</varname> above.</entry>
           </row>
+          <row>
+            <entry>245</entry>
+            <entry><constant>EXIT_BPF</constant></entry>
+            <entry>Failed to apply BPF restrictions. See <varname>RestrictFileSystems=</varname> above.</entry>
+          </row>
         </tbody>
       </tgroup>
     </table>
@@ -3805,6 +4110,75 @@ StandardInputData=SWNrIHNpdHplIGRhIHVuJyBlc3NlIEtsb3BzLAp1ZmYgZWVtYWwga2xvcHAncy
         </tbody>
       </tgroup>
     </table>
+  </refsect1>
+
+  <refsect1>
+    <title>Examples</title>
+
+      <example>
+        <title><varname>$MONITOR_<replaceable>*</replaceable></varname> usage</title>
+
+        <para>A service <filename index="false">myfailer.service</filename> which can trigger an
+        <varname>OnFailure=</varname> dependency.</para>
+
+        <programlisting>
+[Unit]
+Description=Service which can trigger an OnFailure= dependency
+OnFailure=myhandler.service
+
+[Service]
+ExecStart=/bin/myprogram
+        </programlisting>
+
+        <para>A service <filename index="false">mysuccess.service</filename> which can trigger an
+        <varname>OnSuccess=</varname> dependency.</para>
+
+        <programlisting>
+[Unit]
+Description=Service which can trigger an OnSuccess= dependency
+OnSuccess=myhandler.service
+
+[Service]
+ExecStart=/bin/mysecondprogram
+        </programlisting>
+
+        <para>A service <filename index="false">myhandler.service</filename> which can be triggered
+        by any of the above services.</para>
+
+        <programlisting>
+[Unit]
+Description=Acts on service failing or succeeding
+
+[Service]
+ExecStart=/bin/bash -c "echo $MONITOR_SERVICE_RESULT $MONITOR_EXIT_CODE $MONITOR_EXIT_STATUS $MONITOR_INVOCATION_ID $MONITOR_UNIT"
+        </programlisting>
+
+        <para>If <filename index="false">myfailer.service</filename> were to run and exit in failure,
+        then <filename index="false">myhandler.service</filename> would be triggered and the
+        monitor variables would be set as follows:</para>
+
+        <programlisting>
+MONITOR_SERVICE_RESULT=exit-code
+MONITOR_EXIT_CODE=exited
+MONITOR_EXIT_STATUS=1
+MONITOR_INVOCATION_ID=cc8fdc149b2b4ca698d4f259f4054236
+MONITOR_UNIT=myfailer.service
+        </programlisting>
+
+        <para>If <filename index="false">mysuccess.service</filename> were to run and exit in success,
+        then <filename index="false">myhandler.service</filename> would be triggered and the
+        monitor variables would be set as follows:</para>
+
+        <programlisting>
+MONITOR_SERVICE_RESULT=success
+MONITOR_EXIT_CODE=exited
+MONITOR_EXIT_STATUS=0
+MONITOR_INVOCATION_ID=6ab9af147b8c4a3ebe36e7a5f8611697
+MONITOR_UNIT=mysuccess.service
+        </programlisting>
+
+    </example>
+
   </refsect1>
 
   <refsect1>

@@ -33,7 +33,7 @@
 #include "fd-util.h"
 #include "fs-util.h"
 #include "log.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "process-util.h"
 #include "selinux-access.h"
 #include "serialize.h"
@@ -42,6 +42,7 @@
 #include "string-util.h"
 #include "strv.h"
 #include "strxcpyx.h"
+#include "umask-util.h"
 #include "user-util.h"
 
 #define CONNECTIONS_MAX 4096
@@ -925,14 +926,18 @@ int bus_init_private(Manager *m) {
 
                 r = sockaddr_un_set_path(&sa.un, "/run/systemd/private");
         } else {
-                const char *e, *joined;
+                _cleanup_free_ char *joined = NULL;
+                const char *e;
 
                 e = secure_getenv("XDG_RUNTIME_DIR");
                 if (!e)
                         return log_error_errno(SYNTHETIC_ERRNO(EHOSTDOWN),
                                                "XDG_RUNTIME_DIR is not set, refusing.");
 
-                joined = strjoina(e, "/systemd/private");
+                joined = path_join(e, "/systemd/private");
+                if (!joined)
+                        return log_oom();
+
                 r = sockaddr_un_set_path(&sa.un, joined);
         }
         if (r < 0)
@@ -946,7 +951,8 @@ int bus_init_private(Manager *m) {
         if (fd < 0)
                 return log_error_errno(errno, "Failed to allocate private socket: %m");
 
-        r = bind(fd, &sa.sa, sa_len);
+        RUN_WITH_UMASK(0077)
+                r = bind(fd, &sa.sa, sa_len);
         if (r < 0)
                 return log_error_errno(errno, "Failed to bind private socket: %m");
 

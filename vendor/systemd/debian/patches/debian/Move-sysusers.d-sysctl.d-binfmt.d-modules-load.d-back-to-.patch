@@ -14,12 +14,12 @@ Closes: #971282
  2 files changed, 8 insertions(+), 8 deletions(-)
 
 diff --git a/src/core/systemd.pc.in b/src/core/systemd.pc.in
-index fc0f8c3..65996bb 100644
+index 693433b..8368a3f 100644
 --- a/src/core/systemd.pc.in
 +++ b/src/core/systemd.pc.in
-@@ -65,16 +65,16 @@ systemdshutdowndir=${systemd_shutdown_dir}
- tmpfiles_dir=${prefix}/lib/tmpfiles.d
- tmpfilesdir=${tmpfiles_dir}
+@@ -67,16 +67,16 @@ tmpfilesdir=${tmpfiles_dir}
+ 
+ user_tmpfiles_dir=${prefix}/share/user-tmpfiles.d
  
 -sysusers_dir=${rootprefix}/lib/sysusers.d
 +sysusers_dir=${prefix}/lib/sysusers.d
@@ -39,7 +39,7 @@ index fc0f8c3..65996bb 100644
  
  catalog_dir=${prefix}/lib/systemd/catalog
 diff --git a/src/libsystemd/sd-path/sd-path.c b/src/libsystemd/sd-path/sd-path.c
-index ff1e0d5..19a001f 100644
+index ac33e34..f0615ff 100644
 --- a/src/libsystemd/sd-path/sd-path.c
 +++ b/src/libsystemd/sd-path/sd-path.c
 @@ -362,19 +362,19 @@ static int get_path(uint64_t type, char **buffer, const char **ret) {

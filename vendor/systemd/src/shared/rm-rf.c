@@ -19,9 +19,9 @@
 #include "stat-util.h"
 #include "string-util.h"
 
-/* We treat tmpfs/ramfs + cgroupfs as non-physical file sytems. cgroupfs is similar to tmpfs in a way after
- * all: we can create arbitrary directory hierarchies in it, and hence can also use rm_rf() on it to remove
- * those again. */
+/* We treat tmpfs/ramfs + cgroupfs as non-physical file systems. cgroupfs is similar to tmpfs in a way
+ * after all: we can create arbitrary directory hierarchies in it, and hence can also use rm_rf() on it
+ * to remove those again. */
 static bool is_physical_fs(const struct statfs *sfs) {
         return !is_temporary_fs(sfs) && !is_cgroup_fs(sfs);
 }
@@ -268,7 +268,6 @@ int rm_rf_children(
                         }
                 }
 
-                struct dirent *de;
                 FOREACH_DIRENT_ALL(de, d, return -errno) {
                         int is_dir;
 
@@ -351,8 +350,8 @@ int rm_rf(const char *path, RemoveFlags flags) {
                 /* We have a dir */
                 r = rm_rf_children(fd, flags, NULL);
 
-                if (FLAGS_SET(flags, REMOVE_ROOT) && rmdir(path) < 0)
-                        q = -errno;
+                if (FLAGS_SET(flags, REMOVE_ROOT))
+                        q = RET_NERRNO(rmdir(path));
         } else {
                 if (FLAGS_SET(flags, REMOVE_MISSING_OK) && errno == ENOENT)
                         return 0;
@@ -375,8 +374,7 @@ int rm_rf(const char *path, RemoveFlags flags) {
                 }
 
                 r = 0;
-                if (unlink(path) < 0)
-                        q = -errno;
+                q = RET_NERRNO(unlink(path));
         }
 
         if (r < 0)

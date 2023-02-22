@@ -14,7 +14,7 @@
 #include "sd-event.h"
 
 #include "fd-util.h"
-#include "fs-util.h"
+#include "inotify-util.h"
 #include "main-func.h"
 #include "signal-util.h"
 #include "time-util.h"
@@ -80,17 +80,16 @@ static int inotify_handler(sd_event_source *s,
         sd_event *event = sd_event_source_get_event(s);
         ClockState *sp = userdata;
         union inotify_event_buffer buffer;
-        struct inotify_event *e;
         ssize_t l;
 
         l = read(fd, &buffer, sizeof(buffer));
         if (l < 0) {
-                if (IN_SET(errno, EAGAIN, EINTR))
+                if (ERRNO_IS_TRANSIENT(errno))
                         return 0;
 
                 return log_warning_errno(errno, "Lost access to inotify: %m");
         }
-        FOREACH_INOTIFY_EVENT(e, buffer, l)
+        FOREACH_INOTIFY_EVENT_WARN(e, buffer, l)
                 process_inotify_event(event, sp, e);
 
         return 0;
@@ -100,9 +99,7 @@ static int clock_state_update(
                 ClockState *sp,
                 sd_event *event) {
 
-        char buf[MAX((size_t)FORMAT_TIMESTAMP_MAX, STRLEN("unrepresentable"))];
         struct timex tx = {};
-        const char * ts;
         usec_t t;
         int r;
 
@@ -149,10 +146,9 @@ static int clock_state_update(
         if (tx.status & STA_NANO)
                 tx.time.tv_usec /= 1000;
         t = timeval_load(&tx.time);
-        ts = format_timestamp_style(buf, sizeof(buf), t, TIMESTAMP_US_UTC);
-        if (!ts)
-                strcpy(buf, "unrepresentable");
-        log_info("adjtime state %d status %x time %s", sp->adjtime_state, tx.status, ts);
+
+        log_info("adjtime state %d status %x time %s", sp->adjtime_state, tx.status,
+                 FORMAT_TIMESTAMP_STYLE(t, TIMESTAMP_US_UTC) ?: "unrepresentable");
 
         sp->has_watchfile = access("/run/systemd/timesync/synchronized", F_OK) >= 0;
         if (sp->has_watchfile)

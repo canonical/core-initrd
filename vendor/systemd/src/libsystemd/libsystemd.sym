@@ -762,3 +762,19 @@ global:
         sd_device_new_from_ifname;
         sd_device_new_from_ifindex;
 } LIBSYSTEMD_248;
+
+LIBSYSTEMD_250 {
+global:
+        sd_device_get_diskseq;
+        sd_event_add_inotify_fd;
+        sd_event_source_set_ratelimit_expire_callback;
+} LIBSYSTEMD_249;
+
+LIBSYSTEMD_251 {
+global:
+        sd_id128_to_uuid_string;
+        sd_device_new_from_devname;
+        sd_device_new_from_path;
+        sd_device_open;
+        sd_device_enumerator_add_nomatch_sysname;
+} LIBSYSTEMD_250;

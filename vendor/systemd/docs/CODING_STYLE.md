@@ -2,6 +2,7 @@
 title: Coding Style
 category: Contributing
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 # Coding Style
@@ -78,7 +79,60 @@ layout: default
           dont_find_waldo();
   ```
 
+- Please define flags types like this:
+
+  ```c
+  typedef enum FoobarFlags {
+          FOOBAR_QUUX  = 1 << 0,
+          FOOBAR_WALDO = 1 << 1,
+          FOOBAR_XOXO  = 1 << 2,
+          …
+  } FoobarFlags;
+  ```
+
+  i.e. use an enum for it, if possible. Indicate bit values via `1 <<`
+  expressions, and align them vertically. Define both an enum and a type for
+  it.
+
+- If you define (non-flags) enums, follow this template:
+
+  ```c
+  typedef enum FoobarMode {
+          FOOBAR_AAA,
+          FOOBAR_BBB,
+          FOOBAR_CCC,
+          …
+          _FOOBAR_MAX,
+          _FOOBAR_INVALID = -EINVAL,
+  } FoobarMode;
+  ```
+
+  i.e. define a `_MAX` enum for the largest defined enum value, plus one. Since
+  this is not a regular enum value, prefix it with `_`. Also, define a special
+  "invalid" enum value, and set it to `-EINVAL`. That way the enum type can
+  safely be used to propagate conversion errors.
+
+- If you define an enum in a public API, be extra careful, as the size of the
+  enum might change when new values are added, which would break ABI
+  compatibility. Since we typically want to allow adding new enum values to an
+  existing enum type with later API versions, please use the
+  `_SD_ENUM_FORCE_S64()` macro in the enum definition, which forces the size of
+  the enum to be signed 64bit wide.
+
 ## Code Organization and Semantics
+
+- For our codebase we intend to use ISO C11 *with* GNU extensions (aka
+  "gnu11"). Public APIs (i.e. those we expose via `libsystemd.so`
+  i.e. `systemd/sd-*.h`) should only use ISO C89 however (with a very limited
+  set of conservative and common extensions, such as fixed size integer types
+  from `<inttypes.h>`), so that we don't force consuming programs into C11
+  mode. (This discrepancy in particular means one thing: internally we use C99
+  `bool` booleans, externally C89-compatible `int` booleans which generally
+  have different size in memory and slightly different semantics, also see
+  below.)  Both for internal and external code it's OK to use even newer
+  features and GCC extension than "gnu11", as long as there's reasonable
+  fallback #ifdeffery in place to ensure compatibility is retained with older
+  compilers.
 
 - Please name structures in `PascalCase` (with exceptions, such as public API
   structs), variables and functions in `snake_case`.
@@ -152,25 +206,34 @@ layout: default
 ## Using C Constructs
 
 - Allocate local variables where it makes sense: at the top of the block, or at
-  the point where they can be initialized. `r` is typically used for a local
-  state variable, but should almost always be declared at the top of the
-  function.
+  the point where they can be initialized. Avoid huge variable declaration
+  lists at the top of the function.
+
+  As an exception, `r` is typically used for a local state variable, but should
+  almost always be declared as the last variable at the top of the function.
 
   ```c
   {
-          uint64_t a, b;
+          uint64_t a;
           int r;
 
-          a = frobnicate();
-          b = a + 5;
-
-          r = do_something();
+          r = frobnicate(&a);
           if (r < 0)
                   …
+
+          uint64_t b = a + 1, c;
+
+          r = foobarify(a, b, &c);
+          if (r < 0)
+                  …
+
+          const char *pretty = prettify(a, b, c);
+          …
   }
   ```
 
-- Do not mix function invocations with variable definitions in one line.
+- Do not mix multiple variable definitions with function invocations or
+  complicated expressions:
 
   ```c
   {
@@ -224,7 +287,7 @@ layout: default
 - To determine the length of a constant string `"foo"`, don't bother with
   `sizeof("foo")-1`, please use `strlen()` instead (both gcc and clang optimize
   the call away for fixed strings). The only exception is when declaring an
-  array. In that case use STRLEN, which evaluates to a static constant and
+  array. In that case use `STRLEN()`, which evaluates to a static constant and
   doesn't force the compiler to create a VLA.
 
 - Please use C's downgrade-to-bool feature only for expressions that are
@@ -274,6 +337,25 @@ layout: default
   Be strict with this. When you write a function that can fail due to more than
   one cause, it *really* should have an `int` as the return value for the error
   code.
+
+- libc system calls typically return -1 on error (with the error code in
+  `errno`), and >= 0 on success. Use the RET_NERRNO() helper if you are looking
+  for a simple way to convert this libc style error returning into systemd
+  style error returning. e.g.
+
+  ```c
+  …
+  r = RET_NERRNO(unlink(t));
+  …
+  ```
+
+  or
+
+  ```c
+  …
+  r = RET_NERRNO(open("/some/file", O_RDONLY|O_CLOEXEC));
+  …
+  ```
 
 - Do not bother with error checking whether writing to stdout/stderr worked.
 
@@ -329,7 +411,7 @@ layout: default
 
 - For every function you add, think about whether it is a "logging" function or
   a "non-logging" function. "Logging" functions do (non-debug) logging on their
-  own, "non-logging" function never log on their own (except at debug level)
+  own, "non-logging" functions never log on their own (except at debug level)
   and expect their callers to log. All functions in "library" code, i.e. in
   `src/shared/` and suchlike must be "non-logging". Every time a "logging"
   function calls a "non-logging" function, it should log about the resulting
@@ -364,10 +446,11 @@ layout: default
 
 - Avoid fixed-size string buffers, unless you really know the maximum size and
   that maximum size is small. It is often nicer to use dynamic memory,
-  `alloca()` or VLAs. If you do allocate fixed-size strings on the stack, then
-  it is probably only OK if you either use a maximum size such as `LINE_MAX`,
-  or count in detail the maximum size a string can have. (`DECIMAL_STR_MAX` and
-  `DECIMAL_STR_WIDTH` macros are your friends for this!)
+  `alloca_safe()` or VLAs. If you do allocate fixed-size strings on the stack,
+  then it is probably only OK if you either use a maximum size such as
+  `LINE_MAX`, or count in detail the maximum size a string can
+  have. (`DECIMAL_STR_MAX` and `DECIMAL_STR_WIDTH` macros are your friends for
+  this!)
 
   Or in other words, if you use `char buf[256]` then you are likely doing
   something wrong!
@@ -375,13 +458,20 @@ layout: default
 - Make use of `_cleanup_free_` and friends. It makes your code much nicer to
   read (and shorter)!
 
-- Use `alloca()`, but never forget that it is not OK to invoke `alloca()`
-  within a loop or within function call parameters. `alloca()` memory is
-  released at the end of a function, and not at the end of a `{}` block. Thus,
-  if you invoke it in a loop, you keep increasing the stack pointer without
-  ever releasing memory again. (VLAs have better behavior in this case, so
-  consider using them as an alternative.)  Regarding not using `alloca()`
-  within function parameters, see the BUGS section of the `alloca(3)` man page.
+- Do not use `alloca()`, `strdupa()` or `strndupa()` directly. Use
+  `alloca_safe()`, `strdupa_safe()` or `strndupa_safe()` instead. (The
+  difference is that the latter include an assertion that the specified size is
+  below a safety threshold, so that the program rather aborts than runs into
+  possible stack overruns.)
+
+- Use `alloca_safe()`, but never forget that it is not OK to invoke
+  `alloca_safe()` within a loop or within function call
+  parameters. `alloca_safe()` memory is released at the end of a function, and
+  not at the end of a `{}` block. Thus, if you invoke it in a loop, you keep
+  increasing the stack pointer without ever releasing memory again. (VLAs have
+  better behavior in this case, so consider using them as an alternative.)
+  Regarding not using `alloca_safe()` within function parameters, see the BUGS
+  section of the `alloca(3)` man page.
 
 - If you want to concatenate two or more strings, consider using `strjoina()`
   or `strjoin()` rather than `asprintf()`, as the latter is a lot slower. This
@@ -454,7 +544,8 @@ layout: default
 
 - Use the bool type for booleans, not integers. One exception: in public
   headers (i.e those in `src/systemd/sd-*.h`) use integers after all, as `bool`
-  is C99 and in our public APIs we try to stick to C89 (with a few extensions).
+  is C99 and in our public APIs we try to stick to C89 (with a few extensions;
+  also see above).
 
 ## Deadlocks
 
@@ -481,7 +572,7 @@ layout: default
 
 - It's a good idea to use `O_NONBLOCK` when opening 'foreign' regular files,
   i.e.  file system objects that are supposed to be regular files whose paths
-  where specified by the user and hence might actually refer to other types of
+  were specified by the user and hence might actually refer to other types of
   file system objects. This is a good idea so that we don't end up blocking on
   'strange' file nodes, for example if the user pointed us to a FIFO or device
   node which may block when opening. Moreover even for actual regular files

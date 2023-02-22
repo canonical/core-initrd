@@ -4,6 +4,9 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 <tbody>
+  <!-- note: units also use the following deprecated specifiers that are not documented:
+       %c, %r, %R. Do not reuse. -->
+
   <row id='a'>
     <entry><literal>%a</literal></entry>
     <entry>Architecture</entry>
@@ -48,6 +51,11 @@
     <entry><literal>%o</literal></entry>
     <entry>Operating system ID</entry>
     <entry>The operating system identifier of the running system, as read from the <varname>ID=</varname> field of <filename>/etc/os-release</filename>. See <citerefentry><refentrytitle>os-release</refentrytitle><manvolnum>5</manvolnum></citerefentry> for more information.</entry>
+  </row>
+  <row id='q'>
+    <entry><literal>%q</literal></entry>
+    <entry>Pretty host name</entry>
+    <entry>The pretty hostname of the running system, as read from the <varname>PRETTY_HOSTNAME=</varname> field of <filename>/etc/machine-info</filename>. If not set, resolves to the short hostname. See <citerefentry><refentrytitle>machine-info</refentrytitle><manvolnum>5</manvolnum></citerefentry> for more information.</entry>
   </row>
   <row id='T'>
     <entry><literal>%T</literal></entry>

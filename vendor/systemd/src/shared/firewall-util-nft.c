@@ -29,13 +29,16 @@
 
 #define UDP_DPORT_OFFSET 2
 
-static int nfnl_netlink_sendv(sd_netlink *nfnl,
-                              sd_netlink_message *messages[],
-                              size_t msgcount) {
+static int nfnl_netlink_sendv(
+                sd_netlink *nfnl,
+                sd_netlink_message *messages[static 1],
+                size_t msgcount) {
+
         _cleanup_free_ uint32_t *serial = NULL;
-        size_t i;
         int r;
 
+        assert(nfnl);
+        assert(messages);
         assert(msgcount > 0);
 
         r = sd_netlink_sendv(nfnl, messages, msgcount, &serial);
@@ -43,7 +46,7 @@ static int nfnl_netlink_sendv(sd_netlink *nfnl,
                 return r;
 
         r = 0;
-        for (i = 1; i < msgcount - 1; i++) {
+        for (size_t i = 1; i < msgcount - 1; i++) {
                 int tmp;
 
                 /* If message is an error, this returns embedded errno */
@@ -649,7 +652,7 @@ static int fw_nftables_init_family(sd_netlink *nfnl, int family) {
         msgcnt++;
         assert(msgcnt < NFT_INIT_MSGS);
         /* Set F_EXCL so table add fails if the table already exists. */
-        r = sd_nfnl_nft_message_new_table(nfnl, &batch[msgcnt], family, NFT_SYSTEMD_TABLE_NAME, NLM_F_EXCL | NLM_F_ACK);
+        r = sd_nfnl_nft_message_new_table(nfnl, &batch[msgcnt], family, NFT_SYSTEMD_TABLE_NAME);
         if (r < 0)
                 goto out_unref;
 

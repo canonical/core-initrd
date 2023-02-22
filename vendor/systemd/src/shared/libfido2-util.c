@@ -7,11 +7,12 @@
 #include "ask-password-api.h"
 #include "dlfcn-util.h"
 #include "format-table.h"
-#include "locale-util.h"
+#include "glyph-util.h"
 #include "log.h"
 #include "memory-util.h"
 #include "random-util.h"
 #include "strv.h"
+#include "unistd.h"
 
 static void *libfido2_dl = NULL;
 
@@ -312,8 +313,6 @@ static int fido2_use_hmac_hash_specific_token(
                 bool retry_with_up = false, retry_with_pin = false;
 
                 if (FLAGS_SET(required, FIDO2ENROLL_PIN)) {
-                        char **i;
-
                         /* OK, we need a pin, try with all pins in turn */
                         if (strv_isempty(pins))
                                 r = FIDO_ERR_PIN_REQUIRED;
@@ -451,6 +450,20 @@ static int fido2_use_hmac_hash_specific_token(
         return 0;
 }
 
+/* COSE_ECDH_ES256 is not usable with fido_cred_set_type() thus it's not listed here. */
+static const char *fido2_algorithm_to_string(int alg) {
+        switch(alg) {
+                case COSE_ES256:
+                        return "es256";
+                case COSE_RS256:
+                        return "rs256";
+                case COSE_EDDSA:
+                        return "eddsa";
+                default:
+                        return NULL;
+        }
+}
+
 int fido2_use_hmac_hash(
                 const char *device,
                 const char *rp_id,
@@ -533,6 +546,7 @@ int fido2_generate_hmac_hash(
                 const char *user_icon,
                 const char *askpw_icon_name,
                 Fido2EnrollFlags lock_with,
+                int cred_alg,
                 void **ret_cid, size_t *ret_cid_size,
                 void **ret_salt, size_t *ret_salt_size,
                 void **ret_secret, size_t *ret_secret_size,
@@ -629,10 +643,10 @@ int fido2_generate_hmac_hash(
                 return log_error_errno(SYNTHETIC_ERRNO(EIO),
                                        "Failed to set FIDO2 credential relying party ID/name: %s", sym_fido_strerr(r));
 
-        r = sym_fido_cred_set_type(c, COSE_ES256);
+        r = sym_fido_cred_set_type(c, cred_alg);
         if (r != FIDO_OK)
                 return log_error_errno(SYNTHETIC_ERRNO(EIO),
-                                       "Failed to set FIDO2 credential type to ES256: %s", sym_fido_strerr(r));
+                                       "Failed to set FIDO2 credential type to %s: %s", fido2_algorithm_to_string(cred_alg), sym_fido_strerr(r));
 
         r = sym_fido_cred_set_user(
                         c,
@@ -682,7 +696,6 @@ int fido2_generate_hmac_hash(
 
                 for (;;) {
                         _cleanup_(strv_free_erasep) char **pin = NULL;
-                        char **i;
 
                         r = ask_password_auto("Please enter security token PIN:", askpw_icon_name, NULL, "fido2-pin", "fido2-pin", USEC_INFINITY, 0, &pin);
                         if (r < 0)
@@ -723,6 +736,9 @@ int fido2_generate_hmac_hash(
         if (r == FIDO_ERR_ACTION_TIMEOUT)
                 return log_error_errno(SYNTHETIC_ERRNO(ENOSTR),
                                        "Token action timeout. (User didn't interact with token quickly enough.)");
+        if (r == FIDO_ERR_UNSUPPORTED_ALGORITHM)
+                return log_error_errno(SYNTHETIC_ERRNO(EOPNOTSUPP),
+                                        "Token doesn't support credential algorithm %s.", fido2_algorithm_to_string(cred_alg));
         if (r != FIDO_OK)
                 return log_error_errno(SYNTHETIC_ERRNO(EIO),
                                        "Failed to generate FIDO2 credential: %s", sym_fido_strerr(r));
@@ -1077,3 +1093,73 @@ finish:
                                "FIDO2 tokens not supported on this build.");
 #endif
 }
+
+int fido2_have_device(const char *device) {
+#if HAVE_LIBFIDO2
+        size_t allocated = 64, found = 0;
+        fido_dev_info_t *di = NULL;
+        int r;
+
+        /* Return == 0 if not devices are found, > 0 if at least one is found */
+
+        r = dlopen_libfido2();
+        if (r < 0)
+                return log_error_errno(r, "FIDO2 support is not installed.");
+
+        if (device) {
+                if (access(device, F_OK) < 0) {
+                        if (errno == ENOENT)
+                                return 0;
+
+                        return log_error_errno(errno, "Failed to determine whether device '%s' exists: %m", device);
+                }
+
+                return 1;
+        }
+
+        di = sym_fido_dev_info_new(allocated);
+        if (!di)
+                return log_oom();
+
+        r = sym_fido_dev_info_manifest(di, allocated, &found);
+        if (r == FIDO_ERR_INTERNAL) {
+                /* The library returns FIDO_ERR_INTERNAL when no devices are found. I wish it wouldn't. */
+                r = 0;
+                goto finish;
+        }
+        if (r != FIDO_OK) {
+                r = log_error_errno(SYNTHETIC_ERRNO(EIO), "Failed to enumerate FIDO2 devices: %s", sym_fido_strerr(r));
+                goto finish;
+        }
+
+        r = found;
+
+finish:
+        sym_fido_dev_info_free(&di, allocated);
+        return r;
+#else
+        return log_error_errno(SYNTHETIC_ERRNO(EOPNOTSUPP),
+                               "FIDO2 tokens not supported on this build.");
+#endif
+}
+
+#if HAVE_LIBFIDO2
+int parse_fido2_algorithm(const char *s, int *ret) {
+        int a;
+
+        assert(s);
+
+        if (streq(s, "es256"))
+                a = COSE_ES256;
+        else if (streq(s, "rs256"))
+                a = COSE_RS256;
+        else if (streq(s, "eddsa"))
+                a = COSE_EDDSA;
+        else
+                return -EINVAL;
+
+        if (ret)
+                *ret = a;
+        return 0;
+}
+#endif

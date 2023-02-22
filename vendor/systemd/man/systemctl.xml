@@ -196,32 +196,31 @@ Sun 2017-02-26 20:57:49 EST  2h 3min left  Sun 2017-02-26 11:56:36 EST  6h ago  
             <option>-t</option>). If a PID is passed, show information
             about the unit the process belongs to.</para>
 
-            <para>This function is intended to generate human-readable
-            output. If you are looking for computer-parsable output,
-            use <command>show</command> instead. By default, this
-            function only shows 10 lines of output and ellipsizes
-            lines to fit in the terminal window. This can be changed
-            with <option>--lines</option> and <option>--full</option>,
-            see above. In addition, <command>journalctl
-            --unit=<replaceable>NAME</replaceable></command> or
-            <command>journalctl
-            --user-unit=<replaceable>NAME</replaceable></command> use
-            a similar filter for messages and might be more
-            convenient.
-            </para>
+            <para>This function is intended to generate human-readable output. If you are looking for
+            computer-parsable output, use <command>show</command> instead. By default, this function only
+            shows 10 lines of output and ellipsizes lines to fit in the terminal window. This can be changed
+            with <option>--lines</option> and <option>--full</option>, see above. In addition,
+            <command>journalctl --unit=<replaceable>NAME</replaceable></command> or <command>journalctl
+            --user-unit=<replaceable>NAME</replaceable></command> use a similar filter for messages and might
+            be more convenient.</para>
 
-            <para>systemd implicitly loads units as necessary, so just running the <command>status</command> will
-            attempt to load a file. The command is thus not useful for determining if something was already loaded or
-            not.  The units may possibly also be quickly unloaded after the operation is completed if there's no reason
-            to keep it in memory thereafter.
-            </para>
+            <para>Note that this operation only displays <emphasis>runtime</emphasis> status, i.e. information about
+            the current invocation of the unit (if it is running) or the most recent invocation (if it is not
+            running anymore, and has not been released from memory). Information about earlier invocations,
+            invocations from previous system boots, or prior invocations that have already been released from
+            memory may be retrieved via <command>journalctl --unit=</command>.</para>
+
+            <para>systemd implicitly loads units as necessary, so just running the <command>status</command>
+            will attempt to load a file. The command is thus not useful for determining if something was
+            already loaded or not.  The units may possibly also be quickly unloaded after the operation is
+            completed if there's no reason to keep it in memory thereafter.</para>
 
             <example>
               <title>Example output from systemctl status </title>
 
               <programlisting>$ systemctl status bluetooth
 ● bluetooth.service - Bluetooth service
-   Loaded: loaded (/usr/lib/systemd/system/bluetooth.service; enabled; vendor preset: enabled)
+   Loaded: loaded (/usr/lib/systemd/system/bluetooth.service; enabled; preset: enabled)
    Active: active (running) since Wed 2017-01-04 13:54:04 EST; 1 weeks 0 days ago
      Docs: man:bluetoothd(8)
  Main PID: 930 (bluetoothd)
@@ -237,29 +236,31 @@ Jan 12 10:46:45 example.com bluetoothd[8900]: Current Time Service could not be 
 Jan 12 10:46:45 example.com bluetoothd[8900]: gatt-time-server: Input/output error (5)
 </programlisting>
 
-            <para>The dot ("●") uses color on supported terminals to summarize the unit state at a glance. Along with
-            its color, its shape varies according to its state: <literal>inactive</literal> or
-            <literal>maintenance</literal> is a white circle ("○"), <literal>active</literal> is a green dot ("●"),
-            <literal>deactivating</literal> is a white dot, <literal>failed</literal> or <literal>error</literal> is
-            a red cross ("×"), and <literal>reloading</literal> is a green clockwise circle arrow ("↻").
-            </para>
+            <para>The dot ("●") uses color on supported terminals to summarize the unit state at a
+            glance. Along with its color, its shape varies according to its state:
+            <literal>inactive</literal> or <literal>maintenance</literal> is a white circle ("○"),
+            <literal>active</literal> is a green dot ("●"), <literal>deactivating</literal> is a white dot,
+            <literal>failed</literal> or <literal>error</literal> is a red cross ("×"), and
+            <literal>reloading</literal> is a green clockwise circle arrow ("↻").</para>
 
-            <para>The "Loaded:" line in the output will show <literal>loaded</literal> if the unit has been loaded into
-            memory. Other possible values for "Loaded:" include: <literal>error</literal> if there was a problem
-            loading it, <literal>not-found</literal> if no unit file was found for this unit,
-            <literal>bad-setting</literal> if an essential unit file setting could not be parsed and
-            <literal>masked</literal> if the unit file has been masked. Along with showing the path to the unit file,
-            this line will also show the enablement state.  Enabled commands start at boot.  See the full table of
-            possible enablement states — including the definition of <literal>masked</literal> — in the documentation
-            for the <command>is-enabled</command> command.
+            <para>The "Loaded:" line in the output will show <literal>loaded</literal> if the unit has been
+            loaded into memory. Other possible values for "Loaded:" include: <literal>error</literal> if
+            there was a problem loading it, <literal>not-found</literal> if no unit file was found for this
+            unit, <literal>bad-setting</literal> if an essential unit file setting could not be parsed and
+            <literal>masked</literal> if the unit file has been masked. Along with showing the path to the
+            unit file, this line will also show the enablement state.  Enabled units are included in the
+            dependency network between units, and thus are started at boot or via some other form of
+            activation.  See the full table of possible enablement states — including the definition of
+            <literal>masked</literal> — in the documentation for the <command>is-enabled</command> command.
             </para>
 
             <para>The "Active:" line shows active state.  The value is usually <literal>active</literal> or
-            <literal>inactive</literal>. Active could mean started, bound, plugged in, etc depending on the unit type.
-            The unit could also be in process of changing states, reporting a state of <literal>activating</literal> or
-            <literal>deactivating</literal>. A special <literal>failed</literal> state is entered when the service
-            failed in some way, such as a crash, exiting with an error code or timing out. If the failed state is
-            entered the cause will be logged for later reference.</para>
+            <literal>inactive</literal>. Active could mean started, bound, plugged in, etc depending on the
+            unit type.  The unit could also be in process of changing states, reporting a state of
+            <literal>activating</literal> or <literal>deactivating</literal>. A special
+            <literal>failed</literal> state is entered when the service failed in some way, such as a crash,
+            exiting with an error code or timing out. If the failed state is entered the cause will be logged
+            for later reference.</para>
             </example>
 
           </listitem>
@@ -1145,7 +1146,7 @@ Jan 12 10:46:45 example.com bluetoothd[8900]: gatt-time-server: Input/output err
           <listitem>
             <para>Dump the systemd manager environment block. This is the environment
             block that is passed to all processes the manager spawns. The environment
-            block will be dumped in straight-forward form suitable for sourcing into
+            block will be dumped in straightforward form suitable for sourcing into
             most shells. If no special characters or whitespace is present in the variable
             values, no escaping is performed, and the assignments have the form
             <literal>VARIABLE=value</literal>. If whitespace or characters which have
@@ -1447,10 +1448,12 @@ Jan 12 10:46:45 example.com bluetoothd[8900]: gatt-time-server: Input/output err
           <term><command>reboot</command></term>
 
           <listitem>
-            <para>Shut down and reboot the system. This is mostly equivalent to <command>systemctl start reboot.target
-            --job-mode=replace-irreversibly --no-block</command>, but also prints a wall message to all users. This
-            command is asynchronous; it will return after the reboot operation is enqueued, without waiting for it to
-            complete.</para>
+            <para>Shut down and reboot the system.</para>
+
+            <para>This command mostly equivalent to <command>systemctl start reboot.target
+            --job-mode=replace-irreversibly --no-block</command>, but also prints a wall message to all
+            users. This command is asynchronous; it will return after the reboot operation is enqueued,
+            without waiting for it to complete.</para>
 
             <para>If combined with <option>--force</option>, shutdown of all running services is skipped, however all
             processes are killed and all file systems are unmounted or mounted read-only, immediately followed by the
@@ -1463,6 +1466,10 @@ Jan 12 10:46:45 example.com bluetoothd[8900]: gatt-time-server: Input/output err
             <para>If the switch <option>--reboot-argument=</option> is given, it will be passed as the optional
             argument to the <citerefentry><refentrytitle>reboot</refentrytitle><manvolnum>2</manvolnum></citerefentry>
             system call.</para>
+
+            <para>Options <option>--boot-loader-entry=</option>, <option>--boot-loader-menu=</option>, and
+            <option>--firmware-setup</option> can be used to select what to do <emphasis>after</emphasis> the
+            reboot. See the descriptions of those options for details.</para>
           </listitem>
         </varlistentry>
 
@@ -2249,7 +2256,7 @@ Jan 12 10:46:45 example.com bluetoothd[8900]: gatt-time-server: Input/output err
       </varlistentry>
 
       <varlistentry>
-        <term><option>--boot-loader-menu=</option></term>
+        <term><option>--boot-loader-menu=<replaceable>timeout</replaceable></option></term>
 
         <listitem>
           <para>When used with the <command>reboot</command> command, indicate to the system's boot loader to
@@ -2260,7 +2267,7 @@ Jan 12 10:46:45 example.com bluetoothd[8900]: gatt-time-server: Input/output err
       </varlistentry>
 
       <varlistentry>
-        <term><option>--boot-loader-entry=</option></term>
+        <term><option>--boot-loader-entry=<replaceable>ID</replaceable></option></term>
 
         <listitem>
           <para>When used with the <command>reboot</command> command, indicate to the system's boot loader to
@@ -2302,6 +2309,13 @@ Jan 12 10:46:45 example.com bluetoothd[8900]: gatt-time-server: Input/output err
             <varlistentry>
               <term><option>pretty</option> (this is the default)</term>
               <listitem><para><literal>Day YYYY-MM-DD HH:MM:SS TZ</literal></para></listitem>
+            </varlistentry>
+          </variablelist>
+
+          <variablelist>
+            <varlistentry>
+              <term><option>unix</option></term>
+              <listitem><para><literal>@seconds-since-the-epoch</literal></para></listitem>
             </varlistentry>
           </variablelist>
 

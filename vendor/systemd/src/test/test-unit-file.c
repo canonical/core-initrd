@@ -7,35 +7,35 @@
 #include "tests.h"
 #include "unit-file.h"
 
-static void test_unit_validate_alias_symlink_and_warn(void) {
-        log_info("/* %s */", __func__);
-
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a.service", "/other/b.service") == 0);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a.service", "/other/b.socket") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a.service", "/other/b.foobar") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@.service", "/other/b@.service") == 0);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@.service", "/other/b@.socket") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@XXX.service", "/other/b@YYY.service") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@XXX.service", "/other/b@YYY.socket") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@.service", "/other/b@YYY.service") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@XXX.service", "/other/b@XXX.service") == 0);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@XXX.service", "/other/b@.service") == 0);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@.service", "/other/b.service") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a.service", "/other/b@.service") == -EXDEV);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a@.slice", "/other/b.slice") == -EINVAL);
-        assert_se(unit_validate_alias_symlink_and_warn("/path/a.slice", "/other/b.slice") == -EINVAL);
+TEST(unit_validate_alias_symlink_and_warn) {
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a.service", "/other/b.service") == 0);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a.service", "/other/b.socket") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a.service", "/other/b.foobar") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@.service", "/other/b@.service") == 0);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@.service", "/other/b@.socket") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@XXX.service", "/other/b@YYY.service") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@XXX.service", "/other/b@YYY.socket") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@.service", "/other/b@YYY.service") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@XXX.service", "/other/b@XXX.service") == 0);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@XXX.service", "/other/b@.service") == 0);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@.service", "/other/b.service") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a.service", "/other/b@.service") == -EXDEV);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a@.slice", "/other/b.slice") == -EINVAL);
+        assert_se(unit_validate_alias_symlink_or_warn(LOG_INFO, "/path/a.slice", "/other/b.slice") == -EINVAL);
 }
 
-static void test_unit_file_build_name_map(char **ids) {
+TEST(unit_file_build_name_map) {
         _cleanup_(lookup_paths_free) LookupPaths lp = {};
         _cleanup_hashmap_free_ Hashmap *unit_ids = NULL;
         _cleanup_hashmap_free_ Hashmap *unit_names = NULL;
         const char *k, *dst;
-        char **v;
+        char **v, **ids;
         usec_t mtime = 0;
         int r;
 
-        assert_se(lookup_paths_init(&lp, UNIT_FILE_SYSTEM, 0, NULL) >= 0);
+        ids = strv_skip(saved_argv, 1);
+
+        assert_se(lookup_paths_init(&lp, LOOKUP_SCOPE_SYSTEM, 0, NULL) >= 0);
 
         assert_se(unit_file_build_name_map(&lp, &mtime, &unit_ids, &unit_names, NULL) == 1);
 
@@ -55,7 +55,6 @@ static void test_unit_file_build_name_map(char **ids) {
         if (r == 0)
                 log_debug("Cache rebuild skipped based on mtime.");
 
-        char **id;
         STRV_FOREACH(id, ids) {
                  const char *fragment, *name;
                  _cleanup_set_free_free_ Set *names = NULL;
@@ -65,17 +64,28 @@ static void test_unit_file_build_name_map(char **ids) {
                                              *id,
                                              &fragment,
                                              &names);
-                 assert(r == 0);
+                 assert_se(r == 0);
                  log_info("fragment: %s", fragment);
                  log_info("names:");
                  SET_FOREACH(name, names)
                          log_info("    %s", name);
         }
+
+        /* Make sure everything still works if we don't collect names. */
+        STRV_FOREACH(id, ids) {
+                 const char *fragment;
+                 log_info("*** %s ***", *id);
+                 r = unit_file_find_fragment(unit_ids,
+                                             unit_names,
+                                             *id,
+                                             &fragment,
+                                             NULL);
+                 assert_se(r == 0);
+                 log_info("fragment: %s", fragment);
+        }
 }
 
-static void test_runlevel_to_target(void) {
-        log_info("/* %s */", __func__);
-
+TEST(runlevel_to_target) {
         in_initrd_force(false);
         assert_se(streq_ptr(runlevel_to_target(NULL), NULL));
         assert_se(streq_ptr(runlevel_to_target("unknown-runlevel"), NULL));
@@ -91,13 +101,9 @@ static void test_runlevel_to_target(void) {
         assert_se(streq_ptr(runlevel_to_target("rd.rescue"), SPECIAL_RESCUE_TARGET));
 }
 
-int main(int argc, char **argv) {
+static int intro(void) {
         log_show_color(true);
-        test_setup_logging(LOG_DEBUG);
-
-        test_unit_validate_alias_symlink_and_warn();
-        test_unit_file_build_name_map(strv_skip(argv, 1));
-        test_runlevel_to_target();
-
-        return 0;
+        return EXIT_SUCCESS;
 }
+
+DEFINE_TEST_MAIN_WITH_INTRO(LOG_DEBUG, intro);

@@ -1,2 +1,8 @@
 # False positive: nspawn containers are supposed to be started via machines.target
-systemd-container: systemd-service-file-refers-to-unusual-wantedby-target lib/systemd/system/systemd-nspawn@.service machines.target
+systemd-container: systemd-service-file-refers-to-unusual-wantedby-target machines.target [lib/systemd/system/systemd-nspawn@.service]
+# Our units without [Install] are either event driven or statically enabled
+systemd-container: systemd-service-file-missing-install-key
+# Lintian is really bad at associating manpages
+systemd-container: spare-manual-page
+systemd-container: package-supports-alternative-init-but-no-init.d-script
+systemd-container: maintainer-script-calls-systemctl

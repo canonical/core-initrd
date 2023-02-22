@@ -5,6 +5,7 @@
 #include "sd-event.h"
 
 #include "alloc-util.h"
+#include "exec-util.h"
 #include "fd-util.h"
 #include "fs-util.h"
 #include "log.h"
@@ -54,7 +55,7 @@ static int io_handler(sd_event_source *s, int fd, uint32_t revents, void *userda
                 else
                         assert_se(sd_event_source_set_enabled(s, SD_EVENT_OFF) >= 0);
         } else
-                assert_not_reached("Yuck!");
+                assert_not_reached();
 
         return 1;
 }
@@ -169,7 +170,7 @@ static int time_handler(sd_event_source *s, uint64_t usec, void *userdata) {
                         got_c = true;
                 }
         } else
-                assert_not_reached("Huh?");
+                assert_not_reached();
 
         return 2;
 }
@@ -194,7 +195,7 @@ static int post_handler(sd_event_source *s, void *userdata) {
         return 2;
 }
 
-static void test_basic(bool with_pidfd) {
+static void test_basic_one(bool with_pidfd) {
         sd_event *e = NULL;
         sd_event_source *w = NULL, *x = NULL, *y = NULL, *z = NULL, *q = NULL, *t = NULL;
         static const char ch = 'x';
@@ -301,20 +302,21 @@ static void test_basic(bool with_pidfd) {
         assert_se(unsetenv("SYSTEMD_PIDFD") >= 0);
 }
 
-static void test_sd_event_now(void) {
+TEST(basic) {
+        test_basic_one(true);   /* test with pidfd */
+        test_basic_one(false);  /* test without pidfd */
+}
+
+TEST(sd_event_now) {
         _cleanup_(sd_event_unrefp) sd_event *e = NULL;
         uint64_t event_now;
-
-        log_info("/* %s */", __func__);
 
         assert_se(sd_event_new(&e) >= 0);
         assert_se(sd_event_now(e, CLOCK_MONOTONIC, &event_now) > 0);
         assert_se(sd_event_now(e, CLOCK_REALTIME, &event_now) > 0);
         assert_se(sd_event_now(e, CLOCK_REALTIME_ALARM, &event_now) > 0);
-        if (clock_boottime_supported()) {
-                assert_se(sd_event_now(e, CLOCK_BOOTTIME, &event_now) > 0);
-                assert_se(sd_event_now(e, CLOCK_BOOTTIME_ALARM, &event_now) > 0);
-        }
+        assert_se(sd_event_now(e, CLOCK_BOOTTIME, &event_now) > 0);
+        assert_se(sd_event_now(e, CLOCK_BOOTTIME_ALARM, &event_now) > 0);
         assert_se(sd_event_now(e, -1, &event_now) == -EOPNOTSUPP);
         assert_se(sd_event_now(e, 900 /* arbitrary big number */, &event_now) == -EOPNOTSUPP);
 
@@ -323,10 +325,8 @@ static void test_sd_event_now(void) {
         assert_se(sd_event_now(e, CLOCK_MONOTONIC, &event_now) == 0);
         assert_se(sd_event_now(e, CLOCK_REALTIME, &event_now) == 0);
         assert_se(sd_event_now(e, CLOCK_REALTIME_ALARM, &event_now) == 0);
-        if (clock_boottime_supported()) {
-                assert_se(sd_event_now(e, CLOCK_BOOTTIME, &event_now) == 0);
-                assert_se(sd_event_now(e, CLOCK_BOOTTIME_ALARM, &event_now) == 0);
-        }
+        assert_se(sd_event_now(e, CLOCK_BOOTTIME, &event_now) == 0);
+        assert_se(sd_event_now(e, CLOCK_BOOTTIME_ALARM, &event_now) == 0);
         assert_se(sd_event_now(e, -1, &event_now) == -EOPNOTSUPP);
         assert_se(sd_event_now(e, 900 /* arbitrary big number */, &event_now) == -EOPNOTSUPP);
 }
@@ -340,11 +340,9 @@ static int rtqueue_handler(sd_event_source *s, const struct signalfd_siginfo *si
         return 0;
 }
 
-static void test_rtqueue(void) {
+TEST(rtqueue) {
         sd_event_source *u = NULL, *v = NULL, *s = NULL;
         sd_event *e = NULL;
-
-        log_info("/* %s */", __func__);
 
         assert_se(sd_event_default(&e) >= 0);
 
@@ -403,8 +401,8 @@ struct inotify_context {
 static void maybe_exit(sd_event_source *s, struct inotify_context *c) {
         unsigned n;
 
-        assert(s);
-        assert(c);
+        assert_se(s);
+        assert_se(c);
 
         if (!c->delete_self_handler_called)
                 return;
@@ -451,7 +449,7 @@ static int inotify_handler(sd_event_source *s, const struct inotify_event *ev, v
                 log_info("inotify-handler <%s>: delete of %s", description, ev->name);
                 assert_se(streq(ev->name, "sub"));
         } else
-                assert_not_reached("unexpected inotify event");
+                assert_not_reached();
 
         maybe_exit(s, c);
         return 1;
@@ -469,13 +467,13 @@ static int delete_self_handler(sd_event_source *s, const struct inotify_event *e
         } else if (ev->mask & IN_IGNORED) {
                 log_info("delete-self-handler: ignore");
         } else
-                assert_not_reached("unexpected inotify event (delete-self)");
+                assert_not_reached();
 
         maybe_exit(s, c);
         return 1;
 }
 
-static void test_inotify(unsigned n_create_events) {
+static void test_inotify_one(unsigned n_create_events) {
         _cleanup_(rm_rf_physical_and_freep) char *p = NULL;
         sd_event_source *a = NULL, *b = NULL, *c = NULL, *d = NULL;
         struct inotify_context context = {
@@ -528,6 +526,11 @@ static void test_inotify(unsigned n_create_events) {
         sd_event_unref(e);
 }
 
+TEST(inotify) {
+        test_inotify_one(100); /* should work without overflow */
+        test_inotify_one(33000); /* should trigger a q overflow */
+}
+
 static int pidfd_handler(sd_event_source *s, const siginfo_t *si, void *userdata) {
         assert_se(s);
         assert_se(si);
@@ -547,13 +550,11 @@ static int pidfd_handler(sd_event_source *s, const siginfo_t *si, void *userdata
         return 0;
 }
 
-static void test_pidfd(void) {
+TEST(pidfd) {
         sd_event_source *s = NULL, *t = NULL;
         sd_event *e = NULL;
         int pidfd;
         pid_t pid, pid2;
-
-        log_info("/* %s */", __func__);
 
         assert_se(sigprocmask_many(SIG_BLOCK, NULL, SIGCHLD, -1) >= 0);
 
@@ -622,14 +623,17 @@ static int ratelimit_time_handler(sd_event_source *s, uint64_t usec, void *userd
         return 0;
 }
 
-static void test_ratelimit(void) {
+static int expired = -1;
+static int ratelimit_expired(sd_event_source *s, void *userdata) {
+        return ++expired;
+}
+
+TEST(ratelimit) {
         _cleanup_close_pair_ int p[2] = {-1, -1};
         _cleanup_(sd_event_unrefp) sd_event *e = NULL;
         _cleanup_(sd_event_source_unrefp) sd_event_source *s = NULL;
         uint64_t interval;
         unsigned count, burst;
-
-        log_info("/* %s */", __func__);
 
         assert_se(sd_event_default(&e) >= 0);
         assert_se(pipe2(p, O_CLOEXEC|O_NONBLOCK) >= 0);
@@ -685,15 +689,22 @@ static void test_ratelimit(void) {
 
         assert_se(sd_event_source_set_ratelimit(s, 1 * USEC_PER_SEC, 10) >= 0);
 
+        /* Set callback that will be invoked when we leave rate limited state. */
+        assert_se(sd_event_source_set_ratelimit_expire_callback(s, ratelimit_expired) >= 0);
+
         do {
                 assert_se(sd_event_run(e, UINT64_MAX) >= 0);
         } while (!sd_event_source_is_ratelimited(s));
 
         log_info("ratelimit_time_handler: called 10 more times, event source got ratelimited");
         assert_se(count == 20);
+
+        /* Dispatch the event loop once more and check that ratelimit expiration callback got called */
+        assert_se(sd_event_run(e, UINT64_MAX) >= 0);
+        assert_se(expired == 0);
 }
 
-static void test_simple_timeout(void) {
+TEST(simple_timeout) {
         _cleanup_(sd_event_unrefp) sd_event *e = NULL;
         usec_t f, t, some_time;
 
@@ -712,23 +723,90 @@ static void test_simple_timeout(void) {
         assert_se(t >= usec_add(f, some_time));
 }
 
-int main(int argc, char *argv[]) {
-        test_setup_logging(LOG_DEBUG);
+static int inotify_self_destroy_handler(sd_event_source *s, const struct inotify_event *ev, void *userdata) {
+        sd_event_source **p = userdata;
 
-        test_simple_timeout();
+        assert_se(ev);
+        assert_se(p);
+        assert_se(*p == s);
 
-        test_basic(true);   /* test with pidfd */
-        test_basic(false);  /* test without pidfd */
+        assert_se(FLAGS_SET(ev->mask, IN_ATTRIB));
 
-        test_sd_event_now();
-        test_rtqueue();
+        assert_se(sd_event_exit(sd_event_source_get_event(s), 0) >= 0);
 
-        test_inotify(100); /* should work without overflow */
-        test_inotify(33000); /* should trigger a q overflow */
-
-        test_pidfd();
-
-        test_ratelimit();
-
-        return 0;
+        *p = sd_event_source_unref(*p); /* here's what we actually intend to test: we destroy the event
+                                         * source from inside the event source handler */
+        return 1;
 }
+
+TEST(inotify_self_destroy) {
+        _cleanup_(sd_event_source_unrefp) sd_event_source *s = NULL;
+        _cleanup_(sd_event_unrefp) sd_event *e = NULL;
+        char path[] = "/tmp/inotifyXXXXXX";
+        _cleanup_close_ int fd = -1;
+
+        /* Tests that destroying an inotify event source from its own handler is safe */
+
+        assert_se(sd_event_default(&e) >= 0);
+
+        fd = mkostemp_safe(path);
+        assert_se(fd >= 0);
+        assert_se(sd_event_add_inotify_fd(e, &s, fd, IN_ATTRIB, inotify_self_destroy_handler, &s) >= 0);
+        fd = safe_close(fd);
+        assert_se(unlink(path) >= 0); /* This will trigger IN_ATTRIB because link count goes to zero */
+        assert_se(sd_event_loop(e) >= 0);
+}
+
+struct inotify_process_buffered_data_context {
+        const char *path[2];
+        unsigned i;
+};
+
+static int inotify_process_buffered_data_handler(sd_event_source *s, const struct inotify_event *ev, void *userdata) {
+        struct inotify_process_buffered_data_context *c = ASSERT_PTR(userdata);
+        const char *description;
+
+        assert_se(sd_event_source_get_description(s, &description) >= 0);
+
+        assert_se(c->i < 2);
+        assert_se(streq(c->path[c->i], description));
+        c->i++;
+
+        return 1;
+}
+
+TEST(inotify_process_buffered_data) {
+        _cleanup_(rm_rf_physical_and_freep) char *p = NULL, *q = NULL;
+        _cleanup_(sd_event_source_unrefp) sd_event_source *a = NULL, *b = NULL;
+        _cleanup_(sd_event_unrefp) sd_event *e = NULL;
+        _cleanup_free_ char *z = NULL;
+
+        /* For issue #23826 */
+
+        assert_se(sd_event_default(&e) >= 0);
+
+        assert_se(mkdtemp_malloc("/tmp/test-inotify-XXXXXX", &p) >= 0);
+        assert_se(mkdtemp_malloc("/tmp/test-inotify-XXXXXX", &q) >= 0);
+
+        struct inotify_process_buffered_data_context context = {
+                .path = { p, q },
+        };
+
+        assert_se(sd_event_add_inotify(e, &a, p, IN_CREATE, inotify_process_buffered_data_handler, &context) >= 0);
+        assert_se(sd_event_add_inotify(e, &b, q, IN_CREATE, inotify_process_buffered_data_handler, &context) >= 0);
+
+        assert_se(z = path_join(p, "aaa"));
+        assert_se(touch(z) >= 0);
+        z = mfree(z);
+        assert_se(z = path_join(q, "bbb"));
+        assert_se(touch(z) >= 0);
+        z = mfree(z);
+
+        assert_se(sd_event_run(e, 10 * USEC_PER_SEC) > 0);
+        assert_se(sd_event_prepare(e) > 0); /* issue #23826: this was 0. */
+        assert_se(sd_event_dispatch(e) > 0);
+        assert_se(sd_event_prepare(e) == 0);
+        assert_se(sd_event_wait(e, 0) == 0);
+}
+
+DEFINE_TEST_MAIN(LOG_DEBUG);

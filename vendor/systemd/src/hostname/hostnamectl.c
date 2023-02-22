@@ -51,7 +51,28 @@ typedef struct StatusInfo {
         const char *home_url;
         const char *hardware_vendor;
         const char *hardware_model;
+        const char *firmware_version;
 } StatusInfo;
+
+static const char* chassis_string_to_glyph(const char *chassis) {
+        if (streq_ptr(chassis, "laptop"))
+                return u8"💻"; /* Personal Computer */
+        if (streq_ptr(chassis, "desktop"))
+                return u8"🖥️"; /* Desktop Computer */
+        if (streq_ptr(chassis, "server"))
+                return u8"🖳"; /* Old Personal Computer */
+        if (streq_ptr(chassis, "tablet"))
+                return u8"具"; /* Ideograph tool, implement; draw up, write, looks vaguely tabletty */
+        if (streq_ptr(chassis, "watch"))
+                return u8"⌚"; /* Watch */
+        if (streq_ptr(chassis, "handset"))
+                return u8"🕻"; /* Left Hand Telephone Receiver */
+        if (streq_ptr(chassis, "vm"))
+                return u8"🖴"; /* Hard disk */
+        if (streq_ptr(chassis, "container"))
+                return u8"☐"; /* Ballot Box  */
+        return NULL;
+}
 
 static int print_status_info(StatusInfo *i) {
         _cleanup_(table_unrefp) Table *table = NULL;
@@ -108,9 +129,15 @@ static int print_status_info(StatusInfo *i) {
         }
 
         if (!isempty(i->chassis)) {
+                /* Possibly add a pretty symbol. Let's not bother with non-unicode fallbacks, because this is
+                 * just a prettification and we can't really express this with ASCII anyway. */
+                const char *v = chassis_string_to_glyph(i->chassis);
+                if (v)
+                        v = strjoina(i->chassis, " ", v);
+
                 r = table_add_many(table,
                                    TABLE_STRING, "Chassis:",
-                                   TABLE_STRING, i->chassis);
+                                   TABLE_STRING, v ?: i->chassis);
                 if (r < 0)
                         return table_log_add_error(r);
         }
@@ -209,6 +236,14 @@ static int print_status_info(StatusInfo *i) {
                         return table_log_add_error(r);
         }
 
+        if (!isempty(i->firmware_version)) {
+                r = table_add_many(table,
+                                   TABLE_STRING, "Firmware Version:",
+                                   TABLE_STRING, i->firmware_version);
+                if (r < 0)
+                        return table_log_add_error(r);
+        }
+
         r = table_print(table, NULL);
         if (r < 0)
                 return table_log_print_error(r);
@@ -259,20 +294,21 @@ static int show_all_names(sd_bus *bus) {
         StatusInfo info = {};
 
         static const struct bus_properties_map hostname_map[]  = {
-                { "Hostname",                  "s", NULL, offsetof(StatusInfo, hostname)        },
-                { "StaticHostname",            "s", NULL, offsetof(StatusInfo, static_hostname) },
-                { "PrettyHostname",            "s", NULL, offsetof(StatusInfo, pretty_hostname) },
-                { "IconName",                  "s", NULL, offsetof(StatusInfo, icon_name)       },
-                { "Chassis",                   "s", NULL, offsetof(StatusInfo, chassis)         },
-                { "Deployment",                "s", NULL, offsetof(StatusInfo, deployment)      },
-                { "Location",                  "s", NULL, offsetof(StatusInfo, location)        },
-                { "KernelName",                "s", NULL, offsetof(StatusInfo, kernel_name)     },
-                { "KernelRelease",             "s", NULL, offsetof(StatusInfo, kernel_release)  },
-                { "OperatingSystemPrettyName", "s", NULL, offsetof(StatusInfo, os_pretty_name)  },
-                { "OperatingSystemCPEName",    "s", NULL, offsetof(StatusInfo, os_cpe_name)     },
-                { "HomeURL",                   "s", NULL, offsetof(StatusInfo, home_url)        },
-                { "HardwareVendor",            "s", NULL, offsetof(StatusInfo, hardware_vendor) },
-                { "HardwareModel",             "s", NULL, offsetof(StatusInfo, hardware_model)  },
+                { "Hostname",                  "s", NULL, offsetof(StatusInfo, hostname)         },
+                { "StaticHostname",            "s", NULL, offsetof(StatusInfo, static_hostname)  },
+                { "PrettyHostname",            "s", NULL, offsetof(StatusInfo, pretty_hostname)  },
+                { "IconName",                  "s", NULL, offsetof(StatusInfo, icon_name)        },
+                { "Chassis",                   "s", NULL, offsetof(StatusInfo, chassis)          },
+                { "Deployment",                "s", NULL, offsetof(StatusInfo, deployment)       },
+                { "Location",                  "s", NULL, offsetof(StatusInfo, location)         },
+                { "KernelName",                "s", NULL, offsetof(StatusInfo, kernel_name)      },
+                { "KernelRelease",             "s", NULL, offsetof(StatusInfo, kernel_release)   },
+                { "OperatingSystemPrettyName", "s", NULL, offsetof(StatusInfo, os_pretty_name)   },
+                { "OperatingSystemCPEName",    "s", NULL, offsetof(StatusInfo, os_cpe_name)      },
+                { "HomeURL",                   "s", NULL, offsetof(StatusInfo, home_url)         },
+                { "HardwareVendor",            "s", NULL, offsetof(StatusInfo, hardware_vendor)  },
+                { "HardwareModel",             "s", NULL, offsetof(StatusInfo, hardware_model)   },
+                { "FirmwareVersion",           "s", NULL, offsetof(StatusInfo, firmware_version) },
                 {}
         };
 
@@ -620,7 +656,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         return 1;
@@ -660,7 +696,7 @@ static int run(int argc, char *argv[]) {
 
         r = bus_connect_transport(arg_transport, arg_host, false, &bus);
         if (r < 0)
-                return bus_log_connect_error(r);
+                return bus_log_connect_error(r, arg_transport);
 
         return hostnamectl_main(bus, argc, argv);
 }

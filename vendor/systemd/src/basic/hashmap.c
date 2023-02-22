@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
+#include <fnmatch.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -162,7 +163,7 @@ struct _packed_ indirect_storage {
         unsigned n_buckets;                /* number of buckets */
 
         unsigned idx_lowest_entry;         /* Index below which all buckets are free.
-                                              Makes "while(hashmap_steal_first())" loops
+                                              Makes "while (hashmap_steal_first())" loops
                                               O(n) instead of O(n^2) for unordered hashmaps. */
         uint8_t  _pad[3];                  /* padding for the whole HashmapBase */
         /* The bitfields in HashmapBase complete the alignment of the whole thing. */
@@ -401,7 +402,7 @@ static struct hashmap_base_entry* bucket_at_virtual(HashmapBase *h, struct swap_
         if (idx < _IDX_SWAP_END)
                 return &bucket_at_swap(swap, idx)->p.b;
 
-        assert_not_reached("Invalid index");
+        assert_not_reached();
 }
 
 static dib_raw_t* dib_raw_ptr(HashmapBase *h) {
@@ -513,7 +514,7 @@ static void* entry_value(HashmapBase *h, struct hashmap_base_entry *e) {
                 return (void*) e->key;
 
         default:
-                assert_not_reached("Unknown hashmap type");
+                assert_not_reached();
         }
 }
 
@@ -1747,7 +1748,7 @@ HashmapBase* _hashmap_copy(HashmapBase *h  HASHMAP_DEBUG_PARAMS) {
                 r = set_merge((Set*)copy, (Set*)h);
                 break;
         default:
-                assert_not_reached("Unknown hashmap type");
+                assert_not_reached();
         }
 
         if (r < 0)
@@ -1841,7 +1842,7 @@ int _hashmap_put_strdup_full(Hashmap **h, const struct hash_ops *hash_ops, const
         return r;
 }
 
-int _set_put_strdup_full(Set **s, const struct hash_ops *hash_ops, const char *p  HASHMAP_DEBUG_PARAMS) {
+int _set_put_strndup_full(Set **s, const struct hash_ops *hash_ops, const char *p, size_t n  HASHMAP_DEBUG_PARAMS) {
         char *c;
         int r;
 
@@ -1852,10 +1853,13 @@ int _set_put_strdup_full(Set **s, const struct hash_ops *hash_ops, const char *p
         if (r < 0)
                 return r;
 
-        if (set_contains(*s, (char*) p))
-                return 0;
+        if (n == SIZE_MAX) {
+                if (set_contains(*s, (char*) p))
+                        return 0;
 
-        c = strdup(p);
+                c = strdup(p);
+        } else
+                c = strndup(p, n);
         if (!c)
                 return -ENOMEM;
 
@@ -1864,12 +1868,11 @@ int _set_put_strdup_full(Set **s, const struct hash_ops *hash_ops, const char *p
 
 int _set_put_strdupv_full(Set **s, const struct hash_ops *hash_ops, char **l  HASHMAP_DEBUG_PARAMS) {
         int n = 0, r;
-        char **i;
 
         assert(s);
 
         STRV_FOREACH(i, l) {
-                r = _set_put_strdup_full(s, hash_ops, *i  HASHMAP_DEBUG_PASS_ARGS);
+                r = _set_put_strndup_full(s, hash_ops, *i, SIZE_MAX  HASHMAP_DEBUG_PASS_ARGS);
                 if (r < 0)
                         return r;
 
@@ -2070,4 +2073,28 @@ bool set_equal(Set *a, Set *b) {
                         return false;
 
         return true;
+}
+
+static bool set_fnmatch_one(Set *patterns, const char *needle) {
+        const char *p;
+
+        assert(needle);
+
+        SET_FOREACH(p, patterns)
+                if (fnmatch(p, needle, 0) == 0)
+                        return true;
+
+        return false;
+}
+
+bool set_fnmatch(Set *include_patterns, Set *exclude_patterns, const char *needle) {
+        assert(needle);
+
+        if (set_fnmatch_one(exclude_patterns, needle))
+                return false;
+
+        if (set_isempty(include_patterns))
+                return true;
+
+        return set_fnmatch_one(include_patterns, needle);
 }

@@ -2,7 +2,6 @@
 
 #include <errno.h>
 #include <inttypes.h>
-#include <linux/oom.h>
 #include <net/if.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -416,7 +415,7 @@ int safe_atoi(const char *s, int *ret_i) {
         return 0;
 }
 
-int safe_atollu_full(const char *s, unsigned base, long long unsigned *ret_llu) {
+int safe_atollu_full(const char *s, unsigned base, unsigned long long *ret_llu) {
         char *x = NULL;
         unsigned long long l;
 
@@ -645,7 +644,7 @@ int parse_ip_port(const char *s, uint16_t *ret) {
         uint16_t l;
         int r;
 
-        r = safe_atou16(s, &l);
+        r = safe_atou16_full(s, SAFE_ATO_REFUSE_LEADING_WHITESPACE, &l);
         if (r < 0)
                 return r;
 
@@ -693,34 +692,6 @@ int parse_ip_prefix_length(const char *s, int *ret) {
         return 0;
 }
 
-int parse_dev(const char *s, dev_t *ret) {
-        const char *major;
-        unsigned x, y;
-        size_t n;
-        int r;
-
-        n = strspn(s, DIGITS);
-        if (n == 0)
-                return -EINVAL;
-        if (s[n] != ':')
-                return -EINVAL;
-
-        major = strndupa(s, n);
-        r = safe_atou(major, &x);
-        if (r < 0)
-                return r;
-
-        r = safe_atou(s + n + 1, &y);
-        if (r < 0)
-                return r;
-
-        if (!DEVICE_MAJOR_VALID(x) || !DEVICE_MINOR_VALID(y))
-                return -ERANGE;
-
-        *ret = makedev(x, y);
-        return 0;
-}
-
 int parse_oom_score_adjust(const char *s, int *ret) {
         int r, v;
 
@@ -731,7 +702,7 @@ int parse_oom_score_adjust(const char *s, int *ret) {
         if (r < 0)
                 return r;
 
-        if (v < OOM_SCORE_ADJ_MIN || v > OOM_SCORE_ADJ_MAX)
+        if (!oom_score_adjust_is_valid(v))
                 return -ERANGE;
 
         *ret = v;
@@ -741,13 +712,13 @@ int parse_oom_score_adjust(const char *s, int *ret) {
 int store_loadavg_fixed_point(unsigned long i, unsigned long f, loadavg_t *ret) {
         assert(ret);
 
-        if (i >= (~0UL << FSHIFT))
+        if (i >= (~0UL << LOADAVG_PRECISION_BITS))
                 return -ERANGE;
 
-        i = i << FSHIFT;
-        f = DIV_ROUND_UP((f << FSHIFT), 100);
+        i = i << LOADAVG_PRECISION_BITS;
+        f = DIV_ROUND_UP((f << LOADAVG_PRECISION_BITS), 100);
 
-        if (f >= FIXED_1)
+        if (f >= LOADAVG_FIXED_POINT_1_0)
                 return -ERANGE;
 
         *ret = i | f;
@@ -766,7 +737,7 @@ int parse_loadavg_fixed_point(const char *s, loadavg_t *ret) {
         if (!d)
                 return -EINVAL;
 
-        i_str = strndupa(s, d - s);
+        i_str = strndupa_safe(s, d - s);
         f_str = d + 1;
 
         r = safe_atolu_full(i_str, 10, &i);

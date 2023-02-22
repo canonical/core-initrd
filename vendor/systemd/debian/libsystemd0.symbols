@@ -30,7 +30,9 @@ libsystemd.so.0 libsystemd0 #MINVER#
  LIBSYSTEMD_247@LIBSYSTEMD_247 247
  LIBSYSTEMD_248@LIBSYSTEMD_248 248
  LIBSYSTEMD_249@LIBSYSTEMD_249 249
- LIBSYSTEMD_252@LIBSYSTEMD_252 249.11-0ubuntu3.5~
+ LIBSYSTEMD_250@LIBSYSTEMD_250 250
+ LIBSYSTEMD_251@LIBSYSTEMD_251 251~rc1
+ LIBSYSTEMD_252@LIBSYSTEMD_252 251.4-1ubuntu3~
  sd_booted@LIBSYSTEMD_209 0
  sd_bus_add_fallback@LIBSYSTEMD_221 221
  sd_bus_add_fallback_vtable@LIBSYSTEMD_221 221
@@ -337,6 +339,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_device_enumerator_add_match_sysattr@LIBSYSTEMD_240 240
  sd_device_enumerator_add_match_sysname@LIBSYSTEMD_240 240
  sd_device_enumerator_add_match_tag@LIBSYSTEMD_240 240
+ sd_device_enumerator_add_nomatch_sysname@LIBSYSTEMD_251 251~rc2
  sd_device_enumerator_allow_uninitialized@LIBSYSTEMD_240 240
  sd_device_enumerator_get_device_first@LIBSYSTEMD_240 240
  sd_device_enumerator_get_device_next@LIBSYSTEMD_240 240
@@ -354,6 +357,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_device_get_devnum@LIBSYSTEMD_240 240
  sd_device_get_devpath@LIBSYSTEMD_240 240
  sd_device_get_devtype@LIBSYSTEMD_240 240
+ sd_device_get_diskseq@LIBSYSTEMD_250 250
  sd_device_get_driver@LIBSYSTEMD_240 240
  sd_device_get_ifindex@LIBSYSTEMD_240 240
  sd_device_get_is_initialized@LIBSYSTEMD_240 240
@@ -394,12 +398,15 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_device_monitor_stop@LIBSYSTEMD_240 240
  sd_device_monitor_unref@LIBSYSTEMD_240 240
  sd_device_new_from_device_id@LIBSYSTEMD_240 240
+ sd_device_new_from_devname@LIBSYSTEMD_251 251~rc2
  sd_device_new_from_devnum@LIBSYSTEMD_240 240
  sd_device_new_from_ifindex@LIBSYSTEMD_249 249
  sd_device_new_from_ifname@LIBSYSTEMD_249 249
+ sd_device_new_from_path@LIBSYSTEMD_251 251~rc2
  sd_device_new_from_stat_rdev@LIBSYSTEMD_248 248
  sd_device_new_from_subsystem_sysname@LIBSYSTEMD_240 240
  sd_device_new_from_syspath@LIBSYSTEMD_240 240
+ sd_device_open@LIBSYSTEMD_251 251~rc2
  sd_device_ref@LIBSYSTEMD_240 240
  sd_device_set_sysattr_value@LIBSYSTEMD_240 240
  sd_device_set_sysattr_valuef@LIBSYSTEMD_247 247
@@ -411,6 +418,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_event_add_defer@LIBSYSTEMD_221 221
  sd_event_add_exit@LIBSYSTEMD_221 221
  sd_event_add_inotify@LIBSYSTEMD_239 239
+ sd_event_add_inotify_fd@LIBSYSTEMD_250 250
  sd_event_add_io@LIBSYSTEMD_221 221
  sd_event_add_post@LIBSYSTEMD_221 221
  sd_event_add_signal@LIBSYSTEMD_221 221
@@ -472,6 +480,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_event_source_set_prepare@LIBSYSTEMD_221 221
  sd_event_source_set_priority@LIBSYSTEMD_221 221
  sd_event_source_set_ratelimit@LIBSYSTEMD_248 248
+ sd_event_source_set_ratelimit_expire_callback@LIBSYSTEMD_250 250
  sd_event_source_set_time@LIBSYSTEMD_221 221
  sd_event_source_set_time_accuracy@LIBSYSTEMD_221 221
  sd_event_source_set_time_relative@LIBSYSTEMD_247 247
@@ -486,7 +495,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_hwdb_enumerate@LIBSYSTEMD_240 240
  sd_hwdb_get@LIBSYSTEMD_240 240
  sd_hwdb_new@LIBSYSTEMD_240 240
- sd_hwdb_new_from_path@LIBSYSTEMD_252 249.11-0ubuntu3.5~
+ sd_hwdb_new_from_path@LIBSYSTEMD_252 251.4-1ubuntu3~
  sd_hwdb_ref@LIBSYSTEMD_240 240
  sd_hwdb_seek@LIBSYSTEMD_240 240
  sd_hwdb_unref@LIBSYSTEMD_240 240
@@ -498,6 +507,7 @@ libsystemd.so.0 libsystemd0 #MINVER#
  sd_id128_get_machine_app_specific@LIBSYSTEMD_233 233
  sd_id128_randomize@LIBSYSTEMD_209 0
  sd_id128_to_string@LIBSYSTEMD_209 0
+ sd_id128_to_uuid_string@LIBSYSTEMD_251 251~rc1
  sd_is_fifo@LIBSYSTEMD_209 0
  sd_is_mq@LIBSYSTEMD_209 0
  sd_is_socket@LIBSYSTEMD_209 0

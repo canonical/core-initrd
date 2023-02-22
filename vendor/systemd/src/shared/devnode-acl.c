@@ -9,9 +9,9 @@
 #include "device-util.h"
 #include "devnode-acl.h"
 #include "dirent-util.h"
-#include "escape.h"
 #include "fd-util.h"
 #include "format-util.h"
+#include "fs-util.h"
 #include "set.h"
 #include "string-util.h"
 #include "util.h"
@@ -143,7 +143,6 @@ int devnode_acl_all(const char *seat,
         _cleanup_(sd_device_enumerator_unrefp) sd_device_enumerator *e = NULL;
         _cleanup_set_free_free_ Set *nodes = NULL;
         _cleanup_closedir_ DIR *dir = NULL;
-        struct dirent *dent;
         sd_device *d;
         char *n;
         int r;
@@ -195,20 +194,19 @@ int devnode_acl_all(const char *seat,
          * these devices are not known to the kernel at this moment */
         dir = opendir("/run/udev/static_node-tags/uaccess");
         if (dir) {
-                FOREACH_DIRENT(dent, dir, return -errno) {
-                        _cleanup_free_ char *unescaped_devname = NULL;
-
-                        if (cunescape(dent->d_name, UNESCAPE_RELAX, &unescaped_devname) < 0)
-                                return -ENOMEM;
-
-                        n = path_join("/dev", unescaped_devname);
-                        if (!n)
-                                return -ENOMEM;
+                FOREACH_DIRENT(de, dir, return -errno) {
+                        r = readlinkat_malloc(dirfd(dir), de->d_name, &n);
+                        if (r == -ENOENT)
+                                continue;
+                        if (r < 0) {
+                                log_debug_errno(r,
+                                                "Unable to read symlink '/run/udev/static_node-tags/uaccess/%s', ignoring: %m",
+                                                de->d_name);
+                                continue;
+                        }
 
                         log_debug("Found static node %s for seat %s", n, seat);
                         r = set_consume(nodes, n);
-                        if (r == -EEXIST)
-                                continue;
                         if (r < 0)
                                 return r;
                 }

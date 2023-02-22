@@ -428,7 +428,7 @@ int bus_message_from_header(
 
         _cleanup_free_ sd_bus_message *m = NULL;
         struct bus_header *h;
-        size_t a, label_sz;
+        size_t a, label_sz = 0; /* avoid false maybe-uninitialized warning */
 
         assert(bus);
         assert(header || header_accessible <= 0);
@@ -506,7 +506,10 @@ int bus_message_from_header(
                 m->fields_size = BUS_MESSAGE_BSWAP32(m, h->dbus1.fields_size);
                 m->body_size = BUS_MESSAGE_BSWAP32(m, h->dbus1.body_size);
 
-                if (sizeof(struct bus_header) + ALIGN8(m->fields_size) + m->body_size != message_size)
+                assert(message_size >= sizeof(struct bus_header));
+                if (m->fields_size > message_size - sizeof(struct bus_header) ||
+                    ALIGN8(m->fields_size) > message_size - sizeof(struct bus_header) ||
+                    m->body_size != message_size - sizeof(struct bus_header) - ALIGN8(m->fields_size))
                         return -EBADMSG;
         }
 
@@ -2275,7 +2278,7 @@ _public_ int sd_bus_message_close_container(sd_bus_message *m) {
         else if (IN_SET(c->enclosing, SD_BUS_TYPE_STRUCT, SD_BUS_TYPE_DICT_ENTRY))
                 r = bus_message_close_struct(m, c, true);
         else
-                assert_not_reached("Unknown container type");
+                assert_not_reached();
 
         free(c->signature);
         free(c->offsets);
@@ -2815,7 +2818,6 @@ _public_ int sd_bus_message_append_string_memfd(
 }
 
 _public_ int sd_bus_message_append_strv(sd_bus_message *m, char **l) {
-        char **i;
         int r;
 
         assert_return(m, -EINVAL);
@@ -3062,15 +3064,21 @@ void bus_body_part_unmap(struct bus_body_part *part) {
         return;
 }
 
-static int buffer_peek(const void *p, uint32_t sz, size_t *rindex, size_t align, size_t nbytes, void **r) {
+static int buffer_peek(const void *p, size_t sz, size_t *rindex, size_t align, size_t nbytes, void **r) {
         size_t k, start, end;
 
         assert(rindex);
         assert(align > 0);
 
-        start = ALIGN_TO((size_t) *rindex, align);
-        end = start + nbytes;
+        start = ALIGN_TO(*rindex, align);
+        if (start > sz)
+                return -EBADMSG;
 
+        /* Avoid overflow below */
+        if (nbytes > SIZE_MAX - start)
+                return -EBADMSG;
+
+        end = start + nbytes;
         if (end > sz)
                 return -EBADMSG;
 
@@ -3247,7 +3255,7 @@ static int container_next_item(sd_bus_message *m, struct bus_container *c, size_
         } else if (c->enclosing == SD_BUS_TYPE_VARIANT)
                 goto end;
         else
-                assert_not_reached("Unknown container type");
+                assert_not_reached();
 
         return 0;
 
@@ -3273,10 +3281,17 @@ static int message_peek_body(
         assert(rindex);
         assert(align > 0);
 
-        start = ALIGN_TO((size_t) *rindex, align);
-        padding = start - *rindex;
-        end = start + nbytes;
+        start = ALIGN_TO(*rindex, align);
+        if (start > m->user_body_size)
+                return -EBADMSG;
 
+        padding = start - *rindex;
+
+        /* Avoid overflow below */
+        if (nbytes > SIZE_MAX - start)
+                return -EBADMSG;
+
+        end = start + nbytes;
         if (end > m->user_body_size)
                 return -EBADMSG;
 
@@ -3460,7 +3475,7 @@ _public_ int sd_bus_message_read_basic(sd_bus_message *m, char type, void *p) {
                         }
 
                         default:
-                                assert_not_reached("unexpected type");
+                                assert_not_reached();
                         }
                 }
 
@@ -3575,7 +3590,7 @@ _public_ int sd_bus_message_read_basic(sd_bus_message *m, char type, void *p) {
                         }
 
                         default:
-                                assert_not_reached("Unknown basic type...");
+                                assert_not_reached();
                         }
                 }
         }
@@ -4636,7 +4651,7 @@ _public_ int sd_bus_message_skip(sd_bus_message *m, const char *types) {
                 if (r < 0)
                         return r;
 
-                types = strndupa(c->signature + c->index, l);
+                types = strndupa_safe(c->signature + c->index, l);
         }
 
         switch (*types) {

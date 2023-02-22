@@ -8,6 +8,7 @@
 #include "manager-dump.h"
 #include "rm-rf.h"
 #include "service.h"
+#include "slice.h"
 #include "special.h"
 #include "strv.h"
 #include "tests.h"
@@ -75,7 +76,8 @@ int main(int argc, char *argv[]) {
         _cleanup_(sd_bus_error_free) sd_bus_error err = SD_BUS_ERROR_NULL;
         _cleanup_(manager_freep) Manager *m = NULL;
         Unit *a = NULL, *b = NULL, *c = NULL, *d = NULL, *e = NULL, *g = NULL,
-                *h = NULL, *i = NULL, *a_conj = NULL, *unit_with_multiple_dashes = NULL, *stub = NULL;
+                *h = NULL, *i = NULL, *a_conj = NULL, *unit_with_multiple_dashes = NULL, *stub = NULL,
+                *tomato = NULL, *sauce = NULL, *fruit = NULL, *zupa = NULL;
         Job *j;
         int r;
 
@@ -91,11 +93,11 @@ int main(int argc, char *argv[]) {
         assert_se(set_unit_path(unit_dir) >= 0);
         assert_se(runtime_dir = setup_fake_runtime_dir());
 
-        r = manager_new(UNIT_FILE_USER, MANAGER_TEST_RUN_BASIC, &m);
+        r = manager_new(LOOKUP_SCOPE_USER, MANAGER_TEST_RUN_BASIC, &m);
         if (manager_errno_skip_test(r))
                 return log_tests_skipped_errno(r, "manager_new");
         assert_se(r >= 0);
-        assert_se(manager_startup(m, NULL, NULL) >= 0);
+        assert_se(manager_startup(m, NULL, NULL, NULL) >= 0);
 
         printf("Load1:\n");
         assert_se(manager_load_startable_unit_or_warn(m, "a.service", NULL, &a) >= 0);
@@ -190,17 +192,17 @@ int main(int argc, char *argv[]) {
         assert_se(unit_add_dependency(a, UNIT_PROPAGATES_RELOAD_TO, b, true, UNIT_DEPENDENCY_UDEV) == 0);
         assert_se(unit_add_dependency(a, UNIT_PROPAGATES_RELOAD_TO, c, true, UNIT_DEPENDENCY_PROC_SWAP) == 0);
 
-        assert_se(hashmap_get(unit_get_dependencies(a, UNIT_PROPAGATES_RELOAD_TO), b));
-        assert_se(hashmap_get(unit_get_dependencies(b, UNIT_RELOAD_PROPAGATED_FROM), a));
-        assert_se(hashmap_get(unit_get_dependencies(a, UNIT_PROPAGATES_RELOAD_TO), c));
-        assert_se(hashmap_get(unit_get_dependencies(c, UNIT_RELOAD_PROPAGATED_FROM), a));
+        assert_se( hashmap_get(unit_get_dependencies(a, UNIT_PROPAGATES_RELOAD_TO), b));
+        assert_se( hashmap_get(unit_get_dependencies(b, UNIT_RELOAD_PROPAGATED_FROM), a));
+        assert_se( hashmap_get(unit_get_dependencies(a, UNIT_PROPAGATES_RELOAD_TO), c));
+        assert_se( hashmap_get(unit_get_dependencies(c, UNIT_RELOAD_PROPAGATED_FROM), a));
 
         unit_remove_dependencies(a, UNIT_DEPENDENCY_UDEV);
 
         assert_se(!hashmap_get(unit_get_dependencies(a, UNIT_PROPAGATES_RELOAD_TO), b));
         assert_se(!hashmap_get(unit_get_dependencies(b, UNIT_RELOAD_PROPAGATED_FROM), a));
-        assert_se(hashmap_get(unit_get_dependencies(a, UNIT_PROPAGATES_RELOAD_TO), c));
-        assert_se(hashmap_get(unit_get_dependencies(c, UNIT_RELOAD_PROPAGATED_FROM), a));
+        assert_se( hashmap_get(unit_get_dependencies(a, UNIT_PROPAGATES_RELOAD_TO), c));
+        assert_se( hashmap_get(unit_get_dependencies(c, UNIT_RELOAD_PROPAGATED_FROM), a));
 
         unit_remove_dependencies(a, UNIT_DEPENDENCY_PROC_SWAP);
 
@@ -221,6 +223,7 @@ int main(int argc, char *argv[]) {
         assert_se(unit_add_dependency_by_name(stub, UNIT_AFTER, SPECIAL_ROOT_SLICE, true, UNIT_DEPENDENCY_FILE) >= 0);
         assert_se(unit_add_dependency_by_name(stub, UNIT_REQUIRES, "non-existing.mount", true, UNIT_DEPENDENCY_FILE) >= 0);
         assert_se(unit_add_dependency_by_name(stub, UNIT_ON_FAILURE, "non-existing-on-failure.target", true, UNIT_DEPENDENCY_FILE) >= 0);
+        assert_se(unit_add_dependency_by_name(stub, UNIT_ON_SUCCESS, "non-existing-on-success.target", true, UNIT_DEPENDENCY_FILE) >= 0);
 
         log_info("/* Merging a+stub, dumps before */");
         unit_dump(a, stderr, NULL);
@@ -229,13 +232,19 @@ int main(int argc, char *argv[]) {
         log_info("/* Dump of merged a+stub */");
         unit_dump(a, stderr, NULL);
 
-        assert_se(unit_has_dependency(a, UNIT_ATOM_AFTER, manager_get_unit(m, SPECIAL_BASIC_TARGET)));
-        assert_se(unit_has_dependency(a, UNIT_ATOM_AFTER, manager_get_unit(m, "quux.target")));
-        assert_se(unit_has_dependency(a, UNIT_ATOM_AFTER, manager_get_unit(m, SPECIAL_ROOT_SLICE)));
-        assert_se(unit_has_dependency(a, UNIT_ATOM_PULL_IN_START, manager_get_unit(m, "non-existing.mount")));
-        assert_se(unit_has_dependency(a, UNIT_ATOM_RETROACTIVE_START_REPLACE, manager_get_unit(m, "non-existing.mount")));
-        assert_se(unit_has_dependency(a, UNIT_ATOM_ON_FAILURE, manager_get_unit(m, "non-existing-on-failure.target")));
+        assert_se( unit_has_dependency(a, UNIT_ATOM_AFTER, manager_get_unit(m, SPECIAL_BASIC_TARGET)));
+        assert_se( unit_has_dependency(a, UNIT_ATOM_AFTER, manager_get_unit(m, "quux.target")));
+        assert_se( unit_has_dependency(a, UNIT_ATOM_AFTER, manager_get_unit(m, SPECIAL_ROOT_SLICE)));
+        assert_se( unit_has_dependency(a, UNIT_ATOM_PULL_IN_START, manager_get_unit(m, "non-existing.mount")));
+        assert_se( unit_has_dependency(a, UNIT_ATOM_RETROACTIVE_START_REPLACE, manager_get_unit(m, "non-existing.mount")));
+        assert_se( unit_has_dependency(a, UNIT_ATOM_ON_FAILURE, manager_get_unit(m, "non-existing-on-failure.target")));
+        assert_se( unit_has_dependency(manager_get_unit(m, "non-existing-on-failure.target"), UNIT_ATOM_ON_FAILURE_OF, a));
+        assert_se( unit_has_dependency(a, UNIT_ATOM_ON_SUCCESS, manager_get_unit(m, "non-existing-on-success.target")));
+        assert_se( unit_has_dependency(manager_get_unit(m, "non-existing-on-success.target"), UNIT_ATOM_ON_SUCCESS_OF, a));
         assert_se(!unit_has_dependency(a, UNIT_ATOM_ON_FAILURE, manager_get_unit(m, "basic.target")));
+        assert_se(!unit_has_dependency(a, UNIT_ATOM_ON_SUCCESS, manager_get_unit(m, "basic.target")));
+        assert_se(!unit_has_dependency(a, UNIT_ATOM_ON_FAILURE_OF, manager_get_unit(m, "basic.target")));
+        assert_se(!unit_has_dependency(a, UNIT_ATOM_ON_SUCCESS_OF, manager_get_unit(m, "basic.target")));
         assert_se(!unit_has_dependency(a, UNIT_ATOM_PROPAGATES_RELOAD_TO, manager_get_unit(m, "non-existing-on-failure.target")));
 
         assert_se(unit_has_name(a, "a.service"));
@@ -259,6 +268,33 @@ int main(int argc, char *argv[]) {
         assert_se(mm == 3U*5U*7U*11U*13U);
 
         verify_dependency_atoms();
+
+        /* Test adding multiple Slice= dependencies; only the last should remain */
+        assert_se(unit_new_for_name(m, sizeof(Service), "tomato.service", &tomato) >= 0);
+        assert_se(unit_new_for_name(m, sizeof(Slice), "sauce.slice", &sauce) >= 0);
+        assert_se(unit_new_for_name(m, sizeof(Slice), "fruit.slice", &fruit) >= 0);
+        assert_se(unit_new_for_name(m, sizeof(Slice), "zupa.slice", &zupa) >= 0);
+
+        unit_set_slice(tomato, sauce);
+        unit_set_slice(tomato, fruit);
+        unit_set_slice(tomato, zupa);
+
+        assert_se(UNIT_GET_SLICE(tomato) == zupa);
+        assert_se(!unit_has_dependency(tomato, UNIT_ATOM_IN_SLICE, sauce));
+        assert_se(!unit_has_dependency(tomato, UNIT_ATOM_IN_SLICE, fruit));
+        assert_se( unit_has_dependency(tomato, UNIT_ATOM_IN_SLICE, zupa));
+
+        assert_se(!unit_has_dependency(tomato, UNIT_ATOM_REFERENCES, sauce));
+        assert_se(!unit_has_dependency(tomato, UNIT_ATOM_REFERENCES, fruit));
+        assert_se( unit_has_dependency(tomato, UNIT_ATOM_REFERENCES, zupa));
+
+        assert_se(!unit_has_dependency(sauce, UNIT_ATOM_SLICE_OF, tomato));
+        assert_se(!unit_has_dependency(fruit, UNIT_ATOM_SLICE_OF, tomato));
+        assert_se( unit_has_dependency(zupa, UNIT_ATOM_SLICE_OF, tomato));
+
+        assert_se(!unit_has_dependency(sauce, UNIT_ATOM_REFERENCED_BY, tomato));
+        assert_se(!unit_has_dependency(fruit, UNIT_ATOM_REFERENCED_BY, tomato));
+        assert_se( unit_has_dependency(zupa, UNIT_ATOM_REFERENCED_BY, tomato));
 
         return 0;
 }

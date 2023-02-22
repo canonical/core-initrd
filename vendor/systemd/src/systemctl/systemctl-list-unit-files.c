@@ -38,12 +38,12 @@ static bool output_show_unit_file(const UnitFileList *u, char **states, char **p
                 if (!dot)
                         return false;
 
-                if (!strv_find(arg_types, dot+1))
+                if (!strv_contains(arg_types, dot+1))
                         return false;
         }
 
         if (!strv_isempty(states) &&
-            !strv_find(states, unit_file_state_to_string(u->state)))
+            !strv_contains(states, unit_file_state_to_string(u->state)))
                 return false;
 
         return true;
@@ -54,7 +54,7 @@ static int output_unit_file_list(const UnitFileList *units, unsigned c) {
         _cleanup_(unit_file_presets_freep) UnitFilePresets presets = {};
         int r;
 
-        table = table_new("unit file", "state", "vendor preset");
+        table = table_new("unit file", "state", "preset");
         if (!table)
                 return log_oom();
 
@@ -133,7 +133,7 @@ static int output_unit_file_list(const UnitFileList *units, unsigned c) {
         return 0;
 }
 
-int list_unit_files(int argc, char *argv[], void *userdata) {
+int verb_list_unit_files(int argc, char *argv[], void *userdata) {
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
         _cleanup_free_ UnitFileList *units = NULL;
         unsigned c = 0;
@@ -255,7 +255,7 @@ int list_unit_files(int argc, char *argv[], void *userdata) {
                         return bus_log_parse_error(r);
         }
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         typesafe_qsort(units, c, compare_unit_file_list);
         r = output_unit_file_list(units, c);

@@ -281,7 +281,7 @@ static int process_special_field(JournalImporter *imp, char *line) {
 int journal_importer_process_data(JournalImporter *imp) {
         int r;
 
-        switch(imp->state) {
+        switch (imp->state) {
         case IMPORTER_STATE_LINE: {
                 char *line, *sep;
                 size_t n = 0;
@@ -316,7 +316,7 @@ int journal_importer_process_data(JournalImporter *imp) {
                         if (!journal_field_valid(line, sep - line, true)) {
                                 char buf[64], *t;
 
-                                t = strndupa(line, sep - line);
+                                t = strndupa_safe(line, sep - line);
                                 log_debug("Ignoring invalid field: \"%s\"",
                                           cellescape(buf, sizeof buf, t));
 
@@ -335,7 +335,7 @@ int journal_importer_process_data(JournalImporter *imp) {
                         if (!journal_field_valid(line, n - 1, true)) {
                                 char buf[64], *t;
 
-                                t = strndupa(line, n - 1);
+                                t = strndupa_safe(line, n - 1);
                                 log_debug("Ignoring invalid field: \"%s\"",
                                           cellescape(buf, sizeof buf, t));
 
@@ -417,7 +417,7 @@ int journal_importer_process_data(JournalImporter *imp) {
 
                 return 0; /* continue */
         default:
-                assert_not_reached("wtf?");
+                assert_not_reached();
         }
 }
 

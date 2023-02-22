@@ -2,7 +2,6 @@
 
 #include "conf-parser.h"
 #include "fd-util.h"
-#include "fileio.h"
 #include "fuzz.h"
 #include "install.h"
 #include "load-fragment.h"
@@ -22,10 +21,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         const char *name;
         long offset;
 
-        if (size == 0)
+        if (outside_size_range(size, 0, 65536))
                 return 0;
 
-        f = fmemopen_unlocked((char*) data, size, "re");
+        f = data_to_file(data, size);
+
         assert_se(f);
 
         if (read_line(f, LINE_MAX, &p) < 0)
@@ -66,7 +66,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         if (!getenv("SYSTEMD_LOG_LEVEL"))
                 log_set_max_level(LOG_CRIT);
 
-        assert_se(manager_new(UNIT_FILE_SYSTEM, MANAGER_TEST_RUN_MINIMAL, &m) >= 0);
+        assert_se(manager_new(LOOKUP_SCOPE_SYSTEM, MANAGER_TEST_RUN_MINIMAL, &m) >= 0);
 
         name = strjoina("a.", unit_type_to_string(t));
         assert_se(unit_new_for_name(m, unit_vtable[t]->object_size, name, &u) >= 0);

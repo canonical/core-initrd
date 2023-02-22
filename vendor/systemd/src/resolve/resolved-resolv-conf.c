@@ -41,8 +41,7 @@ int manager_check_resolv_conf(const Manager *m) {
 
         /* Is it symlinked to our own uplink file? */
         if (stat(PRIVATE_STATIC_RESOLV_CONF, &own) >= 0 &&
-            st.st_dev == own.st_dev &&
-            st.st_ino == own.st_ino)
+            stat_inode_same(&st, &own))
                 return log_warning_errno(SYNTHETIC_ERRNO(EOPNOTSUPP),
                                          "DNSStubListener= is disabled, but /etc/resolv.conf is a symlink to "
                                          PRIVATE_STATIC_RESOLV_CONF " which expects DNSStubListener= to be enabled.");
@@ -51,8 +50,6 @@ int manager_check_resolv_conf(const Manager *m) {
 }
 
 static bool file_is_our_own(const struct stat *st) {
-        const char *path;
-
         assert(st);
 
         FOREACH_STRING(path,
@@ -64,8 +61,7 @@ static bool file_is_our_own(const struct stat *st) {
 
                 /* Is it symlinked to our own uplink file? */
                 if (stat(path, &own) >= 0 &&
-                    st->st_dev == own.st_dev &&
-                    st->st_ino == own.st_ino)
+                    stat_inode_same(st, &own))
                         return true;
         }
 
@@ -417,8 +413,7 @@ int resolv_conf_mode(void) {
                         continue;
                 }
 
-                if (system_st.st_dev == our_st.st_dev &&
-                    system_st.st_ino == our_st.st_ino)
+                if (stat_inode_same(&system_st, &our_st))
                         return m;
         }
 

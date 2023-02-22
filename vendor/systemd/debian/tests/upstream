@@ -24,4 +24,10 @@ export TEST_SHOW_JOURNAL=warning
 export TEST_REQUIRE_INSTALL_TESTS=0
 export TEST_PREFER_NSPAWN=1
 export NO_BUILD=1
+
+# Temporarily disable tests running in QEMU on ppc64el (LP: #1992178)
+if [ "$DPKGARCH" = "ppc64el" ]; then
+    export TEST_NO_QEMU=1
+fi
+
 test/run-integration-tests.sh

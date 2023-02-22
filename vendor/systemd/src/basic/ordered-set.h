@@ -18,6 +18,14 @@ int _ordered_set_ensure_allocated(OrderedSet **s, const struct hash_ops *ops  HA
 int _ordered_set_ensure_put(OrderedSet **s, const struct hash_ops *ops, void *p  HASHMAP_DEBUG_PARAMS);
 #define ordered_set_ensure_put(s, hash_ops, key) _ordered_set_ensure_put(s, hash_ops, key  HASHMAP_DEBUG_SRC_ARGS)
 
+static inline void ordered_set_clear(OrderedSet *s) {
+        return ordered_hashmap_clear((OrderedHashmap*) s);
+}
+
+static inline void ordered_set_clear_free(OrderedSet *s) {
+        return ordered_hashmap_clear_free((OrderedHashmap*) s);
+}
+
 static inline OrderedSet* ordered_set_free(OrderedSet *s) {
         return (OrderedSet*) ordered_hashmap_free((OrderedHashmap*) s);
 }
@@ -64,6 +72,10 @@ static inline void* ordered_set_steal_first(OrderedSet *s) {
 
 static inline char** ordered_set_get_strv(OrderedSet *s) {
         return _hashmap_get_strv(HASHMAP_BASE((OrderedHashmap*) s));
+}
+
+static inline int ordered_set_reserve(OrderedSet *s, unsigned entries_add) {
+        return ordered_hashmap_reserve((OrderedHashmap*) s, entries_add);
 }
 
 int ordered_set_consume(OrderedSet *s, void *p);

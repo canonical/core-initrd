@@ -21,7 +21,7 @@
 #include "logind-dbus.h"
 #include "logind-user-dbus.h"
 #include "logind-user.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "percent-util.h"
@@ -32,6 +32,7 @@
 #include "string-table.h"
 #include "strv.h"
 #include "tmpfile-util.h"
+#include "uid-alloc-range.h"
 #include "unit-name.h"
 #include "user-util.h"
 #include "util.h"
@@ -188,7 +189,6 @@ static int user_save_internal(User *u) {
                         u->last_session_timestamp);
 
         if (u->sessions) {
-                Session *i;
                 bool first;
 
                 fputs("SESSIONS=", f);
@@ -498,8 +498,8 @@ static void user_stop_service(User *u, bool force) {
 }
 
 int user_stop(User *u, bool force) {
-        Session *s;
         int r = 0;
+
         assert(u);
 
         /* This is called whenever we begin with tearing down a user record. It's called in two cases: explicit API
@@ -533,7 +533,6 @@ int user_stop(User *u, bool force) {
 }
 
 int user_finalize(User *u) {
-        Session *s;
         int r = 0, k;
 
         assert(u);
@@ -574,7 +573,6 @@ int user_finalize(User *u) {
 }
 
 int user_get_idle_hint(User *u, dual_timestamp *t) {
-        Session *s;
         bool idle_hint = true;
         dual_timestamp ts = DUAL_TIMESTAMP_NULL;
 
@@ -629,7 +627,6 @@ int user_check_linger_file(User *u) {
 }
 
 static bool user_unit_active(User *u) {
-        const char *i;
         int r;
 
         assert(u->service);
@@ -641,7 +638,7 @@ static bool user_unit_active(User *u) {
 
                 r = manager_unit_is_active(u->manager, i, &error);
                 if (r < 0)
-                        log_debug_errno(r, "Failed to determine whether unit '%s' is active, ignoring: %s", u->service, bus_error_message(&error, r));
+                        log_debug_errno(r, "Failed to determine whether unit '%s' is active, ignoring: %s", i, bus_error_message(&error, r));
                 if (r != 0)
                         return true;
         }
@@ -720,8 +717,6 @@ void user_add_to_gc_queue(User *u) {
 }
 
 UserState user_get_state(User *u) {
-        Session *i;
-
         assert(u);
 
         if (u->stopping)
@@ -804,8 +799,6 @@ static int elect_display_compare(Session *s1, Session *s2) {
 }
 
 void user_elect_display(User *u) {
-        Session *s;
-
         assert(u);
 
         /* This elects a primary session for each user, which we call the "display". We try to keep the assignment
@@ -855,7 +848,7 @@ void user_update_last_session_timer(User *u) {
         assert(!u->timer_event_source);
 
         user_stop_delay = user_get_stop_delay(u);
-        if (IN_SET(user_stop_delay, 0, USEC_INFINITY))
+        if (!timestamp_is_set(user_stop_delay))
                 return;
 
         if (sd_event_get_state(u->manager->event) == SD_EVENT_FINISHED) {
@@ -871,13 +864,10 @@ void user_update_last_session_timer(User *u) {
         if (r < 0)
                 log_warning_errno(r, "Failed to enqueue user stop event source, ignoring: %m");
 
-        if (DEBUG_LOGGING) {
-                char s[FORMAT_TIMESPAN_MAX];
-
+        if (DEBUG_LOGGING)
                 log_debug("Last session of user '%s' logged out, terminating user context in %s.",
                           u->user_record->user_name,
-                          format_timespan(s, sizeof(s), user_stop_delay, USEC_PER_MSEC));
-        }
+                          FORMAT_TIMESPAN(user_stop_delay, USEC_PER_MSEC));
 }
 
 static const char* const user_state_table[_USER_STATE_MAX] = {

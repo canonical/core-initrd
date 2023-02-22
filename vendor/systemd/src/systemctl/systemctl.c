@@ -66,7 +66,7 @@ char **arg_properties = NULL;
 bool arg_all = false;
 enum dependency arg_dependency = DEPENDENCY_FORWARD;
 const char *_arg_job_mode = NULL;
-UnitFileScope arg_scope = UNIT_FILE_SYSTEM;
+LookupScope arg_scope = LOOKUP_SCOPE_SYSTEM;
 bool arg_wait = false;
 bool arg_no_block = false;
 int arg_legend = -1; /* -1: true, unless --quiet is passed, 1: true */
@@ -128,7 +128,7 @@ static int systemctl_help(void) {
         _cleanup_free_ char *link = NULL;
         int r;
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         r = terminal_urlify_man("systemctl", "1", &link);
         if (r < 0)
@@ -277,14 +277,15 @@ static int systemctl_help(void) {
                "     --legend=BOOL       Enable/disable the legend (column headers and hints)\n"
                "     --no-pager          Do not pipe output into a pager\n"
                "     --no-ask-password   Do not ask for system passwords\n"
-               "     --global            Enable/disable/mask default user unit files globally\n"
-               "     --runtime           Enable/disable/mask unit files temporarily until next\n"
-               "                         reboot\n"
+               "     --global            Edit/enable/disable/mask default user unit files\n"
+               "                         globally\n"
+               "     --runtime           Edit/enable/disable/mask unit files temporarily until\n"
+               "                         next reboot\n"
                "  -f --force             When enabling unit files, override existing symlinks\n"
                "                         When shutting down, execute action immediately\n"
                "     --preset-mode=      Apply only enable, only disable, or all presets\n"
-               "     --root=PATH         Enable/disable/mask unit files in the specified root\n"
-               "                         directory\n"
+               "     --root=PATH         Edit/enable/disable/mask unit files in the specified\n"
+               "                         root directory\n"
                "  -n --lines=INTEGER     Number of journal entries to show\n"
                "  -o --output=STRING     Change journal output mode (short, short-precise,\n"
                "                             short-iso, short-iso-precise, short-full,\n"
@@ -296,11 +297,8 @@ static int systemctl_help(void) {
                "     --boot-loader-entry=NAME\n"
                "                         Boot into a specific boot loader entry on next boot\n"
                "     --plain             Print unit dependencies as a list instead of a tree\n"
-               "     --timestamp=FORMAT  Change format of printed timestamps.\n"
-               "                         'pretty' (default): 'Day YYYY-MM-DD HH:MM:SS TZ\n"
-               "                         'us': 'Day YYYY-MM-DD HH:MM:SS.UUUUUU TZ\n"
-               "                         'utc': 'Day YYYY-MM-DD HH:MM:SS UTC\n"
-               "                         'us+utc': 'Day YYYY-MM-DD HH:MM:SS.UUUUUU UTC\n"
+               "     --timestamp=FORMAT  Change format of printed timestamps (pretty, unix,\n"
+               "                             us, utc, us+utc)\n"
                "     --read-only         Create read-only bind mount\n"
                "     --mkdir             Create directory before mounting, if missing\n"
                "     --marked            Restart/reload previously marked units\n"
@@ -619,15 +617,15 @@ static int systemctl_parse_argv(int argc, char *argv[]) {
                         break;
 
                 case ARG_USER:
-                        arg_scope = UNIT_FILE_USER;
+                        arg_scope = LOOKUP_SCOPE_USER;
                         break;
 
                 case ARG_SYSTEM:
-                        arg_scope = UNIT_FILE_SYSTEM;
+                        arg_scope = LOOKUP_SCOPE_SYSTEM;
                         break;
 
                 case ARG_GLOBAL:
-                        arg_scope = UNIT_FILE_GLOBAL;
+                        arg_scope = LOOKUP_SCOPE_GLOBAL;
                         break;
 
                 case ARG_WAIT:
@@ -922,15 +920,15 @@ static int systemctl_parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
 
                 default:
-                        assert_not_reached("Unhandled option");
+                        assert_not_reached();
                 }
 
         /* If we are in --user mode, there's no point in talking to PolicyKit or the infra to query system
          * passwords */
-        if (arg_scope != UNIT_FILE_SYSTEM)
+        if (arg_scope != LOOKUP_SCOPE_SYSTEM)
                 arg_ask_password = false;
 
-        if (arg_transport == BUS_TRANSPORT_REMOTE && arg_scope != UNIT_FILE_SYSTEM)
+        if (arg_transport == BUS_TRANSPORT_REMOTE && arg_scope != LOOKUP_SCOPE_SYSTEM)
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
                                        "Cannot access user instance remotely.");
 
@@ -1022,83 +1020,83 @@ int systemctl_dispatch_parse_argv(int argc, char *argv[]) {
 #ifndef FUZZ_SYSTEMCTL_PARSE_ARGV
 static int systemctl_main(int argc, char *argv[]) {
         static const Verb verbs[] = {
-                { "list-units",            VERB_ANY, VERB_ANY, VERB_DEFAULT|VERB_ONLINE_ONLY, list_units },
-                { "list-unit-files",       VERB_ANY, VERB_ANY, 0,                list_unit_files         },
-                { "list-sockets",          VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, list_sockets            },
-                { "list-timers",           VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, list_timers             },
-                { "list-jobs",             VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, list_jobs               },
-                { "list-machines",         VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, list_machines           },
-                { "clear-jobs",            VERB_ANY, 1,        VERB_ONLINE_ONLY, trivial_method          },
-                { "cancel",                VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, cancel_job              },
-                { "start",                 2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              },
-                { "stop",                  2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              },
-                { "condstop",              2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              }, /* For compatibility with ALTLinux */
-                { "reload",                2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              },
-                { "restart",               2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              },
-                { "try-restart",           2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              },
-                { "reload-or-restart",     VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, start_unit              },
-                { "reload-or-try-restart", 2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              }, /* For compatibility with old systemctl <= 228 */
-                { "try-reload-or-restart", 2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              },
-                { "force-reload",          2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              }, /* For compatibility with SysV */
-                { "condreload",            2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              }, /* For compatibility with ALTLinux */
-                { "condrestart",           2,        VERB_ANY, VERB_ONLINE_ONLY, start_unit              }, /* For compatibility with RH */
-                { "isolate",               2,        2,        VERB_ONLINE_ONLY, start_unit              },
-                { "kill",                  2,        VERB_ANY, VERB_ONLINE_ONLY, kill_unit               },
-                { "clean",                 2,        VERB_ANY, VERB_ONLINE_ONLY, clean_or_freeze_unit    },
-                { "freeze",                2,        VERB_ANY, VERB_ONLINE_ONLY, clean_or_freeze_unit    },
-                { "thaw",                  2,        VERB_ANY, VERB_ONLINE_ONLY, clean_or_freeze_unit    },
-                { "is-active",             2,        VERB_ANY, VERB_ONLINE_ONLY, check_unit_active       },
-                { "check",                 2,        VERB_ANY, VERB_ONLINE_ONLY, check_unit_active       }, /* deprecated alias of is-active */
-                { "is-failed",             2,        VERB_ANY, VERB_ONLINE_ONLY, check_unit_failed       },
-                { "show",                  VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, show                    },
-                { "cat",                   2,        VERB_ANY, VERB_ONLINE_ONLY, cat                     },
-                { "status",                VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, show                    },
-                { "help",                  VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, show                    },
-                { "daemon-reload",         VERB_ANY, 1,        VERB_ONLINE_ONLY, daemon_reload           },
-                { "daemon-reexec",         VERB_ANY, 1,        VERB_ONLINE_ONLY, daemon_reload           },
-                { "log-level",             VERB_ANY, 2,        VERB_ONLINE_ONLY, log_setting             },
-                { "log-target",            VERB_ANY, 2,        VERB_ONLINE_ONLY, log_setting             },
-                { "service-log-level",     2,        3,        VERB_ONLINE_ONLY, service_log_setting     },
-                { "service-log-target",    2,        3,        VERB_ONLINE_ONLY, service_log_setting     },
-                { "service-watchdogs",     VERB_ANY, 2,        VERB_ONLINE_ONLY, service_watchdogs       },
-                { "show-environment",      VERB_ANY, 1,        VERB_ONLINE_ONLY, show_environment        },
-                { "set-environment",       2,        VERB_ANY, VERB_ONLINE_ONLY, set_environment         },
-                { "unset-environment",     2,        VERB_ANY, VERB_ONLINE_ONLY, set_environment         },
-                { "import-environment",    VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, import_environment      },
-                { "halt",                  VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "poweroff",              VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "reboot",                VERB_ANY, 2,        VERB_ONLINE_ONLY, start_system_special    },
-                { "kexec",                 VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "suspend",               VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "hibernate",             VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "hybrid-sleep",          VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "suspend-then-hibernate",VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "default",               VERB_ANY, 1,        VERB_ONLINE_ONLY, start_special           },
-                { "rescue",                VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "emergency",             VERB_ANY, 1,        VERB_ONLINE_ONLY, start_system_special    },
-                { "exit",                  VERB_ANY, 2,        VERB_ONLINE_ONLY, start_special           },
-                { "reset-failed",          VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, reset_failed            },
-                { "enable",                2,        VERB_ANY, 0,                enable_unit             },
-                { "disable",               2,        VERB_ANY, 0,                enable_unit             },
-                { "is-enabled",            2,        VERB_ANY, 0,                unit_is_enabled         },
-                { "reenable",              2,        VERB_ANY, 0,                enable_unit             },
-                { "preset",                2,        VERB_ANY, 0,                enable_unit             },
-                { "preset-all",            VERB_ANY, 1,        0,                preset_all              },
-                { "mask",                  2,        VERB_ANY, 0,                enable_unit             },
-                { "unmask",                2,        VERB_ANY, 0,                enable_unit             },
-                { "link",                  2,        VERB_ANY, 0,                enable_unit             },
-                { "revert",                2,        VERB_ANY, 0,                enable_unit             },
-                { "switch-root",           2,        VERB_ANY, VERB_ONLINE_ONLY, switch_root             },
-                { "list-dependencies",     VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, list_dependencies       },
-                { "set-default",           2,        2,        0,                set_default             },
-                { "get-default",           VERB_ANY, 1,        0,                get_default             },
-                { "set-property",          3,        VERB_ANY, VERB_ONLINE_ONLY, set_property            },
-                { "is-system-running",     VERB_ANY, 1,        0,                is_system_running       },
-                { "add-wants",             3,        VERB_ANY, 0,                add_dependency          },
-                { "add-requires",          3,        VERB_ANY, 0,                add_dependency          },
-                { "edit",                  2,        VERB_ANY, VERB_ONLINE_ONLY, edit                    },
-                { "bind",                  3,        4,        VERB_ONLINE_ONLY, mount_bind              },
-                { "mount-image",           4,        5,        VERB_ONLINE_ONLY, mount_image             },
+                { "list-units",            VERB_ANY, VERB_ANY, VERB_DEFAULT|VERB_ONLINE_ONLY, verb_list_units },
+                { "list-unit-files",       VERB_ANY, VERB_ANY, 0,                verb_list_unit_files         },
+                { "list-sockets",          VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_list_sockets            },
+                { "list-timers",           VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_list_timers             },
+                { "list-jobs",             VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_list_jobs               },
+                { "list-machines",         VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_list_machines           },
+                { "clear-jobs",            VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_trivial_method          },
+                { "cancel",                VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_cancel                  },
+                { "start",                 2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   },
+                { "stop",                  2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   },
+                { "condstop",              2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   }, /* For compatibility with ALTLinux */
+                { "reload",                2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   },
+                { "restart",               2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   },
+                { "try-restart",           2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   },
+                { "reload-or-restart",     VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_start                   },
+                { "reload-or-try-restart", 2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   }, /* For compatibility with old systemctl <= 228 */
+                { "try-reload-or-restart", 2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   },
+                { "force-reload",          2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   }, /* For compatibility with SysV */
+                { "condreload",            2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   }, /* For compatibility with ALTLinux */
+                { "condrestart",           2,        VERB_ANY, VERB_ONLINE_ONLY, verb_start                   }, /* For compatibility with RH */
+                { "isolate",               2,        2,        VERB_ONLINE_ONLY, verb_start                   },
+                { "kill",                  2,        VERB_ANY, VERB_ONLINE_ONLY, verb_kill                    },
+                { "clean",                 2,        VERB_ANY, VERB_ONLINE_ONLY, verb_clean_or_freeze         },
+                { "freeze",                2,        VERB_ANY, VERB_ONLINE_ONLY, verb_clean_or_freeze         },
+                { "thaw",                  2,        VERB_ANY, VERB_ONLINE_ONLY, verb_clean_or_freeze         },
+                { "is-active",             2,        VERB_ANY, VERB_ONLINE_ONLY, verb_is_active               },
+                { "check",                 2,        VERB_ANY, VERB_ONLINE_ONLY, verb_is_active               }, /* deprecated alias of is-active */
+                { "is-failed",             2,        VERB_ANY, VERB_ONLINE_ONLY, verb_is_failed               },
+                { "show",                  VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_show                    },
+                { "cat",                   2,        VERB_ANY, VERB_ONLINE_ONLY, verb_cat                     },
+                { "status",                VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_show                    },
+                { "help",                  VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_show                    },
+                { "daemon-reload",         1,        1,        VERB_ONLINE_ONLY, verb_daemon_reload           },
+                { "daemon-reexec",         1,        1,        VERB_ONLINE_ONLY, verb_daemon_reload           },
+                { "log-level",             VERB_ANY, 2,        VERB_ONLINE_ONLY, verb_log_setting             },
+                { "log-target",            VERB_ANY, 2,        VERB_ONLINE_ONLY, verb_log_setting             },
+                { "service-log-level",     2,        3,        VERB_ONLINE_ONLY, verb_service_log_setting     },
+                { "service-log-target",    2,        3,        VERB_ONLINE_ONLY, verb_service_log_setting     },
+                { "service-watchdogs",     VERB_ANY, 2,        VERB_ONLINE_ONLY, verb_service_watchdogs       },
+                { "show-environment",      VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_show_environment        },
+                { "set-environment",       2,        VERB_ANY, VERB_ONLINE_ONLY, verb_set_environment         },
+                { "unset-environment",     2,        VERB_ANY, VERB_ONLINE_ONLY, verb_set_environment         },
+                { "import-environment",    VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_import_environment      },
+                { "halt",                  VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "poweroff",              VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "reboot",                VERB_ANY, 2,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "kexec",                 VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "suspend",               VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "hibernate",             VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "hybrid-sleep",          VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "suspend-then-hibernate",VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "default",               VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_special           },
+                { "rescue",                VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "emergency",             VERB_ANY, 1,        VERB_ONLINE_ONLY, verb_start_system_special    },
+                { "exit",                  VERB_ANY, 2,        VERB_ONLINE_ONLY, verb_start_special           },
+                { "reset-failed",          VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_reset_failed            },
+                { "enable",                2,        VERB_ANY, 0,                verb_enable                  },
+                { "disable",               2,        VERB_ANY, 0,                verb_enable                  },
+                { "is-enabled",            2,        VERB_ANY, 0,                verb_is_enabled              },
+                { "reenable",              2,        VERB_ANY, 0,                verb_enable                  },
+                { "preset",                2,        VERB_ANY, 0,                verb_enable                  },
+                { "preset-all",            VERB_ANY, 1,        0,                verb_preset_all              },
+                { "mask",                  2,        VERB_ANY, 0,                verb_enable                  },
+                { "unmask",                2,        VERB_ANY, 0,                verb_enable                  },
+                { "link",                  2,        VERB_ANY, 0,                verb_enable                  },
+                { "revert",                2,        VERB_ANY, 0,                verb_enable                  },
+                { "switch-root",           2,        VERB_ANY, VERB_ONLINE_ONLY, verb_switch_root             },
+                { "list-dependencies",     VERB_ANY, VERB_ANY, VERB_ONLINE_ONLY, verb_list_dependencies       },
+                { "set-default",           2,        2,        0,                verb_set_default             },
+                { "get-default",           VERB_ANY, 1,        0,                verb_get_default             },
+                { "set-property",          3,        VERB_ANY, VERB_ONLINE_ONLY, verb_set_property            },
+                { "is-system-running",     VERB_ANY, 1,        0,                verb_is_system_running       },
+                { "add-wants",             3,        VERB_ANY, 0,                verb_add_dependency          },
+                { "add-requires",          3,        VERB_ANY, 0,                verb_add_dependency          },
+                { "edit",                  2,        VERB_ANY, VERB_ONLINE_ONLY, verb_edit                    },
+                { "bind",                  3,        4,        VERB_ONLINE_ONLY, verb_bind                    },
+                { "mount-image",           4,        5,        VERB_ONLINE_ONLY, verb_mount_image             },
                 {}
         };
 
@@ -1169,6 +1167,10 @@ static int run(int argc, char *argv[]) {
                 r = logind_cancel_shutdown();
                 break;
 
+        case ACTION_SHOW_SHUTDOWN:
+                r = logind_show_shutdown();
+                break;
+
         case ACTION_RUNLEVEL:
                 r = runlevel_main();
                 break;
@@ -1189,7 +1191,7 @@ static int run(int argc, char *argv[]) {
 
         case _ACTION_INVALID:
         default:
-                assert_not_reached("Unknown action");
+                assert_not_reached();
         }
 
 finish:

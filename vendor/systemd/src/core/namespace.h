@@ -121,6 +121,7 @@ int setup_namespace(
                 char **exec_paths,
                 char **no_exec_paths,
                 char **empty_directories,
+                char **exec_dir_symlinks,
                 const BindMount *bind_mounts,
                 size_t n_bind_mounts,
                 const TemporaryFileSystem *temporary_filesystems,
@@ -141,8 +142,10 @@ int setup_namespace(
                 const char *root_verity,
                 const MountImage *extension_images,
                 size_t n_extension_images,
+                char **extension_directories,
                 const char *propagate_dir,
                 const char *incoming_dir,
+                const char *extension_dir,
                 const char *notify_socket,
                 char **error_path);
 

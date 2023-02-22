@@ -155,8 +155,7 @@ static void swap_unwatch_control_pid(Swap *s) {
         if (s->control_pid <= 0)
                 return;
 
-        unit_unwatch_pid(UNIT(s), s->control_pid);
-        s->control_pid = 0;
+        unit_unwatch_pid(UNIT(s), TAKE_PID(s->control_pid));
 }
 
 static void swap_done(Unit *u) {
@@ -538,7 +537,6 @@ static void swap_process_new(Manager *m, const char *device, int prio, bool set_
 
 static void swap_set_state(Swap *s, SwapState state) {
         SwapState old_state;
-        Swap *other;
 
         assert(s);
 
@@ -609,7 +607,6 @@ static int swap_coldplug(Unit *u) {
 }
 
 static void swap_dump(Unit *u, FILE *f, const char *prefix) {
-        char buf[FORMAT_TIMESPAN_MAX];
         Swap *s = SWAP(u);
         SwapParameters *p;
 
@@ -651,7 +648,7 @@ static void swap_dump(Unit *u, FILE *f, const char *prefix) {
 
         fprintf(f,
                 "%sTimeoutSec: %s\n",
-                prefix, format_timespan(buf, sizeof(buf), s->timeout_usec, USEC_PER_SEC));
+                prefix, FORMAT_TIMESPAN(s->timeout_usec, USEC_PER_SEC));
 
         if (s->control_pid > 0)
                 fprintf(f,
@@ -747,8 +744,6 @@ static void swap_enter_dead_or_active(Swap *s, SwapResult f) {
         assert(s);
 
         if (s->from_proc_swaps) {
-                Swap *other;
-
                 swap_enter_active(s, f);
 
                 LIST_FOREACH_OTHERS(same_devnode, other, s)
@@ -904,7 +899,7 @@ static void swap_cycle_clear(Swap *s) {
 }
 
 static int swap_start(Unit *u) {
-        Swap *s = SWAP(u), *other;
+        Swap *s = SWAP(u);
         int r;
 
         assert(s);
@@ -932,12 +927,6 @@ static int swap_start(Unit *u) {
         LIST_FOREACH_OTHERS(same_devnode, other, s)
                 if (UNIT(other)->job && UNIT(other)->job->state == JOB_RUNNING)
                         return -EAGAIN;
-
-        r = unit_test_start_limit(u);
-        if (r < 0) {
-                swap_enter_dead(s, SWAP_FAILURE_START_LIMIT_HIT);
-                return r;
-        }
 
         r = unit_acquire_invocation_id(u);
         if (r < 0)
@@ -980,7 +969,7 @@ static int swap_stop(Unit *u) {
                 return 0;
 
         default:
-                assert_not_reached("Unexpected state.");
+                assert_not_reached();
         }
 }
 
@@ -1074,7 +1063,7 @@ static void swap_sigchld_event(Unit *u, pid_t pid, int code, int status) {
         else if (code == CLD_DUMPED)
                 f = SWAP_FAILURE_CORE_DUMP;
         else
-                assert_not_reached("Unknown code");
+                assert_not_reached();
 
         if (s->result == SWAP_SUCCESS)
                 s->result = f;
@@ -1119,7 +1108,7 @@ static void swap_sigchld_event(Unit *u, pid_t pid, int code, int status) {
                 break;
 
         default:
-                assert_not_reached("Uh, control process died at wrong time.");
+                assert_not_reached();
         }
 
         /* Notify clients about changed exit status */
@@ -1170,7 +1159,7 @@ static int swap_dispatch_timer(sd_event_source *source, usec_t usec, void *userd
                 break;
 
         default:
-                assert_not_reached("Timeout at wrong time.");
+                assert_not_reached();
         }
 
         return 0;
@@ -1202,8 +1191,9 @@ static int swap_load_proc_swaps(Manager *m, bool set_flags) {
                         continue;
                 }
 
-                if (cunescape(dev, UNESCAPE_RELAX, &d) < 0)
-                        return log_oom();
+                ssize_t l = cunescape(dev, UNESCAPE_RELAX, &d);
+                if (l < 0)
+                        return log_error_errno(l, "Failed to unescape device path: %m");
 
                 device_found_node(m, d, DEVICE_FOUND_SWAP, DEVICE_FOUND_SWAP);
 
@@ -1214,7 +1204,6 @@ static int swap_load_proc_swaps(Manager *m, bool set_flags) {
 }
 
 static int swap_process_proc_swaps(Manager *m) {
-        Unit *u;
         int r;
 
         assert(m);
@@ -1227,6 +1216,8 @@ static int swap_process_proc_swaps(Manager *m) {
                 LIST_FOREACH(units_by_type, u, m->units_by_type[UNIT_SWAP]) {
                         Swap *swap = SWAP(u);
 
+                        assert(swap);
+
                         swap->is_active = swap->just_activated = false;
                 }
 
@@ -1237,6 +1228,8 @@ static int swap_process_proc_swaps(Manager *m) {
 
         LIST_FOREACH(units_by_type, u, m->units_by_type[UNIT_SWAP]) {
                 Swap *swap = SWAP(u);
+
+                assert(swap);
 
                 if (!swap->is_active) {
 
@@ -1256,7 +1249,7 @@ static int swap_process_proc_swaps(Manager *m) {
                         }
 
                         if (swap->what)
-                                device_found_node(m, swap->what, 0, DEVICE_FOUND_SWAP);
+                                device_found_node(m, swap->what, DEVICE_NOT_FOUND, DEVICE_FOUND_SWAP);
 
                 } else if (swap->just_activated) {
 
@@ -1303,7 +1296,7 @@ static int swap_dispatch_io(sd_event_source *source, int fd, uint32_t revents, v
 
 static Unit *swap_following(Unit *u) {
         Swap *s = SWAP(u);
-        Swap *other, *first = NULL;
+        Swap *first = NULL;
 
         assert(s);
 
@@ -1323,11 +1316,11 @@ static Unit *swap_following(Unit *u) {
         if (streq_ptr(s->what, s->devnode))
                 return NULL;
 
-        LIST_FOREACH_AFTER(same_devnode, other, s)
+        LIST_FOREACH(same_devnode, other, s->same_devnode_next)
                 if (streq_ptr(other->what, other->devnode))
                         return UNIT(other);
 
-        LIST_FOREACH_BEFORE(same_devnode, other, s) {
+        LIST_FOREACH_BACKWARDS(same_devnode, other, s->same_devnode_prev) {
                 if (streq_ptr(other->what, other->devnode))
                         return UNIT(other);
 
@@ -1339,7 +1332,7 @@ static Unit *swap_following(Unit *u) {
 }
 
 static int swap_following_set(Unit *u, Set **_set) {
-        Swap *s = SWAP(u), *other;
+        Swap *s = SWAP(u);
         _cleanup_set_free_ Set *set = NULL;
         int r;
 
@@ -1502,6 +1495,9 @@ static int swap_get_timeout(Unit *u, usec_t *timeout) {
         usec_t t;
         int r;
 
+        assert(s);
+        assert(u);
+
         if (!s->timer_event_source)
                 return 0;
 
@@ -1588,20 +1584,35 @@ static int swap_can_clean(Unit *u, ExecCleanMask *ret) {
         return exec_context_get_clean_mask(&s->exec_context, ret);
 }
 
+static int swap_can_start(Unit *u) {
+        Swap *s = SWAP(u);
+        int r;
+
+        assert(s);
+
+        r = unit_test_start_limit(u);
+        if (r < 0) {
+                swap_enter_dead(s, SWAP_FAILURE_START_LIMIT_HIT);
+                return r;
+        }
+
+        return 1;
+}
+
 static const char* const swap_exec_command_table[_SWAP_EXEC_COMMAND_MAX] = {
-        [SWAP_EXEC_ACTIVATE] = "ExecActivate",
+        [SWAP_EXEC_ACTIVATE]   = "ExecActivate",
         [SWAP_EXEC_DEACTIVATE] = "ExecDeactivate",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(swap_exec_command, SwapExecCommand);
 
 static const char* const swap_result_table[_SWAP_RESULT_MAX] = {
-        [SWAP_SUCCESS] = "success",
-        [SWAP_FAILURE_RESOURCES] = "resources",
-        [SWAP_FAILURE_TIMEOUT] = "timeout",
-        [SWAP_FAILURE_EXIT_CODE] = "exit-code",
-        [SWAP_FAILURE_SIGNAL] = "signal",
-        [SWAP_FAILURE_CORE_DUMP] = "core-dump",
+        [SWAP_SUCCESS]                 = "success",
+        [SWAP_FAILURE_RESOURCES]       = "resources",
+        [SWAP_FAILURE_TIMEOUT]         = "timeout",
+        [SWAP_FAILURE_EXIT_CODE]       = "exit-code",
+        [SWAP_FAILURE_SIGNAL]          = "signal",
+        [SWAP_FAILURE_CORE_DUMP]       = "core-dump",
         [SWAP_FAILURE_START_LIMIT_HIT] = "start-limit-hit",
 };
 
@@ -1683,4 +1694,6 @@ const UnitVTable swap_vtable = {
                         [JOB_TIMEOUT]    = "Timed out deactivating swap %s.",
                 },
         },
+
+        .can_start = swap_can_start,
 };

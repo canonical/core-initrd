@@ -258,8 +258,7 @@ static int varlink_new(Varlink **ret) {
 
                 .state = _VARLINK_STATE_INVALID,
 
-                .ucred.uid = UID_INVALID,
-                .ucred.gid = GID_INVALID,
+                .ucred = UCRED_INVALID,
 
                 .timestamp = USEC_INFINITY,
                 .timeout = VARLINK_DEFAULT_TIMEOUT_USEC
@@ -906,7 +905,7 @@ static int varlink_dispatch_method(Varlink *v) {
                 break;
 
         default:
-                assert_not_reached("Unexpected state");
+                assert_not_reached();
 
         }
 
@@ -1522,7 +1521,7 @@ int varlink_call(
                 return varlink_log_errno(v, SYNTHETIC_ERRNO(ETIME), "Connection timed out.");
 
         default:
-                assert_not_reached("Unexpected state after method call.");
+                assert_not_reached();
         }
 }
 
@@ -1661,6 +1660,7 @@ int varlink_errorb(Varlink *v, const char *error_id, ...) {
 }
 
 int varlink_error_invalid_parameter(Varlink *v, JsonVariant *parameters) {
+        int r;
 
         assert_return(v, -EINVAL);
         assert_return(parameters, -EINVAL);
@@ -1670,13 +1670,33 @@ int varlink_error_invalid_parameter(Varlink *v, JsonVariant *parameters) {
          * variant in which case we'll pull out the first key. The latter mode is useful in functions that
          * don't expect any arguments. */
 
-        if (json_variant_is_string(parameters))
-                return varlink_error(v, VARLINK_ERROR_INVALID_PARAMETER, parameters);
+        /* varlink_error(...) expects a json object as the third parameter. Passing a string variant causes
+         * parameter sanitization to fail, and it returns -EINVAL. */
+
+        if (json_variant_is_string(parameters)) {
+                _cleanup_(json_variant_unrefp) JsonVariant *parameters_obj = NULL;
+
+                r = json_build(&parameters_obj,
+                                JSON_BUILD_OBJECT(
+                                        JSON_BUILD_PAIR("parameter", JSON_BUILD_VARIANT(parameters))));
+                if (r < 0)
+                        return r;
+
+                return varlink_error(v, VARLINK_ERROR_INVALID_PARAMETER, parameters_obj);
+        }
 
         if (json_variant_is_object(parameters) &&
-            json_variant_elements(parameters) > 0)
-                return varlink_error(v, VARLINK_ERROR_INVALID_PARAMETER,
-                                     json_variant_by_index(parameters, 0));
+            json_variant_elements(parameters) > 0) {
+                _cleanup_(json_variant_unrefp) JsonVariant *parameters_obj = NULL;
+
+                r = json_build(&parameters_obj,
+                                JSON_BUILD_OBJECT(
+                                        JSON_BUILD_PAIR("parameter", JSON_BUILD_VARIANT(json_variant_by_index(parameters, 0)))));
+                if (r < 0)
+                        return r;
+
+                return varlink_error(v, VARLINK_ERROR_INVALID_PARAMETER, parameters_obj);
+        }
 
         return -EINVAL;
 }
@@ -2078,7 +2098,7 @@ static int validate_connection(VarlinkServer *server, const struct ucred *ucred)
         return 1;
 }
 
-static int count_connection(VarlinkServer *server, struct ucred *ucred) {
+static int count_connection(VarlinkServer *server, const struct ucred *ucred) {
         unsigned c;
         int r;
 
@@ -2107,8 +2127,8 @@ static int count_connection(VarlinkServer *server, struct ucred *ucred) {
 
 int varlink_server_add_connection(VarlinkServer *server, int fd, Varlink **ret) {
         _cleanup_(varlink_unrefp) Varlink *v = NULL;
+        struct ucred ucred = UCRED_INVALID;
         bool ucred_acquired;
-        struct ucred ucred;
         int r;
 
         assert_return(server, -EINVAL);
@@ -2146,7 +2166,9 @@ int varlink_server_add_connection(VarlinkServer *server, int fd, Varlink **ret) 
                 v->ucred_acquired = true;
         }
 
-        (void) asprintf(&v->description, "%s-%i", server->description ?: "varlink", v->fd);
+        _cleanup_free_ char *desc = NULL;
+        if (asprintf(&desc, "%s-%i", server->description ?: "varlink", v->fd) >= 0)
+                v->description = TAKE_PTR(desc);
 
         /* Link up the server and the connection, and take reference in both directions. Note that the
          * reference on the connection is left dangling. It will be dropped when the connection is closed,
@@ -2325,7 +2347,6 @@ int varlink_server_shutdown(VarlinkServer *s) {
 }
 
 int varlink_server_attach_event(VarlinkServer *s, sd_event *e, int64_t priority) {
-        VarlinkServerSocket *ss;
         int r;
 
         assert_return(s, -EINVAL);
@@ -2360,8 +2381,6 @@ fail:
 }
 
 int varlink_server_detach_event(VarlinkServer *s) {
-        VarlinkServerSocket *ss;
-
         assert_return(s, -EINVAL);
 
         LIST_FOREACH(sockets, ss, s->sockets)

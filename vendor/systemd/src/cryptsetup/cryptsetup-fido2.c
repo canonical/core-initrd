@@ -2,6 +2,7 @@
 
 #include "ask-password-api.h"
 #include "cryptsetup-fido2.h"
+#include "env-util.h"
 #include "fileio.h"
 #include "hexdecoct.h"
 #include "json.h"
@@ -29,11 +30,12 @@ int acquire_fido2_key(
                 size_t *ret_decrypted_key_size,
                 AskPasswordFlags ask_password_flags) {
 
+        _cleanup_(erase_and_freep) char *envpw = NULL;
         _cleanup_strv_free_erase_ char **pins = NULL;
         _cleanup_free_ void *loaded_salt = NULL;
+        bool device_exists = false;
         const char *salt;
         size_t salt_size;
-        char *e;
         int r;
 
         ask_password_flags |= ASK_PASSWORD_PUSH_CACHE | ASK_PASSWORD_ACCEPT_CACHED;
@@ -64,15 +66,13 @@ int acquire_fido2_key(
                 salt = loaded_salt;
         }
 
-        e = getenv("PIN");
-        if (e) {
-                pins = strv_new(e);
+        r = getenv_steal_erase("PIN", &envpw);
+        if (r < 0)
+                return log_error_errno(r, "Failed to acquire password from environment: %m");
+        if (r > 0) {
+                pins = strv_new(envpw);
                 if (!pins)
                         return log_oom();
-
-                string_erase(e);
-                if (unsetenv("PIN") < 0)
-                        return log_error_errno(errno, "Failed to unset $PIN: %m");
         }
 
         for (;;) {
@@ -90,13 +90,29 @@ int acquire_fido2_key(
                                     -ENOANO,   /* needs pin */
                                     -ENOLCK))  /* pin incorrect */
                                 return r;
-                }
 
-                pins = strv_free_erase(pins);
+                        device_exists = true; /* that a PIN is needed/wasn't correct means that we managed to
+                                               * talk to a device */
+                }
 
                 if (headless)
                         return log_error_errno(SYNTHETIC_ERRNO(ENOPKG), "PIN querying disabled via 'headless' option. Use the '$PIN' environment variable.");
 
+                if (!device_exists) {
+                        /* Before we inquire for the PIN we'll need, if we never talked to the device, check
+                         * if the device actually is plugged in. Otherwise we'll ask for the PIN already when
+                         * the device is not plugged in, which is confusing. */
+
+                        r = fido2_have_device(device);
+                        if (r < 0)
+                                return r;
+                        if (r == 0) /* no device found, return EAGAIN so that caller will wait/watch udev */
+                                return -EAGAIN;
+
+                        device_exists = true;  /* now we know for sure, a device exists, no need to ask again */
+                }
+
+                pins = strv_free_erase(pins);
                 r = ask_password_auto("Please enter security token PIN:", "drive-harddisk", NULL, "fido2-pin", "cryptsetup.fido2-pin", until, ask_password_flags, &pins);
                 if (r < 0)
                         return log_error_errno(r, "Failed to ask for user password: %m");
@@ -134,6 +150,7 @@ int find_fido2_auto_data(
         for (int token = 0; token < sym_crypt_token_max(CRYPT_LUKS2); token ++) {
                 _cleanup_(json_variant_unrefp) JsonVariant *v = NULL;
                 JsonVariant *w;
+                int ks;
 
                 r = cryptsetup_get_token_as_json(cd, token, "systemd-fido2", &v);
                 if (IN_SET(r, -ENOENT, -EINVAL, -EMEDIUMTYPE))
@@ -141,9 +158,20 @@ int find_fido2_auto_data(
                 if (r < 0)
                         return log_error_errno(r, "Failed to read JSON token data off disk: %m");
 
+                ks = cryptsetup_get_keyslot_from_token(v);
+                if (ks < 0) {
+                        /* Handle parsing errors of the keyslots field gracefully, since it's not 'owned' by
+                         * us, but by the LUKS2 spec */
+                        log_warning_errno(ks, "Failed to extract keyslot index from FIDO2 JSON data token %i, skipping: %m", token);
+                        continue;
+                }
+
                 if (cid)
                         return log_error_errno(SYNTHETIC_ERRNO(ENOTUNIQ),
                                                "Multiple FIDO2 tokens enrolled, cannot automatically determine token.");
+
+                assert(keyslot < 0);
+                keyslot = ks;
 
                 w = json_variant_by_key(v, "fido2-credential");
                 if (!w || !json_variant_is_string(w))
@@ -165,11 +193,6 @@ int find_fido2_auto_data(
                 r = unbase64mem(json_variant_string(w), SIZE_MAX, &salt, &salt_size);
                 if (r < 0)
                         return log_error_errno(r, "Failed to decode base64 encoded salt.");
-
-                assert(keyslot < 0);
-                keyslot = cryptsetup_get_keyslot_from_token(v);
-                if (keyslot < 0)
-                        return log_error_errno(keyslot, "Failed to extract keyslot index from FIDO2 JSON data: %m");
 
                 w = json_variant_by_key(v, "fido2-rp");
                 if (w) {

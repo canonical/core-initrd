@@ -6,12 +6,12 @@
 #include "alloc-util.h"
 #include "blockdev-util.h"
 #include "btrfs-util.h"
+#include "devnum-util.h"
 #include "dirent-util.h"
 #include "fd-util.h"
 #include "fileio.h"
 #include "missing_magic.h"
 #include "parse-util.h"
-#include "stat-util.h"
 
 int block_get_whole_disk(dev_t d, dev_t *ret) {
         char p[SYS_BLOCK_PATH_MAX("/partition")];
@@ -44,7 +44,7 @@ int block_get_whole_disk(dev_t d, dev_t *ret) {
         if (r < 0)
                 return r;
 
-        r = parse_dev(s, &devt);
+        r = parse_devnum(s, &devt);
         if (r < 0)
                 return r;
 
@@ -57,20 +57,15 @@ int block_get_whole_disk(dev_t d, dev_t *ret) {
         return 1;
 }
 
-int get_block_device(const char *path, dev_t *ret) {
-        _cleanup_close_ int fd = -1;
+int get_block_device_fd(int fd, dev_t *ret) {
         struct stat st;
         int r;
 
-        assert(path);
+        assert(fd >= 0);
         assert(ret);
 
         /* Gets the block device directly backing a file system. If the block device is encrypted, returns
          * the device mapper block device. */
-
-        fd = open(path, O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
-        if (fd < 0)
-                return -errno;
 
         if (fstat(fd, &st))
                 return -errno;
@@ -90,12 +85,24 @@ int get_block_device(const char *path, dev_t *ret) {
         return 0;
 }
 
+int get_block_device(const char *path, dev_t *ret) {
+        _cleanup_close_ int fd = -1;
+
+        assert(path);
+        assert(ret);
+
+        fd = open(path, O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
+        if (fd < 0)
+                return -errno;
+
+        return get_block_device_fd(fd, ret);
+}
+
 int block_get_originating(dev_t dt, dev_t *ret) {
         _cleanup_closedir_ DIR *d = NULL;
         _cleanup_free_ char *t = NULL;
         char p[SYS_BLOCK_PATH_MAX("/slaves")];
         _cleanup_free_ char *first_found = NULL;
-        struct dirent *de;
         const char *q;
         dev_t devt;
         int r;
@@ -163,7 +170,7 @@ int block_get_originating(dev_t dt, dev_t *ret) {
         if (r < 0)
                 return r;
 
-        r = parse_dev(t, &devt);
+        r = parse_devnum(t, &devt);
         if (r < 0)
                 return -EINVAL;
 
@@ -174,24 +181,37 @@ int block_get_originating(dev_t dt, dev_t *ret) {
         return 1;
 }
 
-int get_block_device_harder(const char *path, dev_t *ret) {
+int get_block_device_harder_fd(int fd, dev_t *ret) {
         int r;
 
-        assert(path);
+        assert(fd >= 0);
         assert(ret);
 
         /* Gets the backing block device for a file system, and handles LUKS encrypted file systems, looking for its
          * immediate parent, if there is one. */
 
-        r = get_block_device(path, ret);
+        r = get_block_device_fd(fd, ret);
         if (r <= 0)
                 return r;
 
         r = block_get_originating(*ret, ret);
         if (r < 0)
-                log_debug_errno(r, "Failed to chase block device '%s', ignoring: %m", path);
+                log_debug_errno(r, "Failed to chase block device, ignoring: %m");
 
         return 1;
+}
+
+int get_block_device_harder(const char *path, dev_t *ret) {
+        _cleanup_close_ int fd = -1;
+
+        assert(path);
+        assert(ret);
+
+        fd = open(path, O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
+        if (fd < 0)
+                return -errno;
+
+        return get_block_device_harder_fd(fd, ret);
 }
 
 int lock_whole_block_device(dev_t devt, int operation) {
@@ -324,6 +344,22 @@ static int blockdev_is_encrypted(const char *sysfs_path, unsigned depth_left) {
         }
 
         return found_encrypted;
+}
+
+int fd_is_encrypted(int fd) {
+        char p[SYS_BLOCK_PATH_MAX(NULL)];
+        dev_t devt;
+        int r;
+
+        r = get_block_device_fd(fd, &devt);
+        if (r < 0)
+                return r;
+        if (r == 0) /* doesn't have a block device */
+                return false;
+
+        xsprintf_sys_block_path(p, NULL, devt);
+
+        return blockdev_is_encrypted(p, 10 /* safety net: maximum recursion depth */);
 }
 
 int path_is_encrypted(const char *path) {

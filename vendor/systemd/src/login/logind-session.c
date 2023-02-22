@@ -15,6 +15,7 @@
 #include "audit-util.h"
 #include "bus-error.h"
 #include "bus-util.h"
+#include "devnum-util.h"
 #include "env-file.h"
 #include "escape.h"
 #include "fd-util.h"
@@ -26,7 +27,7 @@
 #include "logind-session-dbus.h"
 #include "logind-session.h"
 #include "logind-user-dbus.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "process-util.h"
@@ -377,7 +378,7 @@ static int session_load_devices(Session *s, const char *devices) {
                         break;
                 }
 
-                k = parse_dev(word, &dev);
+                k = parse_devnum(word, &dev);
                 if (k < 0) {
                         r = k;
                         continue;
@@ -445,7 +446,6 @@ int session_load(Session *s) {
                            "ACTIVE",         &active,
                            "DEVICES",        &devices,
                            "IS_DISPLAY",     &is_display);
-
         if (r < 0)
                 return log_error_errno(r, "Failed to read %s: %m", s->state_file);
 
@@ -1097,11 +1097,7 @@ int session_create_fifo(Session *s) {
         }
 
         /* Open writing side */
-        r = open(s->fifo_path, O_WRONLY|O_CLOEXEC|O_NONBLOCK);
-        if (r < 0)
-                return -errno;
-
-        return r;
+        return RET_NERRNO(open(s->fifo_path, O_WRONLY|O_CLOEXEC|O_NONBLOCK));
 }
 
 static void session_remove_fifo(Session *s) {

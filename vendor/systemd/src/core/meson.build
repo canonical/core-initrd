@@ -13,6 +13,8 @@ libcore_sources = '''
         bpf-firewall.h
         bpf-foreign.c
         bpf-foreign.h
+        bpf-lsm.c
+        bpf-lsm.h
         bpf-socket-bind.c
         bpf-socket-bind.h
         cgroup.c
@@ -71,8 +73,8 @@ libcore_sources = '''
         generator-setup.h
         ima-setup.c
         ima-setup.h
-        ip-address-access.c
-        ip-address-access.h
+        import-creds.c
+        import-creds.h
         job.c
         job.h
         kill.c
@@ -87,6 +89,8 @@ libcore_sources = '''
         locale-setup.h
         manager-dump.c
         manager-dump.h
+        manager-serialize.c
+        manager-serialize.h
         manager.c
         manager.h
         mount.c
@@ -95,6 +99,8 @@ libcore_sources = '''
         namespace.h
         path.c
         path.h
+        restrict-ifaces.c
+        restrict-ifaces.h
         scope.c
         scope.h
         selinux-access.c
@@ -129,17 +135,32 @@ libcore_sources = '''
         unit.h
 '''.split()
 
+if conf.get('BPF_FRAMEWORK') == 1
+        libcore_sources += files(
+                'bpf-util.c',
+                'bpf-util.h',
+        )
+endif
+
+subdir('bpf')
+
 subdir('bpf/socket_bind')
 if conf.get('BPF_FRAMEWORK') == 1
         libcore_sources += [socket_bind_skel_h]
+        subdir('bpf/restrict_fs')
+        libcore_sources += [restrict_fs_skel_h]
+endif
+
+subdir('bpf/restrict_ifaces')
+if conf.get('BPF_FRAMEWORK') == 1
+        libcore_sources += [restrict_ifaces_skel_h]
 endif
 
 load_fragment_gperf_gperf = custom_target(
         'load-fragment-gperf.gperf',
         input : 'load-fragment-gperf.gperf.in',
         output: 'load-fragment-gperf.gperf',
-        command : [meson_render_jinja2, config_h, '@INPUT@'],
-        capture : true)
+        command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'])
 
 load_fragment_gperf_c = custom_target(
         'load-fragment-gperf.c',
@@ -155,12 +176,18 @@ load_fragment_gperf_nulstr_c = custom_target(
         command : [awk, '-f', '@INPUT0@', '@INPUT1@'],
         capture : true)
 
-libcore = static_library(
-        'core',
+libcore_name = 'systemd-core-@0@'.format(shared_lib_tag)
+
+libcore = shared_library(
+        libcore_name,
         libcore_sources,
         load_fragment_gperf_c,
         load_fragment_gperf_nulstr_c,
         include_directories : includes,
+        c_args : ['-fvisibility=default'],
+        link_args : ['-shared',
+                     '-Wl,--version-script=' + libshared_sym_path],
+        link_with : libshared,
         dependencies : [versiondep,
                         threads,
                         libdl,
@@ -172,11 +199,19 @@ libcore = static_library(
                         libapparmor,
                         libselinux,
                         libmount,
-                        libacl])
+                        libblkid,
+                        libacl],
+        install : true,
+        install_dir : rootlibexecdir)
 
 core_includes = [includes, include_directories('.')]
 
-systemd_sources = files('main.c')
+systemd_sources = files(
+        'main.c',
+        'main.h',
+        'crash-handler.c',
+        'crash-handler.h',
+)
 
 in_files = [['system.conf',                     pkgsysconfdir],
             ['user.conf',                       pkgsysconfdir],
@@ -191,8 +226,7 @@ foreach item : in_files
                 file,
                 input : file + '.in',
                 output: file,
-                command : [meson_render_jinja2, config_h, '@INPUT@'],
-                capture : true,
+                command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'],
                 install : (dir == pkgsysconfdir) ? install_sysconfdir_samples : (dir != 'no'),
                 install_dir : dir)
 endforeach
@@ -208,15 +242,15 @@ meson.add_install_script('sh', '-c', mkdir_p.format(systemgeneratordir))
 meson.add_install_script('sh', '-c', mkdir_p.format(usergeneratordir))
 
 if install_sysconfdir
-        meson.add_install_script('sh', '-c', mkdir_p.format(join_paths(pkgsysconfdir, 'system')))
-        meson.add_install_script('sh', '-c', mkdir_p.format(join_paths(pkgsysconfdir, 'user')))
-        meson.add_install_script('sh', '-c', mkdir_p.format(join_paths(sysconfdir, 'xdg/systemd')))
+        meson.add_install_script('sh', '-c', mkdir_p.format(pkgsysconfdir / 'system'))
+        meson.add_install_script('sh', '-c', mkdir_p.format(pkgsysconfdir / 'user'))
+        meson.add_install_script('sh', '-c', mkdir_p.format(sysconfdir / 'xdg/systemd'))
 endif
 
 ############################################################
 
 fuzzers += [
-        [['src/core/fuzz-unit-file.c'],
+        [files('fuzz-unit-file.c'),
          [libcore,
           libshared],
          [libmount]],

@@ -18,7 +18,7 @@
 #include "keymap-util.h"
 #include "locale-util.h"
 #include "macro.h"
-#include "mkdir.h"
+#include "mkdir-label.h"
 #include "nulstr-util.h"
 #include "process-util.h"
 #include "string-util.h"
@@ -157,7 +157,6 @@ int locale_read_data(Context *c, sd_bus_message *m) {
 int vconsole_read_data(Context *c, sd_bus_message *m) {
         struct stat st;
         usec_t t;
-        int r;
 
         /* Do not try to re-read the file within single bus operation. */
         if (m) {
@@ -185,13 +184,9 @@ int vconsole_read_data(Context *c, sd_bus_message *m) {
         c->vc_mtime = t;
         context_free_vconsole(c);
 
-        r = parse_env_file(NULL, "/etc/vconsole.conf",
-                           "KEYMAP",        &c->vc_keymap,
-                           "KEYMAP_TOGGLE", &c->vc_keymap_toggle);
-        if (r < 0)
-                return r;
-
-        return 0;
+        return parse_env_file(NULL, "/etc/vconsole.conf",
+                              "KEYMAP",        &c->vc_keymap,
+                              "KEYMAP_TOGGLE", &c->vc_keymap_toggle);
 }
 
 int x11_read_data(Context *c, sd_bus_message *m) {
@@ -648,9 +643,10 @@ int find_legacy_keymap(Context *c, char **ret) {
                  */
                 char *l, *v = NULL, *converted;
 
-                l = strndupa(c->x11_layout, strcspn(c->x11_layout, ","));
+                l = strndupa_safe(c->x11_layout, strcspn(c->x11_layout, ","));
                 if (c->x11_variant)
-                        v = strndupa(c->x11_variant, strcspn(c->x11_variant, ","));
+                        v = strndupa_safe(c->x11_variant,
+                                          strcspn(c->x11_variant, ","));
                 r = find_converted_keymap(l, v, &converted);
                 if (r < 0)
                         return r;
@@ -691,7 +687,7 @@ int find_language_fallback(const char *lang, char **language) {
                 }
         }
 
-        assert_not_reached("should not be here");
+        assert_not_reached();
 }
 
 int x11_convert_to_vconsole(Context *c) {
@@ -845,9 +841,9 @@ int locale_gen_enable_locale(const char *locale) {
                 r = copy_access(fileno(fr), fileno(fw));
                 if (r < 0)
                         return r;
-                r = copy_xattr(fileno(fr), fileno(fw));
+                r = copy_xattr(fileno(fr), fileno(fw), COPY_ALL_XATTRS);
                 if (r < 0)
-                        return r;
+                        log_debug_errno(r, "Failed to copy all xattrs from old to new /etc/locale.gen file, ignoring: %m");
         }
 
         if (!write_new) {

@@ -14,6 +14,7 @@
 
 #include "alloc-util.h"
 #include "btrfs-util.h"
+#include "chase-symlinks.h"
 #include "chattr-util.h"
 #include "copy.h"
 #include "dirent-util.h"
@@ -84,7 +85,7 @@ DEFINE_HASH_OPS_WITH_VALUE_DESTRUCTOR(image_hash_ops, char, string_hash_func, st
 
 static char **image_settings_path(Image *image) {
         _cleanup_strv_free_ char **l = NULL;
-        const char *fn, *s;
+        const char *fn;
         unsigned i = 0;
 
         assert(image);
@@ -333,7 +334,7 @@ static int image_make(
                 if (!ret)
                         return 0;
 
-                (void) fd_getcrtime_at(dfd, filename, &crtime, 0);
+                (void) fd_getcrtime_at(dfd, filename, AT_SYMLINK_FOLLOW, &crtime);
 
                 if (!pretty) {
                         r = extract_pretty(filename, ".raw", &pretty_buffer);
@@ -542,7 +543,6 @@ int image_discover(
         NULSTR_FOREACH(path, image_search_path[class]) {
                 _cleanup_free_ char *resolved = NULL;
                 _cleanup_closedir_ DIR *d = NULL;
-                struct dirent *de;
 
                 r = chase_symlinks_and_opendir(path, root, CHASE_PREFIX_ROOT, &resolved, &d);
                 if (r == -ENOENT)
@@ -632,7 +632,6 @@ int image_remove(Image *i) {
         _cleanup_(release_lock_file) LockFile global_lock = LOCK_FILE_INIT, local_lock = LOCK_FILE_INIT;
         _cleanup_strv_free_ char **settings = NULL;
         _cleanup_free_ char *roothash = NULL;
-        char **j;
         int r;
 
         assert(i);
@@ -695,10 +694,9 @@ int image_remove(Image *i) {
                 return -EOPNOTSUPP;
         }
 
-        STRV_FOREACH(j, settings) {
+        STRV_FOREACH(j, settings)
                 if (unlink(*j) < 0 && errno != ENOENT)
                         log_debug_errno(errno, "Failed to unlink %s, ignoring: %m", *j);
-        }
 
         if (unlink(roothash) < 0 && errno != ENOENT)
                 log_debug_errno(errno, "Failed to unlink %s, ignoring: %m", roothash);
@@ -724,7 +722,6 @@ int image_rename(Image *i, const char *new_name) {
         _cleanup_free_ char *new_path = NULL, *nn = NULL, *roothash = NULL;
         _cleanup_strv_free_ char **settings = NULL;
         unsigned file_attr = 0;
-        char **j;
         int r;
 
         assert(i);
@@ -845,7 +842,6 @@ int image_clone(Image *i, const char *new_name, bool read_only) {
         _cleanup_strv_free_ char **settings = NULL;
         _cleanup_free_ char *roothash = NULL;
         const char *new_path;
-        char **j;
         int r;
 
         assert(i);
@@ -1200,9 +1196,16 @@ int image_read_metadata(Image *i) {
                 if (r < 0)
                         return r;
 
+                /* Make sure udevd doesn't issue BLKRRPART in the background which might make our partitions
+                 * disappear temporarily. */
+                r = loop_device_flock(d, LOCK_SH);
+                if (r < 0)
+                        return r;
+
                 r = dissect_image(
                                 d->fd,
                                 NULL, NULL,
+                                d->diskseq,
                                 d->uevent_seqnum_not_before,
                                 d->timestamp_not_before,
                                 DISSECT_IMAGE_GENERIC_ROOT |
@@ -1214,7 +1217,9 @@ int image_read_metadata(Image *i) {
                 if (r < 0)
                         return r;
 
-                r = dissected_image_acquire_metadata(m);
+                r = dissected_image_acquire_metadata(m,
+                                                     DISSECT_IMAGE_VALIDATE_OS |
+                                                     DISSECT_IMAGE_VALIDATE_OS_EXT);
                 if (r < 0)
                         return r;
 

@@ -10,7 +10,9 @@
 #include "ether-addr-util.h"
 #include "hostname-setup.h"
 #include "network-internal.h"
+#include "networkd-address.h"
 #include "networkd-manager.h"
+#include "networkd-route-util.h"
 #include "string-util.h"
 #include "strv.h"
 #include "tests.h"
@@ -144,6 +146,12 @@ static void test_route_tables(Manager *manager) {
         assert_se(!manager->route_table_names_by_number);
         assert_se(!manager->route_table_numbers_by_name);
 
+        /* Invalid pairs */
+        assert_se(config_parse_route_table_names("manager", "filename", 1, "section", 1, "RouteTable", 0, "main:123 default:333 local:999", manager, manager) >= 0);
+        assert_se(config_parse_route_table_names("manager", "filename", 1, "section", 1, "RouteTable", 0, "1234:321 :567 hoge:foo aaa:-888", manager, manager) >= 0);
+        assert_se(!manager->route_table_names_by_number);
+        assert_se(!manager->route_table_numbers_by_name);
+
         test_route_tables_one(manager, "default", 253);
         test_route_tables_one(manager, "main", 254);
         test_route_tables_one(manager, "local", 255);
@@ -168,6 +176,16 @@ static int test_load_config(Manager *manager) {
         return 0;
 }
 
+static bool address_equal(const Address *a1, const Address *a2) {
+        if (a1 == a2)
+                return true;
+
+        if (!a1 || !a2)
+                return false;
+
+        return address_compare_func(a1, a2) == 0;
+}
+
 static void test_address_equality(void) {
         _cleanup_(address_freep) Address *a1 = NULL, *a2 = NULL;
 
@@ -190,8 +208,10 @@ static void test_address_equality(void) {
         assert_se(in_addr_from_string(AF_INET, "192.168.3.9", &a2->in_addr) >= 0);
         assert_se(address_equal(a1, a2));
         assert_se(in_addr_from_string(AF_INET, "192.168.3.10", &a1->in_addr_peer) >= 0);
-        assert_se(address_equal(a1, a2));
+        assert_se(!address_equal(a1, a2));
         assert_se(in_addr_from_string(AF_INET, "192.168.3.11", &a2->in_addr_peer) >= 0);
+        assert_se(!address_equal(a1, a2));
+        assert_se(in_addr_from_string(AF_INET, "192.168.3.10", &a2->in_addr_peer) >= 0);
         assert_se(address_equal(a1, a2));
         a1->prefixlen = 10;
         assert_se(!address_equal(a1, a2));
@@ -207,8 +227,9 @@ static void test_address_equality(void) {
         assert_se(address_equal(a1, a2));
 
         a2->prefixlen = 8;
-        assert_se(address_equal(a1, a2));
+        assert_se(!address_equal(a1, a2));
 
+        a2->prefixlen = 10;
         assert_se(in_addr_from_string(AF_INET6, "2001:4ca0:4f01::1", &a2->in_addr) >= 0);
         assert_se(!address_equal(a1, a2));
 }
@@ -269,7 +290,8 @@ int main(void) {
         test_address_equality();
         test_dhcp_hostname_shorten_overlong();
 
-        assert_se(manager_new(&manager) >= 0);
+        assert_se(manager_new(&manager, /* test_mode = */ true) >= 0);
+        assert_se(manager_setup(manager) >= 0);
 
         test_route_tables(manager);
 

@@ -1,0 +1,4 @@
+usr/share/man/man1/resolv*
+usr/share/man/man5/org.freedesktop.resolve1*
+usr/share/man/man5/resolved.conf.*
+usr/share/man/man8/systemd-resolved.*

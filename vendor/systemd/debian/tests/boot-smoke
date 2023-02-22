@@ -32,6 +32,12 @@ Section "Device"
 EndSection
 EOF
 
+    # This test installs network-manager, which seems to cause
+    # systemd-networkd-wait-online to be stuck as they conflict,
+    # so systemctl start network-online.target ran by autopkgtest
+    # gets stuck, at least in Debian Bullseye images.
+    # https://salsa.debian.org/ci-team/autopkgtest/-/blob/debian/5.21/virt/autopkgtest-virt-lxc#L131
+    systemctl disable systemd-networkd.service
 
     AUTOPKGTEST_REBOOT_MARK=0
     if [ -d /tmp/systemd-replace/ ]; then

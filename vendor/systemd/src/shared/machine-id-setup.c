@@ -9,7 +9,6 @@
 
 #include "alloc-util.h"
 #include "fd-util.h"
-#include "fs-util.h"
 #include "id128-util.h"
 #include "io-util.h"
 #include "log.h"
@@ -23,6 +22,7 @@
 #include "process-util.h"
 #include "stat-util.h"
 #include "string-util.h"
+#include "sync-util.h"
 #include "umask-util.h"
 #include "util.h"
 #include "virt.h"
@@ -197,7 +197,7 @@ finish:
 
 int machine_id_commit(const char *root) {
         _cleanup_close_ int fd = -1, initial_mntns_fd = -1;
-        const char *etc_machine_id, *sync_path;
+        const char *etc_machine_id;
         sd_id128_t id;
         int r;
 

@@ -5,6 +5,7 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "sd-daemon.h"
 
@@ -22,8 +23,7 @@
 #include "main-func.h"
 #include "mkdir.h"
 #include "parse-argument.h"
-#include "parse-util.h"
-#include "path-util.h"
+#include "parse-helpers.h"
 #include "pretty-print.h"
 #include "process-util.h"
 #include "rlimit-util.h"
@@ -438,7 +438,7 @@ static int setup_uploader(Uploader *u, const char *url, const char *state_file) 
                 char *t;
                 size_t x;
 
-                t = strdupa(url);
+                t = strdupa_safe(url);
                 x = strlen(t);
                 while (x > 0 && t[x - 1] == '/')
                         t[x - 1] = '\0';
@@ -568,11 +568,11 @@ finalize:
 
 static int parse_config(void) {
         const ConfigTableItem items[] = {
-                { "Upload",  "URL",                    config_parse_string,         0, &arg_url                  },
-                { "Upload",  "ServerKeyFile",          config_parse_path_or_ignore, 0, &arg_key                  },
-                { "Upload",  "ServerCertificateFile",  config_parse_path_or_ignore, 0, &arg_cert                 },
-                { "Upload",  "TrustedCertificateFile", config_parse_path_or_ignore, 0, &arg_trust                },
-                { "Upload",  "NetworkTimeoutSec",      config_parse_sec,            0, &arg_network_timeout_usec },
+                { "Upload",  "URL",                    config_parse_string,         CONFIG_PARSE_STRING_SAFE, &arg_url                  },
+                { "Upload",  "ServerKeyFile",          config_parse_path_or_ignore, 0,                        &arg_key                  },
+                { "Upload",  "ServerCertificateFile",  config_parse_path_or_ignore, 0,                        &arg_cert                 },
+                { "Upload",  "TrustedCertificateFile", config_parse_path_or_ignore, 0,                        &arg_trust                },
+                { "Upload",  "NetworkTimeoutSec",      config_parse_sec,            0,                        &arg_network_timeout_usec },
                 {}
         };
 
@@ -667,7 +667,7 @@ static int parse_argv(int argc, char *argv[]) {
         opterr = 0;
 
         while ((c = getopt_long(argc, argv, "hu:mM:D:", options, NULL)) >= 0)
-                switch(c) {
+                switch (c) {
                 case 'h':
                         return help();
 
@@ -779,7 +779,7 @@ static int parse_argv(int argc, char *argv[]) {
                                                argv[optind - 1]);
 
                 default:
-                        assert_not_reached("Unhandled option code.");
+                        assert_not_reached();
                 }
 
         if (!arg_url)

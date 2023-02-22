@@ -13,11 +13,12 @@ downstream_package_name: systemd
 # `git describe` returns in systemd's case 'v245-xxx' which breaks RPM version
 # detection (that expects 245-xxxx'). Let's tweak the version string accordingly
 upstream_tag_template: "v{version}"
+srpm_build_deps: []
 
 actions:
   post-upstream-clone:
-    # Use the Fedora 35 specfile
-    - "git clone --branch f35 https://src.fedoraproject.org/rpms/systemd .packit_rpm --depth=1"
+    # Use the Fedora Rawhide specfile
+    - "git clone https://src.fedoraproject.org/rpms/systemd .packit_rpm --depth=1"
     # Drop the "sources" file so rebase-helper doesn't think we're a dist-git
     - "rm -fv .packit_rpm/sources"
     # Drop backported patches from the specfile, but keep the downstream-only ones
@@ -37,6 +38,8 @@ jobs:
   trigger: pull_request
   metadata:
     targets:
-    - fedora-35-aarch64
-    - fedora-35-i386
-    - fedora-35-x86_64
+    - fedora-rawhide-aarch64
+    - fedora-rawhide-i386
+    - fedora-rawhide-ppc64le
+    - fedora-rawhide-s390x
+    - fedora-rawhide-x86_64

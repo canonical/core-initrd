@@ -53,6 +53,10 @@ int udev_resolve_subsys_kernel(const char *string, char *result, size_t maxsize,
 int udev_queue_is_empty(void);
 int udev_queue_init(void);
 
+int on_ac_power(void);
+
+bool udev_available(void);
+
 #if HAVE_SYS_SDT_H
 
 /* Each trace point can have different number of additional arguments. Note that when the macro is used only
@@ -75,7 +79,7 @@ int udev_queue_init(void);
                 (void) sd_device_get_syspath(_d, &_p);                                                     \
                 (void) sd_device_get_subsystem(_d, &_s);                                                   \
                 STAP_PROBEV(udev, name, device_action_to_string(_a), _n, _p, _s __VA_OPT__(,) __VA_ARGS__);\
-        } while(false);
+        } while (false);
 #else
 #define DEVICE_TRACE_POINT(name, dev, ...) ((void) 0)
 #endif

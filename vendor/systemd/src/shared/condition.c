@@ -22,7 +22,7 @@
 #include "cgroup-util.h"
 #include "condition.h"
 #include "cpu-set-util.h"
-#include "efi-loader.h"
+#include "efi-api.h"
 #include "env-file.h"
 #include "env-util.h"
 #include "extract-word.h"
@@ -39,17 +39,21 @@
 #include "os-util.h"
 #include "parse-util.h"
 #include "path-util.h"
+#include "percent-util.h"
 #include "proc-cmdline.h"
 #include "process-util.h"
+#include "psi-util.h"
 #include "selinux-util.h"
 #include "smack-util.h"
+#include "special.h"
 #include "stat-util.h"
 #include "string-table.h"
 #include "string-util.h"
 #include "tomoyo-util.h"
-#include "user-record.h"
+#include "tpm2-util.h"
+#include "udev-util.h"
+#include "uid-alloc-range.h"
 #include "user-util.h"
-#include "util.h"
 #include "virt.h"
 
 Condition* condition_new(ConditionType type, const char *parameter, bool trigger, bool negate) {
@@ -86,9 +90,7 @@ Condition* condition_free(Condition *c) {
 }
 
 Condition* condition_free_list_type(Condition *head, ConditionType type) {
-        Condition *c, *n;
-
-        LIST_FOREACH_SAFE(conditions, c, n, head)
+        LIST_FOREACH(conditions, c, head)
                 if (type < 0 || c->type == type) {
                         LIST_REMOVE(conditions, head, c);
                         condition_free(c);
@@ -202,7 +204,7 @@ static bool test_order(int k, OrderOperator p) {
                 return k > 0;
 
         default:
-                assert_not_reached("unknown order");
+                assert_not_reached();
 
         }
 }
@@ -458,7 +460,8 @@ static int condition_test_group(Condition *c, char **env) {
 }
 
 static int condition_test_virtualization(Condition *c, char **env) {
-        int b, v;
+        Virtualization v;
+        int b;
 
         assert(c);
         assert(c->parameter);
@@ -474,7 +477,7 @@ static int condition_test_virtualization(Condition *c, char **env) {
         /* First, compare with yes/no */
         b = parse_boolean(c->parameter);
         if (b >= 0)
-                return b == !!v;
+                return b == (v != VIRTUALIZATION_NONE);
 
         /* Then, compare categorization */
         if (streq(c->parameter, "vm"))
@@ -488,7 +491,7 @@ static int condition_test_virtualization(Condition *c, char **env) {
 }
 
 static int condition_test_architecture(Condition *c, char **env) {
-        int a, b;
+        Architecture a, b;
 
         assert(c);
         assert(c->parameter);
@@ -509,7 +512,7 @@ static int condition_test_architecture(Condition *c, char **env) {
         return a == b;
 }
 
-#define DTCOMPAT_FILE "/sys/firmware/devicetree/base/compatible"
+#define DTCOMPAT_FILE "/proc/device-tree/compatible"
 static int condition_test_firmware_devicetree_compatible(const char *dtcarg) {
         int r;
         _cleanup_free_ char *dtcompat = NULL;
@@ -530,11 +533,8 @@ static int condition_test_firmware_devicetree_compatible(const char *dtcarg) {
                 return false;
         }
 
-        /*
-         * /sys/firmware/devicetree/base/compatible consists of one or more
-         * strings, each ending in '\0'. So the last character in dtcompat must
-         * be a '\0'.
-         */
+         /* /proc/device-tree/compatible consists of one or more strings, each ending in '\0'.
+          * So the last character in dtcompat must be a '\0'. */
         if (dtcompat[size - 1] != '\0') {
                 log_debug("%s is in an unknown format, assuming machine is incompatible", DTCOMPAT_FILE);
                 return false;
@@ -624,29 +624,14 @@ static int condition_test_ac_power(Condition *c, char **env) {
 }
 
 static int has_tpm2(void) {
-        int r;
-
         /* Checks whether the system has at least one TPM2 resource manager device, i.e. at least one "tpmrm"
-         * class device */
+         * class device. Alternatively, we are also happy if the firmware reports support (this is to cover
+         * for cases where we simply haven't loaded the driver for it yet, i.e. during early boot where we
+         * very likely want to use this condition check).
+         *
+         * Note that we don't check if we ourselves are built with TPM2 support here! */
 
-        r = dir_is_empty("/sys/class/tpmrm");
-        if (r == 0)
-                return true; /* nice! we have a device */
-
-        /* Hmm, so Linux doesn't know of the TPM2 device (or we couldn't check for it), most likely because
-         * the driver wasn't loaded yet. Let's see if the firmware knows about a TPM2 device, in this
-         * case. This way we can answer the TPM2 question already during early boot (where we most likely
-         * need it) */
-        if (efi_has_tpm2())
-                return true;
-
-        /* OK, this didn't work either, in this case propagate the original errors */
-        if (r == -ENOENT)
-                return false;
-        if (r < 0)
-                return log_debug_errno(r, "Failed to determine whether system has TPM2 support: %m");
-
-        return !r;
+        return (tpm2_support() & (TPM2_SUPPORT_DRIVER|TPM2_SUPPORT_FIRMWARE)) != 0;
 }
 
 static int condition_test_security(Condition *c, char **env) {
@@ -787,7 +772,8 @@ static int condition_test_needs_update(Condition *c, char **env) {
         if (r < 0) {
                 log_debug_errno(r, "Failed to parse timestamp file '%s', using mtime: %m", p);
                 return true;
-        } else if (r == 0) {
+        }
+        if (isempty(timestamp_str)) {
                 log_debug("No data in timestamp file '%s', using mtime.", p);
                 return true;
         }
@@ -829,7 +815,6 @@ static int condition_test_first_boot(Condition *c, char **env) {
 
 static int condition_test_environment(Condition *c, char **env) {
         bool equal;
-        char **i;
 
         assert(c);
         assert(c->parameter);
@@ -937,7 +922,7 @@ static int condition_test_directory_not_empty(Condition *c, char **env) {
         assert(c->parameter);
         assert(c->type == CONDITION_DIRECTORY_NOT_EMPTY);
 
-        r = dir_is_empty(c->parameter);
+        r = dir_is_empty(c->parameter, /* ignore_hidden_or_backup= */ true);
         return r <= 0 && !IN_SET(r, -ENOENT, -ENOTDIR);
 }
 
@@ -963,6 +948,151 @@ static int condition_test_file_is_executable(Condition *c, char **env) {
         return (stat(c->parameter, &st) >= 0 &&
                 S_ISREG(st.st_mode) &&
                 (st.st_mode & 0111));
+}
+
+static int condition_test_psi(Condition *c, char **env) {
+        _cleanup_free_ char *first = NULL, *second = NULL, *third = NULL, *fourth = NULL, *pressure_path = NULL;
+        const char *p, *value, *pressure_type;
+        loadavg_t *current, limit;
+        ResourcePressure pressure;
+        int r;
+
+        assert(c);
+        assert(c->parameter);
+        assert(IN_SET(c->type, CONDITION_MEMORY_PRESSURE, CONDITION_CPU_PRESSURE, CONDITION_IO_PRESSURE));
+
+        if (!is_pressure_supported()) {
+                log_debug("Pressure Stall Information (PSI) is not supported, skipping.");
+                return 1;
+        }
+
+        pressure_type = c->type == CONDITION_MEMORY_PRESSURE ? "memory" :
+                        c->type == CONDITION_CPU_PRESSURE ? "cpu" :
+                        "io";
+
+        p = c->parameter;
+        r = extract_many_words(&p, ":", 0, &first, &second, NULL);
+        if (r <= 0)
+                return log_debug_errno(r < 0 ? r : SYNTHETIC_ERRNO(EINVAL), "Failed to parse condition parameter %s: %m", c->parameter);
+        /* If only one parameter is passed, then we look at the global system pressure rather than a specific cgroup. */
+        if (r == 1) {
+                pressure_path = path_join("/proc/pressure", pressure_type);
+                if (!pressure_path)
+                        return log_oom_debug();
+
+                value = first;
+        } else {
+                const char *controller = strjoina(pressure_type, ".pressure");
+                _cleanup_free_ char *slice_path = NULL, *root_scope = NULL;
+                CGroupMask mask, required_mask;
+                char *slice, *e;
+
+                required_mask = c->type == CONDITION_MEMORY_PRESSURE ? CGROUP_MASK_MEMORY :
+                                c->type == CONDITION_CPU_PRESSURE ? CGROUP_MASK_CPU :
+                                CGROUP_MASK_IO;
+
+                slice = strstrip(first);
+                if (!slice)
+                        return log_debug_errno(SYNTHETIC_ERRNO(EINVAL), "Failed to parse condition parameter %s: %m", c->parameter);
+
+                r = cg_all_unified();
+                if (r < 0)
+                        return log_debug_errno(r, "Failed to determine whether the unified cgroups hierarchy is used: %m");
+                if (r == 0) {
+                        log_debug("PSI condition check requires the unified cgroups hierarchy, skipping.");
+                        return 1;
+                }
+
+                r = cg_mask_supported(&mask);
+                if (r < 0)
+                        return log_debug_errno(r, "Failed to get supported cgroup controllers: %m");
+
+                if (!FLAGS_SET(mask, required_mask)) {
+                        log_debug("Cgroup %s controller not available, skipping PSI condition check.", pressure_type);
+                        return 1;
+                }
+
+                r = cg_slice_to_path(slice, &slice_path);
+                if (r < 0)
+                        return log_debug_errno(r, "Cannot determine slice \"%s\" cgroup path: %m", slice);
+
+                /* We might be running under the user manager, so get the root path and prefix it accordingly. */
+                r = cg_pid_get_path(SYSTEMD_CGROUP_CONTROLLER, getpid_cached(), &root_scope);
+                if (r < 0)
+                        return log_debug_errno(r, "Failed to get root cgroup path: %m");
+
+                /* Drop init.scope, we want the parent. We could get an empty or / path, but that's fine,
+                 * just skip it in that case. */
+                e = endswith(root_scope, "/" SPECIAL_INIT_SCOPE);
+                if (e)
+                        *e = 0;
+                if (!empty_or_root(root_scope)) {
+                        _cleanup_free_ char *slice_joined = NULL;
+
+                        slice_joined = path_join(root_scope, slice_path);
+                        if (!slice_joined)
+                                return log_oom_debug();
+
+                        free_and_replace(slice_path, slice_joined);
+                }
+
+                r = cg_get_path(SYSTEMD_CGROUP_CONTROLLER, slice_path, controller, &pressure_path);
+                if (r < 0)
+                        return log_debug_errno(r, "Error getting cgroup pressure path from %s: %m", slice_path);
+
+                value = second;
+        }
+
+        /* If a value including a specific timespan (in the intervals allowed by the kernel),
+         * parse it, otherwise we assume just a plain percentage that will be checked if it is
+         * smaller or equal to the current pressure average over 5 minutes. */
+        r = extract_many_words(&value, "/", 0, &third, &fourth, NULL);
+        if (r <= 0)
+                return log_debug_errno(r < 0 ? r : SYNTHETIC_ERRNO(EINVAL), "Failed to parse condition parameter %s: %m", c->parameter);
+        if (r == 1)
+                current = &pressure.avg300;
+        else {
+                const char *timespan;
+
+                timespan = skip_leading_chars(fourth, NULL);
+                if (!timespan)
+                        return log_debug_errno(SYNTHETIC_ERRNO(EINVAL), "Failed to parse condition parameter %s: %m", c->parameter);
+
+                if (startswith(timespan, "10sec"))
+                        current = &pressure.avg10;
+                else if (startswith(timespan, "1min"))
+                        current = &pressure.avg60;
+                else if (startswith(timespan, "5min"))
+                        current = &pressure.avg300;
+                else
+                        return log_debug_errno(SYNTHETIC_ERRNO(EINVAL), "Failed to parse condition parameter %s: %m", c->parameter);
+        }
+
+        value = strstrip(third);
+        if (!value)
+                return log_debug_errno(SYNTHETIC_ERRNO(EINVAL), "Failed to parse condition parameter %s: %m", c->parameter);
+
+        r = parse_permyriad(value);
+        if (r < 0)
+                return log_debug_errno(r, "Failed to parse permyriad: %s", c->parameter);
+
+        r = store_loadavg_fixed_point(r / 100LU, r % 100LU, &limit);
+        if (r < 0)
+                return log_debug_errno(r, "Failed to parse loadavg: %s", c->parameter);
+
+        r = read_resource_pressure(pressure_path, PRESSURE_TYPE_FULL, &pressure);
+        if (r == -ENODATA) /* cpu.pressure 'full' was added recently, fall back to 'some'. */
+                r = read_resource_pressure(pressure_path, PRESSURE_TYPE_SOME, &pressure);
+        if (r == -ENOENT) {
+                /* We already checked that /proc/pressure exists, so this means we were given a cgroup
+                 * that doesn't exist or doesn't exist any longer. */
+                log_debug("\"%s\" not found, skipping PSI check.", pressure_path);
+                return 1;
+        }
+        if (r < 0)
+                return log_debug_errno(r, "Error parsing pressure from %s: %m", pressure_path);
+
+        return *current <= limit;
 }
 
 int condition_test(Condition *c, char **env) {
@@ -997,6 +1127,9 @@ int condition_test(Condition *c, char **env) {
                 [CONDITION_ENVIRONMENT]              = condition_test_environment,
                 [CONDITION_CPU_FEATURE]              = condition_test_cpufeature,
                 [CONDITION_OS_RELEASE]               = condition_test_osrelease,
+                [CONDITION_MEMORY_PRESSURE]          = condition_test_psi,
+                [CONDITION_CPU_PRESSURE]             = condition_test_psi,
+                [CONDITION_IO_PRESSURE]              = condition_test_psi,
         };
 
         int r, b;
@@ -1023,7 +1156,6 @@ bool condition_test_list(
                 condition_test_logger_t logger,
                 void *userdata) {
 
-        Condition *c;
         int triggered = -1;
 
         assert(!!logger == !!to_string);
@@ -1086,8 +1218,6 @@ void condition_dump(Condition *c, FILE *f, const char *prefix, condition_to_stri
 }
 
 void condition_dump_list(Condition *first, FILE *f, const char *prefix, condition_to_string_t to_string) {
-        Condition *c;
-
         LIST_FOREACH(conditions, c, first)
                 condition_dump(c, f, prefix, to_string);
 }
@@ -1122,6 +1252,9 @@ static const char* const condition_type_table[_CONDITION_TYPE_MAX] = {
         [CONDITION_ENVIRONMENT] = "ConditionEnvironment",
         [CONDITION_CPU_FEATURE] = "ConditionCPUFeature",
         [CONDITION_OS_RELEASE] = "ConditionOSRelease",
+        [CONDITION_MEMORY_PRESSURE] = "ConditionMemoryPressure",
+        [CONDITION_CPU_PRESSURE] = "ConditionCPUPressure",
+        [CONDITION_IO_PRESSURE] = "ConditionIOPressure",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(condition_type, ConditionType);
@@ -1156,6 +1289,9 @@ static const char* const assert_type_table[_CONDITION_TYPE_MAX] = {
         [CONDITION_ENVIRONMENT] = "AssertEnvironment",
         [CONDITION_CPU_FEATURE] = "AssertCPUFeature",
         [CONDITION_OS_RELEASE] = "AssertOSRelease",
+        [CONDITION_MEMORY_PRESSURE] = "AssertMemoryPressure",
+        [CONDITION_CPU_PRESSURE] = "AssertCPUPressure",
+        [CONDITION_IO_PRESSURE] = "AssertIOPressure",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(assert_type, ConditionType);

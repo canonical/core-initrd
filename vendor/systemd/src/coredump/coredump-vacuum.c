@@ -13,6 +13,7 @@
 #include "hashmap.h"
 #include "macro.h"
 #include "memory-util.h"
+#include "stat-util.h"
 #include "string-util.h"
 #include "time-util.h"
 #include "user-util.h"
@@ -61,7 +62,7 @@ static int uid_from_file_name(const char *filename, uid_t *uid) {
         if (!e)
                 return -EINVAL;
 
-        u = strndupa(p, e-p);
+        u = strndupa_safe(p, e - p);
         return parse_uid(u, uid);
 }
 
@@ -142,7 +143,6 @@ int coredump_vacuum(int exclude_fd, uint64_t keep_free, uint64_t max_use) {
         for (;;) {
                 _cleanup_(vacuum_candidate_hashmap_freep) Hashmap *h = NULL;
                 VacuumCandidate *worst = NULL;
-                struct dirent *de;
                 uint64_t sum = 0;
 
                 rewinddir(d);
@@ -168,9 +168,7 @@ int coredump_vacuum(int exclude_fd, uint64_t keep_free, uint64_t max_use) {
                         if (!S_ISREG(st.st_mode))
                                 continue;
 
-                        if (exclude_fd >= 0 &&
-                            exclude_st.st_dev == st.st_dev &&
-                            exclude_st.st_ino == st.st_ino)
+                        if (exclude_fd >= 0 && stat_inode_same(&exclude_st, &st))
                                 continue;
 
                         r = hashmap_ensure_allocated(&h, NULL);

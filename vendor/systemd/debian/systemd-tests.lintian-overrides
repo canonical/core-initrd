@@ -1,0 +1,10 @@
+# It's not documentation, it's test data
+systemd-tests: package-contains-documentation-outside-usr-share-doc
+# netlink keyword
+systemd-tests: spelling-error-in-binary usr/lib/systemd/tests/test-network iif if
+# variable name, not a typo
+systemd-tests: spelling-error-in-binary usr/lib/systemd/tests/manual/test-udev ressize resize
+# test binaries, we don't care about these flags
+systemd-tests: hardening-no-fortify-functions
+systemd-tests: hardening-no-bindnow
+systemd-tests: hardening-no-relro

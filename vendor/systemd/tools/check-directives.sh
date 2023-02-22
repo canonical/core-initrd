@@ -3,8 +3,8 @@
 set -eu
 set -o pipefail
 
-SOURCE_ROOT="${1:?Missing argument: project source root}"
-BUILD_ROOT="${2:?Missing argument: project build root}"
+SOURCE_ROOT="${1:?}"
+BUILD_ROOT="${2:?}"
 
 command -v gawk &>/dev/null || exit 77
 
@@ -34,8 +34,8 @@ function generate_directives() {
 ret=0
 if ! diff \
      <(generate_directives "$SOURCE_ROOT"/src/network/networkd-network-gperf.gperf | sort) \
-     <(sort "$SOURCE_ROOT"/test/fuzz/fuzz-network-parser/directives.network); then
-    echo "Looks like test/fuzz/fuzz-network-parser/directives.network hasn't been updated"
+     <(sort "$SOURCE_ROOT"/test/fuzz/fuzz-network-parser/directives); then
+    echo "Looks like test/fuzz/fuzz-network-parser/directives hasn't been updated"
     ret=1
 fi
 

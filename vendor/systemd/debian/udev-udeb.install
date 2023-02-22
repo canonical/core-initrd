@@ -15,8 +15,8 @@ lib/udev/rules.d/75-net-description.rules
 lib/udev/rules.d/75-probe_mtd.rules
 lib/udev/rules.d/80-drivers.rules
 lib/udev/rules.d/80-net-setup-link.rules
-../../extra/network/73-usb-net-by-mac.link lib/systemd/network/
-../../extra/rules/50-firmware.rules lib/udev/rules.d/
-../../extra/rules/73-special-net-names.rules lib/udev/rules.d/
-../../extra/start-udev lib/debian-installer/
-../../extra/modprobe.d-udeb/scsi-mod-scan-sync.conf lib/modprobe.d/
+../extra/network/73-usb-net-by-mac.link lib/systemd/network/
+../extra/rules/50-firmware.rules lib/udev/rules.d/
+../extra/rules/73-special-net-names.rules lib/udev/rules.d/
+../extra/start-udev lib/debian-installer/
+../extra/modprobe.d-udeb/scsi-mod-scan-sync.conf lib/modprobe.d/

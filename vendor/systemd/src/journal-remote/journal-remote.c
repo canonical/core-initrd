@@ -14,11 +14,11 @@
 #include "errno-util.h"
 #include "escape.h"
 #include "fd-util.h"
-#include "journal-file.h"
 #include "journal-remote-write.h"
 #include "journal-remote.h"
 #include "journald-native.h"
 #include "macro.h"
+#include "managed-journal-file.h"
 #include "parse-util.h"
 #include "process-util.h"
 #include "socket-util.h"
@@ -58,19 +58,24 @@ static int open_output(RemoteServer *s, Writer *w, const char* host) {
         }
 
         default:
-                assert_not_reached("what?");
+                assert_not_reached();
         }
 
-        r = journal_file_open_reliably(filename,
-                                       O_RDWR|O_CREAT, 0640,
-                                       s->compress, UINT64_MAX, s->seal,
-                                       &w->metrics,
-                                       w->mmap, NULL,
-                                       NULL, &w->journal);
+        r = managed_journal_file_open_reliably(
+                        filename,
+                        O_RDWR|O_CREAT,
+                        s->file_flags,
+                        0640,
+                        UINT64_MAX,
+                        &w->metrics,
+                        w->mmap,
+                        NULL,
+                        NULL,
+                        &w->journal);
         if (r < 0)
                 return log_error_errno(r, "Failed to open output journal %s: %m", filename);
 
-        log_debug("Opened output file %s", w->journal->path);
+        log_debug("Opened output file %s", w->journal->file->path);
         return 0;
 }
 
@@ -99,7 +104,7 @@ int journal_remote_get_writer(RemoteServer *s, const char *host, Writer **writer
         const void *key;
         int r;
 
-        switch(s->split_mode) {
+        switch (s->split_mode) {
         case JOURNAL_WRITE_SPLIT_NONE:
                 key = "one and only";
                 break;
@@ -110,7 +115,7 @@ int journal_remote_get_writer(RemoteServer *s, const char *host, Writer **writer
                 break;
 
         default:
-                assert_not_reached("what split mode?");
+                assert_not_reached();
         }
 
         w = hashmap_get(s->writers, key);
@@ -243,13 +248,13 @@ int journal_remote_add_source(RemoteServer *s, int fd, char* name, bool own_name
                 r = sd_event_add_defer(s->events, &source->buffer_event,
                                        dispatch_raw_source_until_block, source);
                 if (r == 0)
-                        sd_event_source_set_enabled(source->buffer_event, SD_EVENT_OFF);
+                        r = sd_event_source_set_enabled(source->buffer_event, SD_EVENT_OFF);
         } else if (r == -EPERM) {
                 log_debug("Falling back to sd_event_add_defer for fd:%d (%s)", fd, name);
                 r = sd_event_add_defer(s->events, &source->event,
                                        dispatch_blocking_source_event, source);
                 if (r == 0)
-                        sd_event_source_set_enabled(source->event, SD_EVENT_ON);
+                        r = sd_event_source_set_enabled(source->event, SD_EVENT_ON);
         }
         if (r < 0) {
                 log_error_errno(r, "Failed to register event source for fd:%d: %m",
@@ -302,8 +307,7 @@ int journal_remote_server_init(
                 RemoteServer *s,
                 const char *output,
                 JournalWriteSplitMode split_mode,
-                bool compress,
-                bool seal) {
+                JournalFileFlags file_flags) {
 
         int r;
 
@@ -313,8 +317,7 @@ int journal_remote_server_init(
         journal_remote_server_global = s;
 
         s->split_mode = split_mode;
-        s->compress = compress;
-        s->seal = seal;
+        s->file_flags = file_flags;
 
         if (output)
                 s->output = output;
@@ -323,7 +326,7 @@ int journal_remote_server_init(
         else if (split_mode == JOURNAL_WRITE_SPLIT_HOST)
                 s->output = REMOTE_JOURNAL_PATH;
         else
-                assert_not_reached("bad split mode");
+                assert_not_reached();
 
         r = sd_event_default(&s->events);
         if (r < 0)
@@ -391,7 +394,7 @@ int journal_remote_handle_raw_source(
         source = s->sources[fd];
         assert(source->importer.fd == fd);
 
-        r = process_source(source, s->compress, s->seal);
+        r = process_source(source, s->file_flags);
         if (journal_importer_eof(&source->importer)) {
                 size_t remaining;
 
@@ -429,9 +432,14 @@ static int dispatch_raw_source_until_block(sd_event_source *event,
         sd_event_source_ref(event);
 
         r = journal_remote_handle_raw_source(event, source->importer.fd, EPOLLIN, journal_remote_server_global);
-        if (r != 1)
+        if (r != 1) {
+                int k;
+
                 /* No more data for now */
-                sd_event_source_set_enabled(event, SD_EVENT_OFF);
+                k = sd_event_source_set_enabled(event, SD_EVENT_OFF);
+                if (k < 0)
+                        r = k;
+        }
 
         sd_event_source_unref(event);
 
@@ -449,10 +457,15 @@ static int dispatch_raw_source_event(sd_event_source *event,
         assert(source->buffer_event);
 
         r = journal_remote_handle_raw_source(event, fd, EPOLLIN, journal_remote_server_global);
-        if (r == 1)
+        if (r == 1) {
+                int k;
+
                 /* Might have more data. We need to rerun the handler
                  * until we are sure the buffer is exhausted. */
-                sd_event_source_set_enabled(source->buffer_event, SD_EVENT_ON);
+                k = sd_event_source_set_enabled(source->buffer_event, SD_EVENT_ON);
+                if (k < 0)
+                        r = k;
+        }
 
         return r;
 }
@@ -482,7 +495,7 @@ static int accept_connection(
                 return log_error_errno(errno, "accept() on fd:%d failed: %m", fd);
         }
 
-        switch(socket_address_family(addr)) {
+        switch (socket_address_family(addr)) {
         case AF_INET:
         case AF_INET6: {
                 _cleanup_free_ char *a = NULL;

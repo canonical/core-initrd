@@ -5,13 +5,16 @@
 #include <sys/mount.h>
 
 #include "alloc-util.h"
+#include "chase-symlinks.h"
 #include "fd-util.h"
 #include "fileio.h"
+#include "filesystems.h"
 #include "fs-util.h"
 #include "missing_stat.h"
 #include "missing_syscall.h"
 #include "mkdir.h"
 #include "mountpoint-util.h"
+#include "nulstr-util.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "stat-util.h"
@@ -153,7 +156,7 @@ static bool filename_possibly_with_slash_suffix(const char *s) {
         if (slash[strspn(slash, "/")] != 0) /* Check that the suffix consist only of one or more slashes */
                 return false;
 
-        copied = strndupa(s, slash - s);
+        copied = strndupa_safe(s, slash - s);
         return filename_is_valid(copied);
 }
 
@@ -295,10 +298,8 @@ fallback_fstat:
         if (fstatat(fd, "", &b, AT_EMPTY_PATH) < 0)
                 return -errno;
 
-        /* A directory with same device and inode as its parent? Must
-         * be the root directory */
-        if (a.st_dev == b.st_dev &&
-            a.st_ino == b.st_ino)
+        /* A directory with same device and inode as its parent? Must be the root directory */
+        if (stat_inode_same(&a, &b))
                 return 1;
 
         return check_st_dev && (a.st_dev != b.st_dev);
@@ -365,48 +366,33 @@ bool fstype_is_network(const char *fstype) {
         if (x)
                 fstype = x;
 
+        if (nulstr_contains(filesystem_sets[FILESYSTEM_SET_NETWORK].value, fstype))
+                return true;
+
+        /* Filesystems not present in the internal database */
         return STR_IN_SET(fstype,
-                          "afs",
-                          "ceph",
-                          "cifs",
-                          "smb3",
-                          "smbfs",
-                          "sshfs",
-                          "ncpfs",
-                          "ncp",
-                          "nfs",
-                          "nfs4",
-                          "gfs",
-                          "gfs2",
+                          "davfs",
                           "glusterfs",
-                          "pvfs2", /* OrangeFS */
-                          "ocfs2",
                           "lustre",
-                          "davfs");
+                          "sshfs");
 }
 
 bool fstype_is_api_vfs(const char *fstype) {
+        const FilesystemSet *fs;
+
+        FOREACH_POINTER(fs,
+                filesystem_sets + FILESYSTEM_SET_BASIC_API,
+                filesystem_sets + FILESYSTEM_SET_AUXILIARY_API,
+                filesystem_sets + FILESYSTEM_SET_PRIVILEGED_API,
+                filesystem_sets + FILESYSTEM_SET_TEMPORARY)
+            if (nulstr_contains(fs->value, fstype))
+                    return true;
+
+        /* Filesystems not present in the internal database */
         return STR_IN_SET(fstype,
                           "autofs",
-                          "bpf",
-                          "cgroup",
-                          "cgroup2",
-                          "configfs",
                           "cpuset",
-                          "debugfs",
-                          "devpts",
-                          "devtmpfs",
-                          "efivarfs",
-                          "fusectl",
-                          "hugetlbfs",
-                          "mqueue",
-                          "proc",
-                          "pstore",
-                          "ramfs",
-                          "securityfs",
-                          "sysfs",
-                          "tmpfs",
-                          "tracefs");
+                          "devtmpfs");
 }
 
 bool fstype_is_blockdev_backed(const char *fstype) {
@@ -423,14 +409,16 @@ bool fstype_is_ro(const char *fstype) {
         /* All Linux file systems that are necessarily read-only */
         return STR_IN_SET(fstype,
                           "DM_verity_hash",
-                          "iso9660",
+                          "cramfs",
                           "erofs",
+                          "iso9660",
                           "squashfs");
 }
 
 bool fstype_can_discard(const char *fstype) {
         return STR_IN_SET(fstype,
                           "btrfs",
+                          "f2fs",
                           "ext4",
                           "vfat",
                           "xfs");

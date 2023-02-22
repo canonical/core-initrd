@@ -7,11 +7,10 @@
 #include "systemctl-util.h"
 #include "systemctl.h"
 
-int clean_or_freeze_unit(int argc, char *argv[], void *userdata) {
+int verb_clean_or_freeze(int argc, char *argv[], void *userdata) {
         _cleanup_(bus_wait_for_units_freep) BusWaitForUnits *w = NULL;
         _cleanup_strv_free_ char **names = NULL;
         int r, ret = EXIT_SUCCESS;
-        char **name;
         const char *method;
         sd_bus *bus;
 
@@ -44,7 +43,7 @@ int clean_or_freeze_unit(int argc, char *argv[], void *userdata) {
         else if (streq(argv[0], "thaw"))
                 method = "ThawUnit";
         else
-                assert_not_reached("Unhandled method");
+                assert_not_reached();
 
         STRV_FOREACH(name, names) {
                 _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;

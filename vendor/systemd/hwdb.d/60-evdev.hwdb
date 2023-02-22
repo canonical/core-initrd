@@ -3,11 +3,6 @@
 # The lookup keys are composed in:
 #   60-evdev.rules
 #
-# Note: The format of the "evdev:" prefix match key is a contract between the
-# rules file and the hardware data, it might change in later revisions to
-# support more or better matches, it is not necessarily expected to be a stable
-# ABI.
-#
 # Match string formats:
 # evdev:<modalias>
 # evdev:name:<device name>:dmi:<dmi string>
@@ -188,6 +183,13 @@ evdev:name:Elan Touchpad:dmi:*:svnASUSTeKCOMPUTERINC.:pnUX305UA:*
  EVDEV_ABS_01=0:2119:33
  EVDEV_ABS_35=0:3097:32
  EVDEV_ABS_36=0:2119:33
+
+# Asus UX362FA
+evdev:name:ELAN1401:00 04F3:30DC Touchpad:dmi:*:svnASUSTeKCOMPUTERINC.:pnZenBookUX362FA_UX362FA:*
+ EVDEV_ABS_00=:::8
+ EVDEV_ABS_01=:::8
+ EVDEV_ABS_35=:::8
+ EVDEV_ABS_36=:::8
 
 #########################################
 # Bangho
@@ -375,6 +377,15 @@ evdev:name:SynPS/2 Synaptics TouchPad:*svnHP:pnHPENVYx360Convertible15m-cn0xxx:*
  EVDEV_ABS_01=1119:4741:61
  EVDEV_ABS_35=1302:5640:36
  EVDEV_ABS_36=1119:4741:61
+
+#########################################
+# HUION
+#########################################
+
+# HUION Inpiroy H420X
+evdev:input:b0003v256Cp0064*
+ EVDEV_ABS_00=::200
+ EVDEV_ABS_01=::200
 
 #########################################
 # Lenovo
@@ -567,13 +578,22 @@ evdev:name:AlpsPS/2 ALPS GlidePoint:dmi:*svnLENOVO:*pvrLenovoU41-70:*
  EVDEV_ABS_35=117:3958:36
  EVDEV_ABS_36=104:1960:26
 
-# Lenovo Thinkpad T490 and T14 Gen1
+# Lenovo Thinkpad T490 and T14/P14s Gen1/2
 evdev:name:SynPS/2 Synaptics TouchPad:dmi:*:svnLENOVO:*pvrThinkPadT490:*
 evdev:name:SynPS/2 Synaptics TouchPad:dmi:*:svnLENOVO:*pvrThinkPadT14Gen1:*
+evdev:name:SynPS/2 Synaptics TouchPad:dmi:*:svnLENOVO:*pvrThinkPadP14sGen1:*
+evdev:name:SynPS/2 Synaptics TouchPad:dmi:*:svnLENOVO:*pvrThinkPadP14sGen2a:*
  EVDEV_ABS_00=::44
  EVDEV_ABS_01=::52
  EVDEV_ABS_35=::44
  EVDEV_ABS_36=::52
+
+# Lenovo ThinkPad T15g Gen1
+evdev:name:SynPS/2 Synaptics TouchPad:dmi:*svnLENOVO:*pvrThinkPadT15gGen1**
+ EVDEV_ABS_00=::44
+ EVDEV_ABS_01=::50
+ EVDEV_ABS_35=::44
+ EVDEV_ABS_36=::50
 
 # Lenovo Legion Y9000X2020
 evdev:name:MSFT0001:02 04F3:304B Touchpad:dmi:*svnLENOVO:*pvrLenovoLegionY9000X2020:*
@@ -581,6 +601,24 @@ evdev:name:MSFT0001:02 04F3:304B Touchpad:dmi:*svnLENOVO:*pvrLenovoLegionY9000X2
  EVDEV_ABS_01=::30
  EVDEV_ABS_35=::31
  EVDEV_ABS_36=::30
+
+#########################################
+# Microsoft
+#########################################
+
+# Surface Laptop 2 (13")
+evdev:name:Microsoft Surface 045E:0933 Touchpad:dmi:*svnMicrosoftCorporation:*pnSurfaceLaptop2**
+ EVDEV_ABS_00=::38
+ EVDEV_ABS_01=::38
+ EVDEV_ABS_35=::38
+ EVDEV_ABS_36=::38
+
+# Surface Laptop 3 (15")
+evdev:name:Microsoft Surface 045E:09AF Touchpad:dmi:*svnMicrosoftCorporation:*pnSurfaceLaptop3**
+ EVDEV_ABS_00=::39
+ EVDEV_ABS_01=::37
+ EVDEV_ABS_35=::39
+ EVDEV_ABS_36=::37
 
 #########################################
 # NEWYES
@@ -601,6 +639,17 @@ evdev:input:b0003v258Ap001E*
  EVDEV_ABS_01=::15
  EVDEV_ABS_35=::15
  EVDEV_ABS_36=::15
+
+#########################################
+# Positivo-Vaio
+#########################################
+
+# Vaio FE14
+evdev:name:SYNA3602:00 0911:5288 Touchpad:dmi:*svnPositivoBahia-VAIO:pnVJFE41F11*
+ EVDEV_ABS_00=::28
+ EVDEV_ABS_01=::27
+ EVDEV_ABS_35=::28
+ EVDEV_ABS_36=::27
 
 #########################################
 # Razer

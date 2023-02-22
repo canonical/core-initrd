@@ -103,7 +103,6 @@ static int generate_unit_file(SysvStub *s) {
         _cleanup_free_ char *path_escaped = NULL;
         _cleanup_fclose_ FILE *f = NULL;
         const char *unit;
-        char **p;
         int r;
 
         assert(s);
@@ -289,7 +288,7 @@ static int sysv_translate_facility(SysvStub *s, unsigned line, const char *name,
         }
 
         /* Strip ".sh" suffix from file name for comparison */
-        filename_no_sh = strdupa(filename);
+        filename_no_sh = strdupa_safe(filename);
         e = endswith(filename_no_sh, ".sh");
         if (e) {
                 *e = '\0';
@@ -707,7 +706,6 @@ static int acquire_search_path(const char *def, const char *envvar, char ***ret)
 
 static int enumerate_sysv(const LookupPaths *lp, Hashmap *all_services) {
         _cleanup_strv_free_ char **sysvinit_path = NULL;
-        char **path;
         int r;
 
         assert(lp);
@@ -718,7 +716,6 @@ static int enumerate_sysv(const LookupPaths *lp, Hashmap *all_services) {
 
         STRV_FOREACH(path, sysvinit_path) {
                 _cleanup_closedir_ DIR *d = NULL;
-                struct dirent *de;
 
                 d = opendir(*path);
                 if (!d) {
@@ -750,7 +747,7 @@ static int enumerate_sysv(const LookupPaths *lp, Hashmap *all_services) {
                         if (hashmap_contains(all_services, name))
                                 continue;
 
-                        r = unit_file_exists(UNIT_FILE_SYSTEM, lp, name);
+                        r = unit_file_exists(LOOKUP_SCOPE_SYSTEM, lp, name);
                         if (r < 0 && !IN_SET(r, -ELOOP, -ERFKILL, -EADDRNOTAVAIL)) {
                                 log_debug_errno(r, "Failed to detect whether %s exists, skipping: %m", name);
                                 continue;
@@ -792,7 +789,6 @@ static int set_dependencies_from_rcnd(const LookupPaths *lp, Hashmap *all_servic
         Set *runlevel_services[ELEMENTSOF(rcnd_table)] = {};
         _cleanup_strv_free_ char **sysvrcnd_path = NULL;
         SysvStub *service;
-        char **p;
         int r;
 
         assert(lp);
@@ -805,7 +801,6 @@ static int set_dependencies_from_rcnd(const LookupPaths *lp, Hashmap *all_servic
                 for (unsigned i = 0; i < ELEMENTSOF(rcnd_table); i ++) {
                         _cleanup_closedir_ DIR *d = NULL;
                         _cleanup_free_ char *path = NULL;
-                        struct dirent *de;
 
                         path = path_join(*p, rcnd_table[i].path);
                         if (!path) {
@@ -896,9 +891,9 @@ static int run(const char *dest, const char *dest_early, const char *dest_late) 
 
         assert_se(arg_dest = dest_late);
 
-        r = lookup_paths_init(&lp, UNIT_FILE_SYSTEM, LOOKUP_PATHS_EXCLUDE_GENERATED, NULL);
+        r = lookup_paths_init_or_warn(&lp, LOOKUP_SCOPE_SYSTEM, LOOKUP_PATHS_EXCLUDE_GENERATED, NULL);
         if (r < 0)
-                return log_error_errno(r, "Failed to find lookup paths: %m");
+                return r;
 
         all_services = hashmap_new(&string_hash_ops);
         if (!all_services)

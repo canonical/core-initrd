@@ -116,8 +116,7 @@ static int find_gpt_root(sd_device *dev, blkid_probe pr, bool test) {
 
         _cleanup_free_ char *root_id = NULL, *root_label = NULL;
         bool found_esp = false;
-        blkid_partlist pl;
-        int i, nvals, r;
+        int r;
 
         assert(pr);
 
@@ -126,12 +125,12 @@ static int find_gpt_root(sd_device *dev, blkid_probe pr, bool test) {
          * disk, and add a property indicating its partition UUID. */
 
         errno = 0;
-        pl = blkid_probe_get_partitions(pr);
+        blkid_partlist pl = blkid_probe_get_partitions(pr);
         if (!pl)
                 return errno_or_else(ENOMEM);
 
-        nvals = blkid_partlist_numof_partitions(pl);
-        for (i = 0; i < nvals; i++) {
+        int nvals = blkid_partlist_numof_partitions(pl);
+        for (int i = 0; i < nvals; i++) {
                 blkid_partition pp;
                 const char *stype, *sid, *label;
                 sd_id128_t type;
@@ -234,13 +233,13 @@ static int probe_superblocks(blkid_probe pr) {
         return blkid_do_safeprobe(pr);
 }
 
-static int builtin_blkid(sd_device *dev, int argc, char *argv[], bool test) {
+static int builtin_blkid(sd_device *dev, sd_netlink **rtnl, int argc, char *argv[], bool test) {
         const char *devnode, *root_partition = NULL, *data, *name;
         _cleanup_(blkid_free_probep) blkid_probe pr = NULL;
         bool noraid = false, is_gpt = false;
         _cleanup_close_ int fd = -1;
         int64_t offset = 0;
-        int nvals, i, r;
+        int r;
 
         static const struct option options[] = {
                 { "offset", required_argument, NULL, 'o' },
@@ -303,11 +302,12 @@ static int builtin_blkid(sd_device *dev, int argc, char *argv[], bool test) {
         if (r < 0)
                 return log_device_debug_errno(dev, r, "Failed to get device name: %m");
 
-        fd = open(devnode, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
+        fd = sd_device_open(dev, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
         if (fd < 0) {
-                log_device_debug_errno(dev, errno, "Failed to open block device %s%s: %m",
-                                       devnode, errno == ENOENT ? ", ignoring" : "");
-                return errno == ENOENT ? 0 : -errno;
+                bool ignore = ERRNO_IS_DEVICE_ABSENT(fd);
+                log_device_debug_errno(dev, fd, "Failed to open block device %s%s: %m",
+                                       devnode, ignore ? ", ignoring" : "");
+                return ignore ? 0 : fd;
         }
 
         errno = 0;
@@ -325,11 +325,11 @@ static int builtin_blkid(sd_device *dev, int argc, char *argv[], bool test) {
         (void) sd_device_get_property_value(dev, "ID_PART_GPT_AUTO_ROOT_UUID", &root_partition);
 
         errno = 0;
-        nvals = blkid_probe_numof_values(pr);
+        int nvals = blkid_probe_numof_values(pr);
         if (nvals < 0)
                 return log_device_debug_errno(dev, errno_or_else(ENOMEM), "Failed to get number of probed values: %m");
 
-        for (i = 0; i < nvals; i++) {
+        for (int i = 0; i < nvals; i++) {
                 if (blkid_probe_get_value(pr, i, &name, &data, NULL) < 0)
                         continue;
 

@@ -13,12 +13,16 @@ units = [
         ['veritysetup-pre.target',              'HAVE_LIBCRYPTSETUP'],
         ['veritysetup.target',                  'HAVE_LIBCRYPTSETUP',
          'sysinit.target.wants/'],
+        ['integritysetup-pre.target',           'HAVE_LIBCRYPTSETUP'],
+        ['integritysetup.target',               'HAVE_LIBCRYPTSETUP',
+         'sysinit.target.wants/'],
         ['dev-hugepages.mount',                 '',
          'sysinit.target.wants/'],
         ['dev-mqueue.mount',                    '',
          'sysinit.target.wants/'],
         ['emergency.target',                    ''],
         ['exit.target',                         ''],
+        ['factory-reset.target',                ''],
         ['final.target',                        ''],
         ['first-boot-complete.target',          ''],
         ['getty.target',                        '',
@@ -102,8 +106,9 @@ units = [
         ['systemd-ask-password-wall.path',      '',
          'multi-user.target.wants/'],
         ['systemd-ask-password-wall.service',   ''],
-        ['systemd-boot-system-token.service',   'ENABLE_EFI',
+        ['systemd-boot-system-token.service',   'HAVE_GNU_EFI',
          'sysinit.target.wants/'],
+        ['systemd-boot-update.service',         'HAVE_GNU_EFI'],
         ['systemd-coredump.socket',             'ENABLE_COREDUMP',
          'sockets.target.wants/'],
         ['systemd-exit.service',                ''],
@@ -135,6 +140,8 @@ units = [
         ['systemd-reboot.service',              ''],
         ['systemd-rfkill.socket',               'ENABLE_RFKILL'],
         ['systemd-sysext.service',              'ENABLE_SYSEXT'],
+        ['systemd-sysupdate.timer',             'ENABLE_SYSUPDATE'],
+        ['systemd-sysupdate-reboot.timer',      'ENABLE_SYSUPDATE'],
         ['systemd-sysusers.service',            'ENABLE_SYSUSERS',
          'sysinit.target.wants/'],
         ['systemd-tmpfiles-clean.service',      'ENABLE_TMPFILES'],
@@ -162,6 +169,7 @@ units = [
         ['user.slice',                          ''],
         ['var-lib-machines.mount',              'ENABLE_MACHINED',
          'remote-fs.target.wants/ machines.target.wants/'],
+        ['systemd-oomd.socket',                 'ENABLE_OOMD'],
 ]
 
 in_units = [
@@ -180,7 +188,7 @@ in_units = [
         ['systemd-backlight@.service',           'ENABLE_BACKLIGHT'],
         ['systemd-binfmt.service',               'ENABLE_BINFMT',
          'sysinit.target.wants/'],
-        ['systemd-bless-boot.service',           'ENABLE_EFI HAVE_BLKID'],
+        ['systemd-bless-boot.service',           'HAVE_GNU_EFI HAVE_BLKID'],
         ['systemd-boot-check-no-failures.service', ''],
         ['systemd-coredump@.service',            'ENABLE_COREDUMP'],
         ['systemd-pstore.service',               'ENABLE_PSTORE'],
@@ -214,9 +222,9 @@ in_units = [
         ['systemd-network-generator.service',    ''],
         ['systemd-networkd.service',             'ENABLE_NETWORKD'],
         ['systemd-networkd-wait-online.service', 'ENABLE_NETWORKD'],
+        ['systemd-networkd-wait-online@.service','ENABLE_NETWORKD'],
         ['systemd-nspawn@.service',              ''],
-        ['systemd-oomd.service',                 'ENABLE_OOMD',
-         'dbus-org.freedesktop.oom1.service'],
+        ['systemd-oomd.service',                 'ENABLE_OOMD'],
         ['systemd-portabled.service',            'ENABLE_PORTABLED',
          'dbus-org.freedesktop.portable1.service'],
         ['systemd-userdbd.service',              'ENABLE_USERDB'],
@@ -230,6 +238,8 @@ in_units = [
         ['systemd-suspend.service',              ''],
         ['systemd-sysctl.service',               '',
          'sysinit.target.wants/'],
+        ['systemd-sysupdate.service',            'ENABLE_SYSUPDATE'],
+        ['systemd-sysupdate-reboot.service',     'ENABLE_SYSUPDATE'],
         ['systemd-timedated.service',            'ENABLE_TIMEDATED',
          'dbus-org.freedesktop.timedate1.service'],
         ['systemd-timesyncd.service',            'ENABLE_TIMESYNCD'],
@@ -266,8 +276,7 @@ foreach tuple : in_units
                 file,
                 input : file + '.in',
                 output : file,
-                command : [meson_render_jinja2, config_h, '@INPUT@'],
-                capture : true,
+                command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'],
                 install : install,
                 install_dir : systemunitdir)
 
@@ -307,17 +316,17 @@ install_data('user-.slice.d/10-defaults.conf',
 
 if install_sysconfdir
         meson.add_install_script(meson_make_symlink,
-                                 join_paths(pkgsysconfdir, 'user'),
-                                 join_paths(sysconfdir, 'xdg/systemd/user'))
+                                 pkgsysconfdir / 'user',
+                                 sysconfdir / 'xdg/systemd/user')
 endif
 meson.add_install_script(meson_make_symlink,
-                         join_paths(dbussystemservicedir, 'org.freedesktop.systemd1.service'),
-                         join_paths(dbussessionservicedir, 'org.freedesktop.systemd1.service'))
+                         dbussystemservicedir / 'org.freedesktop.systemd1.service',
+                         dbussessionservicedir / 'org.freedesktop.systemd1.service')
 if conf.get('HAVE_SYSV_COMPAT') == 1
         foreach i : [1, 2, 3, 4, 5]
                 meson.add_install_script(
                         'sh', '-c',
-                        mkdir_p.format(join_paths(systemunitdir, 'runlevel@0@.target.wants'.format(i))))
+                        mkdir_p.format(systemunitdir / 'runlevel@0@.target.wants'.format(i)))
         endforeach
 endif
 

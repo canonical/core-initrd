@@ -45,7 +45,7 @@ __get_env() {
 
 __get_interfaces(){
     local name
-    for name in $(cd /sys/class/net && ls); do
+    for name in $(cd /sys/class/net && command ls); do
         [[ "$name" != "lo" ]] && echo "$name"
     done
 }
@@ -63,7 +63,7 @@ _systemd_nspawn() {
 
     local -A OPTS=(
         [STANDALONE]='-h --help --version --private-network -b --boot --read-only -q --quiet --share-system
-                      --keep-unit -n --network-veth -j -x --ephemeral -a --as-pid2 -U'
+                      --keep-unit -n --network-veth -j -x --ephemeral -a --as-pid2 -U --suppress-sync=yes'
         [ARG]='-D --directory -u --user --uuid --capability --drop-capability --link-journal --bind --bind-ro
                       -M --machine -S --slice -E --setenv -Z --selinux-context -L --selinux-apifs-context
                       --register --network-interface --network-bridge --personality -i --image --tmpfs

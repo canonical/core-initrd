@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include "alloc-util.h"
 #include "calendarspec.h"
@@ -75,26 +76,21 @@ static int component_compare(CalendarComponent * const *a, CalendarComponent * c
 }
 
 static void normalize_chain(CalendarComponent **c) {
-        CalendarComponent **b, *i, **j, *next;
-        size_t n = 0, k;
-
         assert(c);
 
-        for (i = *c; i; i = i->next) {
+        size_t n = 0;
+        for (CalendarComponent *i = *c; i; i = i->next) {
                 n++;
 
-                /*
-                 * While we're counting the chain, also normalize `stop`
-                 * so the length of the range is a multiple of `repeat`
-                 */
+                /* While we're counting the chain, also normalize 'stop'
+                 * so the length of the range is a multiple of 'repeat'. */
                 if (i->stop > i->start && i->repeat > 0)
                         i->stop -= (i->stop - i->start) % i->repeat;
 
-                /* If a repeat value is specified, but it cannot even be triggered once, let's suppress
-                 * it.
+                /* If a repeat value is specified, but it cannot even be triggered once, let's suppress it.
                  *
-                 * Similar, if the stop value is the same as the start value, then let's just make this a
-                 * non-repeating chain element */
+                 * Similarly, if the stop value is the same as the start value, then let's just make this a
+                 * non-repeating chain element. */
                 if ((i->stop > i->start && i->repeat > 0 && i->start + i->repeat > i->stop) ||
                     i->start == i->stop) {
                         i->repeat = 0;
@@ -105,17 +101,18 @@ static void normalize_chain(CalendarComponent **c) {
         if (n <= 1)
                 return;
 
-        j = b = newa(CalendarComponent*, n);
-        for (i = *c; i; i = i->next)
+        CalendarComponent **b, **j;
+        b = j = newa(CalendarComponent*, n);
+        for (CalendarComponent *i = *c; i; i = i->next)
                 *(j++) = i;
 
         typesafe_qsort(b, n, component_compare);
 
         b[n-1]->next = NULL;
-        next = b[n-1];
+        CalendarComponent *next = b[n-1];
 
         /* Drop non-unique entries */
-        for (k = n-1; k > 0; k--) {
+        for (size_t k = n-1; k > 0; k--) {
                 if (component_compare(&b[k-1], &next) == 0) {
                         free(b[k-1]);
                         continue;
@@ -148,7 +145,7 @@ static void fix_year(CalendarComponent *c) {
         }
 }
 
-int calendar_spec_normalize(CalendarSpec *c) {
+static void calendar_spec_normalize(CalendarSpec *c) {
         assert(c);
 
         if (streq_ptr(c->timezone, "UTC")) {
@@ -170,8 +167,6 @@ int calendar_spec_normalize(CalendarSpec *c) {
         normalize_chain(&c->hour);
         normalize_chain(&c->minute);
         normalize_chain(&c->microsecond);
-
-        return 0;
 }
 
 static bool chain_valid(CalendarComponent *c, int from, int to, bool end_of_month) {
@@ -252,7 +247,7 @@ static void format_weekdays(FILE *f, const CalendarSpec *c) {
                 "Thu",
                 "Fri",
                 "Sat",
-                "Sun"
+                "Sun",
         };
 
         int l, x;
@@ -293,17 +288,24 @@ static void format_weekdays(FILE *f, const CalendarSpec *c) {
         }
 }
 
-static void format_chain(FILE *f, int space, const CalendarComponent *c, bool usec) {
+static bool chain_is_star(const CalendarComponent *c, bool usec) {
+        /* Return true if the whole chain can be replaced by '*'.
+         * This happens when the chain is empty or one of the components covers all. */
+        if (!c)
+                return true;
+        if (usec)
+                for (; c; c = c->next)
+                        if (c->start == 0 && c->stop < 0 && c->repeat == USEC_PER_SEC)
+                                return true;
+        return false;
+}
+
+static void _format_chain(FILE *f, int space, const CalendarComponent *c, bool start, bool usec) {
         int d = usec ? (int) USEC_PER_SEC : 1;
 
         assert(f);
 
-        if (!c) {
-                fputc('*', f);
-                return;
-        }
-
-        if (usec && c->start == 0 && c->repeat == USEC_PER_SEC && !c->next) {
+        if (start && chain_is_star(c, usec)) {
                 fputc('*', f);
                 return;
         }
@@ -326,8 +328,12 @@ static void format_chain(FILE *f, int space, const CalendarComponent *c, bool us
 
         if (c->next) {
                 fputc(',', f);
-                format_chain(f, space, c->next, usec);
+                _format_chain(f, space, c->next, false, usec);
         }
+}
+
+static void format_chain(FILE *f, int space, const CalendarComponent *c, bool usec) {
+        _format_chain(f, space, c, /* start = */ true, usec);
 }
 
 int calendar_spec_to_string(const CalendarSpec *c, char **p) {
@@ -407,7 +413,7 @@ static int parse_weekdays(const char **p, CalendarSpec *c) {
                 { "Saturday",  5 },
                 { "Sat",       5 },
                 { "Sunday",    6 },
-                { "Sun",       6 }
+                { "Sun",       6 },
         };
 
         int l = -1;
@@ -434,12 +440,10 @@ static int parse_weekdays(const char **p, CalendarSpec *c) {
                         c->weekdays_bits |= 1 << day_nr[i].nr;
 
                         if (l >= 0) {
-                                int j;
-
                                 if (l > day_nr[i].nr)
                                         return -EINVAL;
 
-                                for (j = l + 1; j < day_nr[i].nr; j++)
+                                for (int j = l + 1; j < day_nr[i].nr; j++)
                                         c->weekdays_bits |= 1 << j;
                         }
 
@@ -1089,9 +1093,7 @@ int calendar_spec_from_string(const char *p, CalendarSpec **spec) {
                         return -EINVAL;
         }
 
-        r = calendar_spec_normalize(c);
-        if (r < 0)
-                return r;
+        calendar_spec_normalize(c);
 
         if (!calendar_spec_valid(c))
                 return -EINVAL;
@@ -1180,6 +1182,7 @@ static int find_matching_component(
 
 static int tm_within_bounds(struct tm *tm, bool utc) {
         struct tm t;
+        int cmp;
         assert(tm);
 
         /*
@@ -1194,13 +1197,25 @@ static int tm_within_bounds(struct tm *tm, bool utc) {
         if (mktime_or_timegm(&t, utc) < 0)
                 return negative_errno();
 
-        /* Did any normalization take place? If so, it was out of bounds before */
-        int cmp = CMP(t.tm_year, tm->tm_year) ?:
-                  CMP(t.tm_mon, tm->tm_mon) ?:
-                  CMP(t.tm_mday, tm->tm_mday) ?:
-                  CMP(t.tm_hour, tm->tm_hour) ?:
-                  CMP(t.tm_min, tm->tm_min) ?:
-                  CMP(t.tm_sec, tm->tm_sec);
+        /*
+         * Did any normalization take place? If so, it was out of bounds before.
+         * Normalization could skip next elapse, e.g. result of normalizing 3-33
+         * is 4-2. This skips 4-1. So reset the sub time unit if upper unit was
+         * out of bounds. Normalization has occurred implies find_matching_component() > 0,
+         * other sub time units are already reset in find_next().
+         */
+        if ((cmp = CMP(t.tm_year, tm->tm_year)) != 0)
+                t.tm_mon = 0;
+        else if ((cmp = CMP(t.tm_mon, tm->tm_mon)) != 0)
+                t.tm_mday = 1;
+        else if ((cmp = CMP(t.tm_mday, tm->tm_mday)) != 0)
+                t.tm_hour = 0;
+        else if ((cmp = CMP(t.tm_hour, tm->tm_hour)) != 0)
+                t.tm_min = 0;
+        else if ((cmp = CMP(t.tm_min, tm->tm_min)) != 0)
+                t.tm_sec = 0;
+        else
+                cmp = CMP(t.tm_sec, tm->tm_sec);
 
         if (cmp < 0)
                 return -EDEADLK; /* Refuse to go backward */

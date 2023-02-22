@@ -1,0 +1,35 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Sat, 28 May 2022 12:00:08 +0200
+Subject: Move homectl and userdbctl to bindir
+
+Those binaries aren't needed during early boot.
+
+(cherry picked from commit 003a67616148a8c2b94aa0c87595465f5dcac508)
+---
+ meson.build | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index dbba108..ecc5533 100644
+--- a/meson.build
++++ b/meson.build
+@@ -2577,8 +2577,7 @@ if conf.get('ENABLE_USERDB') == 1
+                 link_with : [libshared],
+                 dependencies : [threads],
+                 install_rpath : rootlibexecdir,
+-                install : true,
+-                install_dir : rootbindir)
++                install : true)
+ endif
+ 
+ if conf.get('ENABLE_HOMED') == 1
+@@ -2621,8 +2620,7 @@ if conf.get('ENABLE_HOMED') == 1
+                                 libp11kit,
+                                 libdl],
+                 install_rpath : rootlibexecdir,
+-                install : true,
+-                install_dir : rootbindir)
++                install : true)
+ 
+         if conf.get('HAVE_PAM') == 1
+                 version_script_arg = project_source_root / pam_systemd_home_sym

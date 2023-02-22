@@ -2,13 +2,14 @@
 title: Journal File Format
 category: Interfaces
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 # Journal File Format
 
 _Note that this document describes the binary on-disk format of journals only.
-For interfacing with web technologies there's the [Journal JSON Format](https://systemd.io/JOURNAL_EXPORT_FORMATS#journal-json-format).
-For transfer of journal data across the network there's the [Journal Export Format](https://systemd.io/JOURNAL_EXPORT_FORMATS#journal-export-format)._
+For interfacing with web technologies there's the [Journal JSON Format](JOURNAL_EXPORT_FORMATS.md#journal-json-format).
+For transfer of journal data across the network there's the [Journal Export Format](JOURNAL_EXPORT_FORMATS.md#journal-export-format)._
 
 The systemd journal stores log data in a binary format with several features:
 
@@ -44,9 +45,10 @@ stream-based nature it is not indexed.
 _Or, to put this in other words: this low-level document is probably not what
 you want to use as base of your project. You want our [C
 API](https://www.freedesktop.org/software/systemd/man/sd-journal.html) instead!
-And if you really don't want the C API, then you want the [Journal Export
-Format or Journal JSON Format](https://systemd.io/JOURNAL_EXPORT_FORMATS) instead!
-This document is primarily for your entertainment and education. Thank you!_
+And if you really don't want the C API, then you want the
+[Journal Export Format or Journal JSON Format](JOURNAL_EXPORT_FORMATS.md)
+instead! This document is primarily for your entertainment and education.
+Thank you!_
 
 This document assumes you have a basic understanding of the journal concepts,
 the properties of a journal entry and so on. If not, please go and read up,
@@ -296,7 +298,7 @@ STATE_ARCHIVED. If a writer is asked to write to a file that is not in
 STATE_OFFLINE it should immediately rotate the file and start a new one,
 without changing the file.
 
-After and before the state field is changed `fdatasync()` should be executed on
+After and before the state field is changed, `fdatasync()` should be executed on
 the file to ensure the dirty state hits disk.
 
 

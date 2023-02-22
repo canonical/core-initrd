@@ -37,7 +37,6 @@ typedef struct LookupParameters {
 
 static int add_nss_service(JsonVariant **v) {
         _cleanup_(json_variant_unrefp) JsonVariant *status = NULL, *z = NULL;
-        char buf[SD_ID128_STRING_MAX];
         sd_id128_t mid;
         int r;
 
@@ -54,7 +53,7 @@ static int add_nss_service(JsonVariant **v) {
                 return r;
 
         status = json_variant_ref(json_variant_by_key(*v, "status"));
-        z = json_variant_ref(json_variant_by_key(status, sd_id128_to_string(mid, buf)));
+        z = json_variant_ref(json_variant_by_key(status, SD_ID128_TO_STRING(mid)));
 
         if (json_variant_by_key(z, "service"))
                 return 0;
@@ -63,7 +62,7 @@ static int add_nss_service(JsonVariant **v) {
         if (r < 0)
                 return r;
 
-        r = json_variant_set_field(&status, buf, z);
+        r = json_variant_set_field(&status, SD_ID128_TO_STRING(mid), z);
         if (r < 0)
                 return r;
 
@@ -115,12 +114,11 @@ static int build_user_json(Varlink *link, UserRecord *ur, JsonVariant **ret) {
 
 static int userdb_flags_from_service(Varlink *link, const char *service, UserDBFlags *ret) {
         assert(link);
-        assert(service);
         assert(ret);
 
         if (streq_ptr(service, "io.systemd.NameServiceSwitch"))
                 *ret = USERDB_NSS_ONLY|USERDB_AVOID_MULTIPLEXER;
-        if (streq_ptr(service, "io.systemd.DropIn"))
+        else if (streq_ptr(service, "io.systemd.DropIn"))
                 *ret = USERDB_DROPIN_ONLY|USERDB_AVOID_MULTIPLEXER;
         else if (streq_ptr(service, "io.systemd.Multiplexer"))
                 *ret = USERDB_AVOID_MULTIPLEXER;
@@ -154,7 +152,8 @@ static int vl_method_get_user_record(Varlink *link, JsonVariant *parameters, Var
                 return r;
 
         r = userdb_flags_from_service(link, p.service, &userdb_flags);
-        if (r < 0)
+        if (r != 0) /* return value of < 0 means error (as usual); > 0 means 'already processed and replied,
+                     * we are done'; == 0 means 'not processed, caller should process now' */
                 return r;
 
         if (uid_is_valid(p.uid))
@@ -166,6 +165,14 @@ static int vl_method_get_user_record(Varlink *link, JsonVariant *parameters, Var
                 _cleanup_(json_variant_unrefp) JsonVariant *last = NULL;
 
                 r = userdb_all(userdb_flags, &iterator);
+                if (IN_SET(r, -ESRCH, -ENOLINK))
+                        /* We turn off Varlink lookups in various cases (e.g. in case we only enable DropIn
+                         * backend) — this might make userdb_all return ENOLINK (which indicates that varlink
+                         * was off and no other suitable source or entries were found). Let's hide this
+                         * implementation detail and always return NoRecordFound in this case, since from a
+                         * client's perspective it's irrelevant if there was no entry at all or just not on
+                         * the service that the query was limited to. */
+                        return varlink_error(link, "io.systemd.UserDatabase.NoRecordFound", NULL);
                 if (r < 0)
                         return r;
 
@@ -281,7 +288,7 @@ static int vl_method_get_group_record(Varlink *link, JsonVariant *parameters, Va
                 return r;
 
         r = userdb_flags_from_service(link, p.service, &userdb_flags);
-        if (r < 0)
+        if (r != 0)
                 return r;
 
         if (gid_is_valid(p.gid))
@@ -293,6 +300,8 @@ static int vl_method_get_group_record(Varlink *link, JsonVariant *parameters, Va
                 _cleanup_(json_variant_unrefp) JsonVariant *last = NULL;
 
                 r = groupdb_all(userdb_flags, &iterator);
+                if (IN_SET(r, -ESRCH, -ENOLINK))
+                        return varlink_error(link, "io.systemd.UserDatabase.NoRecordFound", NULL);
                 if (r < 0)
                         return r;
 
@@ -362,7 +371,7 @@ static int vl_method_get_memberships(Varlink *link, JsonVariant *parameters, Var
                 return r;
 
         r = userdb_flags_from_service(link, p.service, &userdb_flags);
-        if (r < 0)
+        if (r != 0)
                 return r;
 
         if (p.group_name)
@@ -371,6 +380,8 @@ static int vl_method_get_memberships(Varlink *link, JsonVariant *parameters, Var
                 r = membershipdb_by_user(p.user_name, userdb_flags, &iterator);
         else
                 r = membershipdb_all(userdb_flags, &iterator);
+        if (IN_SET(r, -ESRCH, -ENOLINK))
+                return varlink_error(link, "io.systemd.UserDatabase.NoRecordFound", NULL);
         if (r < 0)
                 return r;
 
@@ -503,27 +514,21 @@ static int run(int argc, char *argv[]) {
 
                 n = now(CLOCK_MONOTONIC);
                 if (n >= usec_add(start_time, RUNTIME_MAX_USEC)) {
-                        char buf[FORMAT_TIMESPAN_MAX];
                         log_debug("Exiting worker, ran for %s, that's enough.",
-                                  format_timespan(buf, sizeof(buf), usec_sub_unsigned(n, start_time), 0));
+                                  FORMAT_TIMESPAN(usec_sub_unsigned(n, start_time), 0));
                         break;
                 }
 
                 if (last_busy_usec == USEC_INFINITY)
                         last_busy_usec = n;
                 else if (listen_idle_usec != USEC_INFINITY && n >= usec_add(last_busy_usec, listen_idle_usec)) {
-                        char buf[FORMAT_TIMESPAN_MAX];
                         log_debug("Exiting worker, been idle for %s.",
-                                  format_timespan(buf, sizeof(buf), usec_sub_unsigned(n, last_busy_usec), 0));
+                                  FORMAT_TIMESPAN(usec_sub_unsigned(n, last_busy_usec), 0));
                         break;
                 }
 
                 (void) rename_process("systemd-userwork: waiting...");
-
-                fd = accept4(listen_fd, NULL, NULL, SOCK_NONBLOCK|SOCK_CLOEXEC);
-                if (fd < 0)
-                        fd = -errno;
-
+                fd = RET_NERRNO(accept4(listen_fd, NULL, NULL, SOCK_NONBLOCK|SOCK_CLOEXEC));
                 (void) rename_process("systemd-userwork: processing...");
 
                 if (fd == -EAGAIN)
@@ -551,7 +556,7 @@ static int run(int argc, char *argv[]) {
                                         return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Parent already died?");
 
                                 if (kill(parent, SIGUSR2) < 0)
-                                        return log_error_errno(errno, "Failed to kill our own parent.");
+                                        return log_error_errno(errno, "Failed to kill our own parent: %m");
                         }
                 }
 

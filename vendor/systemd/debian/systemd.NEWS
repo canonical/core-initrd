@@ -1,3 +1,32 @@
+systemd (251.3-2) unstable; urgency=medium
+
+  systemd-resolved has been split into a separate package.
+  This new systemd-resolved package will not be installed automatically on
+  upgrades. If you are using systemd-resolved, please install this new
+  package manually.
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 05 Aug 2022 20:26:12 +0100
+
+systemd (251.2-3) unstable; urgency=medium
+
+  systemd-boot has been split into a separate package.
+  This new systemd-boot package will not be installed automatically on
+  upgrades. If you are using systemd-boot, please install this new
+  package manually.
+
+  The default boot loader in Debian is grub2. If you have not set up
+  systemd-boot manually, no action is required on your side.
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 08 Jun 2022 21:49:47 +0200
+
+systemd (251.1-1) unstable; urgency=medium
+
+  systemd-journal-gatewayd and systemd-journal-remote are now built
+  without the --trust option, in order to be able to switch away from
+  gnutls to openssl.
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 26 May 2022 00:55:39 +0100
+
 systemd (247.2-2) unstable; urgency=medium
 
   systemd now defaults to the "unified" cgroup hierarchy (i.e. cgroupv2).
@@ -35,6 +64,16 @@ systemd (247.2-1) unstable; urgency=medium
 
  -- Balint Reczey <rbalint@ubuntu.com>  Fri, 11 Dec 2020 18:22:42 +0100
 
+systemd (241-4) unstable; urgency=medium
+
+  DRM render nodes (/dev/dri/renderD*) are now owned by group "render"
+  (previously group "video"). Dynamic ACLs via the "uaccess" udev tag are still
+  applied, so in the common case things should just continue to work.
+  If you rely on static permissions to access those devices, you need to update
+  group memberships accordingly to use group "render" now.
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 17 May 2019 19:15:32 +0200
+
 systemd (236-1) unstable; urgency=medium
 
   DynamicUser=yes has been enabled for systemd-journal-upload.service and
@@ -63,3 +102,19 @@ systemd (224-2) unstable; urgency=medium
   systemd-importd.
 
  -- Martin Pitt <mpitt@debian.org>  Sat, 22 Aug 2015 15:58:43 +0200
+
+systemd (220-7) unstable; urgency=medium
+
+  The mechanism for providing stable network interface names changed.
+  Previously they were kept in /etc/udev/rules.d/70-persistent-net.rules
+  which mapped device MAC addresses to the (arbitrary) name they got when
+  they first appeared (i. e. mostly at the time of installation). As this
+  had several problems and is not supported any more, this is deprecated in
+  favor of the "net.ifnames" mechanism. With this most of your network
+  interfaces will get location-based names. If you have ifupdown, firewall,
+  or other configuration that relies on the old names, you need to update
+  these by Debian 10/Ubuntu 18.04 LTS, and then remove
+  /etc/udev/rules.d/70-persistent-net.rules. Please see
+  /usr/share/doc/udev/README.Debian.gz for details about this.
+
+ -- Martin Pitt <mpitt@debian.org>  Mon, 15 Jun 2015 15:30:29 +0200

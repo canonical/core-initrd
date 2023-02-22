@@ -2,6 +2,7 @@
 title: Initrd Interface
 category: Interfaces
 layout: default
+SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 
@@ -11,7 +12,7 @@ The Linux initrd mechanism (short for "initial RAM disk") refers to a small
 file system archive that is unpacked by the kernel and contains the first
 userspace code that runs. It typically finds and transitions into the actual
 root file system to use. systemd supports both initrd and initrd-less boots. If
-an initrd is used it is a good idea to pass a few bits of runtime information
+an initrd is used, it is a good idea to pass a few bits of runtime information
 from the initrd to systemd in order to avoid duplicate work and to provide
 performance data to the administrator. In this page we attempt to roughly
 describe the interfaces that exist between the initrd and systemd. These
@@ -36,11 +37,10 @@ interfaces are currently used by dracut and the ArchLinux initrds.
   optionally followed (in `argv[2]`, `argv[3]`, … systemd's original command
   line options, for example `--log-level=` and similar.
 
-* Storage daemons run from the initrd should follow the guide on [systemd
-  and Storage Daemons for the Root File
-  System](https://systemd.io/ROOT_STORAGE_DAEMONS) to survive properly from the
-  boot initrd all the way to the point where systemd jumps back into the initrd
-  for shutdown.
+* Storage daemons run from the initrd should follow the guide on
+  [systemd and Storage Daemons for the Root File System](ROOT_STORAGE_DAEMONS.md)
+  to survive properly from the boot initrd all the way to the point where
+  systemd jumps back into the initrd for shutdown.
 
 One last clarification: we use the term _initrd_ very generically here
 describing any kind of early boot file system, regardless whether that might be
@@ -69,5 +69,4 @@ systemd. Here are a few terse notes:
 
 * The switch-root operation will result in a killing spree of all running
   processes. Some processes might need to be excluded from that, see the guide
-  on [systemd and Storage Daemons for the Root File
-  System](https://systemd.io/ROOT_STORAGE_DAEMONS).
+  on [systemd and Storage Daemons for the Root File System](ROOT_STORAGE_DAEMONS.md).

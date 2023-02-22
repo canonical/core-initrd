@@ -7,6 +7,7 @@
 #include "fileio.h"
 #include "format-util.h"
 #include "parse-util.h"
+#include "restrict-ifaces.h"
 #include "serialize.h"
 #include "string-table.h"
 #include "unit-serialize.h"
@@ -170,8 +171,11 @@ int unit_serialize(Unit *u, FILE *f, FDSet *fds, bool switching_root) {
 
         (void) bpf_program_serialize_attachment(f, fds, "ip-bpf-ingress-installed", u->ip_bpf_ingress_installed);
         (void) bpf_program_serialize_attachment(f, fds, "ip-bpf-egress-installed", u->ip_bpf_egress_installed);
+        (void) bpf_program_serialize_attachment(f, fds, "bpf-device-control-installed", u->bpf_device_control_installed);
         (void) bpf_program_serialize_attachment_set(f, fds, "ip-bpf-custom-ingress-installed", u->ip_bpf_custom_ingress_installed);
         (void) bpf_program_serialize_attachment_set(f, fds, "ip-bpf-custom-egress-installed", u->ip_bpf_custom_egress_installed);
+
+        (void) serialize_restrict_network_interfaces(u, f, fds);
 
         if (uid_is_valid(u->ref_uid))
                 (void) serialize_item_format(f, "ref-uid", UID_FMT, u->ref_uid);
@@ -405,6 +409,9 @@ int unit_deserialize(Unit *u, FILE *f, FDSet *fds) {
                 } else if (streq(l, "ip-bpf-egress-installed")) {
                          (void) bpf_program_deserialize_attachment(v, fds, &u->ip_bpf_egress_installed);
                          continue;
+                } else if (streq(l, "bpf-device-control-installed")) {
+                         (void) bpf_program_deserialize_attachment(v, fds, &u->bpf_device_control_installed);
+                         continue;
 
                 } else if (streq(l, "ip-bpf-custom-ingress-installed")) {
                          (void) bpf_program_deserialize_attachment_set(v, fds, &u->ip_bpf_custom_ingress_installed);
@@ -412,6 +419,21 @@ int unit_deserialize(Unit *u, FILE *f, FDSet *fds) {
                 } else if (streq(l, "ip-bpf-custom-egress-installed")) {
                          (void) bpf_program_deserialize_attachment_set(v, fds, &u->ip_bpf_custom_egress_installed);
                          continue;
+
+                } else if (streq(l, "restrict-ifaces-bpf-fd")) {
+                        int fd;
+
+                        if (safe_atoi(v, &fd) < 0 || fd < 0 || !fdset_contains(fds, fd)) {
+                                log_unit_debug(u, "Failed to parse restrict-ifaces-bpf-fd value: %s", v);
+                                continue;
+                        }
+                        if (fdset_remove(fds, fd) < 0) {
+                                log_unit_debug(u, "Failed to remove restrict-ifaces-bpf-fd %d from fdset", fd);
+                                continue;
+                        }
+
+                        (void) restrict_network_interfaces_add_initial_link_fd(u, fd);
+                        continue;
 
                 } else if (streq(l, "ref-uid")) {
                         uid_t uid;
@@ -571,6 +593,7 @@ static void print_unit_dependency_mask(FILE *f, const char *kind, UnitDependency
                 { UNIT_DEPENDENCY_MOUNTINFO_IMPLICIT, "mountinfo-implicit" },
                 { UNIT_DEPENDENCY_MOUNTINFO_DEFAULT,  "mountinfo-default"  },
                 { UNIT_DEPENDENCY_PROC_SWAP,          "proc-swap"          },
+                { UNIT_DEPENDENCY_SLICE_PROPERTY,     "slice-property"     },
         };
 
         assert(f);
@@ -600,9 +623,8 @@ static void print_unit_dependency_mask(FILE *f, const char *kind, UnitDependency
 }
 
 void unit_dump(Unit *u, FILE *f, const char *prefix) {
-        char *t, **j;
+        char *t;
         const char *prefix2;
-        char timestamp[5][FORMAT_TIMESTAMP_MAX], timespan[FORMAT_TIMESPAN_MAX];
         Unit *following;
         _cleanup_set_free_ Set *following_set = NULL;
         CGroupMask m;
@@ -640,11 +662,11 @@ void unit_dump(Unit *u, FILE *f, const char *prefix) {
                 prefix, strna(u->instance),
                 prefix, unit_load_state_to_string(u->load_state),
                 prefix, unit_active_state_to_string(unit_active_state(u)),
-                prefix, strna(format_timestamp(timestamp[0], sizeof(timestamp[0]), u->state_change_timestamp.realtime)),
-                prefix, strna(format_timestamp(timestamp[1], sizeof(timestamp[1]), u->inactive_exit_timestamp.realtime)),
-                prefix, strna(format_timestamp(timestamp[2], sizeof(timestamp[2]), u->active_enter_timestamp.realtime)),
-                prefix, strna(format_timestamp(timestamp[3], sizeof(timestamp[3]), u->active_exit_timestamp.realtime)),
-                prefix, strna(format_timestamp(timestamp[4], sizeof(timestamp[4]), u->inactive_enter_timestamp.realtime)),
+                prefix, strna(FORMAT_TIMESTAMP(u->state_change_timestamp.realtime)),
+                prefix, strna(FORMAT_TIMESTAMP(u->inactive_exit_timestamp.realtime)),
+                prefix, strna(FORMAT_TIMESTAMP(u->active_enter_timestamp.realtime)),
+                prefix, strna(FORMAT_TIMESTAMP(u->active_exit_timestamp.realtime)),
+                prefix, strna(FORMAT_TIMESTAMP(u->inactive_enter_timestamp.realtime)),
                 prefix, yes_no(unit_may_gc(u)),
                 prefix, yes_no(unit_need_daemon_reload(u)),
                 prefix, yes_no(u->transient),
@@ -741,7 +763,7 @@ void unit_dump(Unit *u, FILE *f, const char *prefix) {
                 fprintf(f, "%s\tSuccess Action Exit Status: %i\n", prefix, u->success_action_exit_status);
 
         if (u->job_timeout != USEC_INFINITY)
-                fprintf(f, "%s\tJob Timeout: %s\n", prefix, format_timespan(timespan, sizeof(timespan), u->job_timeout, 0));
+                fprintf(f, "%s\tJob Timeout: %s\n", prefix, FORMAT_TIMESPAN(u->job_timeout, 0));
 
         if (u->job_timeout_action != EMERGENCY_ACTION_NONE)
                 fprintf(f, "%s\tJob Timeout Action: %s\n", prefix, emergency_action_to_string(u->job_timeout_action));
@@ -756,14 +778,14 @@ void unit_dump(Unit *u, FILE *f, const char *prefix) {
                 fprintf(f,
                         "%s\tCondition Timestamp: %s\n"
                         "%s\tCondition Result: %s\n",
-                        prefix, strna(format_timestamp(timestamp[0], sizeof(timestamp[0]), u->condition_timestamp.realtime)),
+                        prefix, strna(FORMAT_TIMESTAMP(u->condition_timestamp.realtime)),
                         prefix, yes_no(u->condition_result));
 
         if (dual_timestamp_is_set(&u->assert_timestamp))
                 fprintf(f,
                         "%s\tAssert Timestamp: %s\n"
                         "%s\tAssert Result: %s\n",
-                        prefix, strna(format_timestamp(timestamp[0], sizeof(timestamp[0]), u->assert_timestamp.realtime)),
+                        prefix, strna(FORMAT_TIMESTAMP(u->assert_timestamp.realtime)),
                         prefix, yes_no(u->assert_result));
 
         for (UnitDependency d = 0; d < _UNIT_DEPENDENCY_MAX; d++) {

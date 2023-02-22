@@ -58,7 +58,7 @@ int dns_search_domain_new(
                 break;
 
         default:
-                assert_not_reached("Unknown search domain type");
+                assert_not_reached();
         }
 
         d->linked = true;
@@ -135,7 +135,7 @@ void dns_search_domain_move_back_and_unmark(DnsSearchDomain *d) {
                 break;
 
         default:
-                assert_not_reached("Unknown search domain type");
+                assert_not_reached();
         }
 }
 
@@ -166,7 +166,7 @@ bool dns_search_domain_unlink_marked(DnsSearchDomain *first) {
         } else
                 changed = false;
 
-        return changed || dns_search_domain_unlink_marked(next);
+        return dns_search_domain_unlink_marked(next) || changed;
 }
 
 void dns_search_domain_mark_all(DnsSearchDomain *first) {
@@ -178,7 +178,6 @@ void dns_search_domain_mark_all(DnsSearchDomain *first) {
 }
 
 int dns_search_domain_find(DnsSearchDomain *first, const char *name, DnsSearchDomain **ret) {
-        DnsSearchDomain *d;
         int r;
 
         assert(name);

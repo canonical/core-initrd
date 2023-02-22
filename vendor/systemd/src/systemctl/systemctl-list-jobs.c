@@ -73,7 +73,7 @@ static int output_jobs_list(sd_bus *bus, const struct job_info* jobs, unsigned n
                 return 0;
         }
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         table = table_new("job", "unit", "type", "state");
         if (!table)
@@ -125,7 +125,7 @@ static bool output_show_job(struct job_info *job, char **patterns) {
         return strv_fnmatch_or_empty(patterns, job->name, FNM_NOESCAPE);
 }
 
-int list_jobs(int argc, char *argv[], void *userdata) {
+int verb_list_jobs(int argc, char *argv[], void *userdata) {
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
         _cleanup_free_ struct job_info *jobs = NULL;
@@ -168,7 +168,7 @@ int list_jobs(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return bus_log_parse_error(r);
 
-        (void) pager_open(arg_pager_flags);
+        pager_open(arg_pager_flags);
 
         return output_jobs_list(bus, jobs, c, skipped);
 }
