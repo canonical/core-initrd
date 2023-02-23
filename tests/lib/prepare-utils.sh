@@ -122,11 +122,12 @@ install_core_initrd_deps() {
     # from when we build the debian package
     sudo add-apt-repository ppa:snappy-dev/image -y
     sudo DEBIAN_FRONTEND=noninteractive apt update -yqq
+    sudo apt-mark hold grub-efi-amd64-signed
     sudo DEBIAN_FRONTEND=noninteractive apt upgrade -yqq
 
     # these are already installed in the lxd image which speeds things up, but they
     # are missing in qemu and google images.
-    sudo DEBIAN_FRONTEND=noninteractive apt install initramfs-tools-core psmisc fdisk snapd mtools ovmf qemu-system-x86 sshpass whois openssh-server -yqq
+    sudo DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends initramfs-tools-core psmisc fdisk snapd mtools ovmf qemu-system-x86 sshpass whois openssh-server -yqq
 
     # use the snapd snap explicitly
     # TODO: since ubuntu-image ships it's own version of `snap prepare-image`, 
