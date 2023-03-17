@@ -2,60 +2,68 @@
 
 set -eu
 
-if [ "$(/usr/libexec/core/get-arg snapd_recovery_mode || true)" != run ]; then
-    exit 0
+normaldir="${1}"
+mkdir -p "${normaldir}"
+
+generate_unit() {
+    where="${1}"
+    fs="${2}"
+    device="${3}"
+    shift 2
+
+    mount_unit="$(systemd-escape --suffix=mount -p "${where}")"
+
+    case "${fs}" in
+        tmpfs)
+            cat <<EOF >"${normaldir}/${mount_unit}"
+[Unit]
+
+[Mount]
+Type=${fs}
+What=${device}
+Where=${where}
+Options=nosuid,private
+EOF
+            ;;
+        *)
+            device_escaped="$(systemd-escape -p "${device}")"
+            cat <<EOF >"${normaldir}/${mount_unit}"
+[Unit]
+BindsTo=${device_escaped}.device
+After=${device_escaped}.device
+Requires=systemd-fsck@${device_escaped}.service
+After=systemd-fsck@${device_escaped}.service
+
+[Mount]
+Type=${fs}
+What=${device}
+Where=${where}
+Options=private
+EOF
+            ;;
+    esac
+
+
+    for target; do
+        mkdir -p "${normaldir}/${target}"
+        ln -s "../${mount_unit}" "${normaldir}/${target}/${mount_unit}"
+    done
+}
+
+if mode="$(/usr/libexec/core/get-arg snapd_recovery_mode)"; then
+  case "${mode}" in
+      run)
+          generate_unit /run/mnt/data ext4 /dev/ubuntu/data initrd-root-fs.target.requires
+          generate_unit /run/mnt/ubuntu-seed vfat /dev/ubuntu/seed initrd-root-fs.target.wants
+          generate_unit /run/mnt/ubuntu-boot ext4 /dev/ubuntu/boot initrd-root-fs.target.requires model-available.target.requires
+          generate_unit /run/mnt/ubuntu-save ext4 /dev/ubuntu/save initrd-root-fs.target.wants
+          ;;
+      install)
+          generate_unit /run/mnt/ubuntu-seed vfat /dev/ubuntu/seed initrd-root-fs.target.requires model-available.target.requires
+          generate_unit /run/mnt/data tmpfs tmpfs initrd-root-fs.target.requires
+          ;;
+      *)
+          exit 0
+          ;;
+  esac
 fi
-
-mkdir -p "${1}"
-
-cat <<EOF >"${1}/run-mnt-data.mount"
-[Unit]
-BindsTo=dev-ubuntu-data.device
-After=dev-ubuntu-data.device
-
-[Mount]
-Type=ext4
-What=/dev/ubuntu/data
-Where=/run/mnt/data
-EOF
-
-cat <<EOF >"${1}/run-mnt-ubuntu\\x2dsave.mount"
-[Unit]
-BindsTo=dev-ubuntu-save.device
-After=dev-ubuntu-save.device
-
-[Mount]
-Type=ext4
-What=/dev/ubuntu/save
-Where=/run/mnt/ubuntu-save
-EOF
-
-cat <<EOF >"${1}/run-mnt-ubuntu\\x2dseed.mount"
-[Unit]
-BindsTo=dev-ubuntu-seed.device
-After=dev-ubuntu-seed.device
-
-[Mount]
-Type=vfat
-What=/dev/ubuntu/seed
-Where=/run/mnt/ubuntu-seed
-EOF
-
-cat <<EOF >"${1}/run-mnt-ubuntu\\x2dboot.mount"
-[Unit]
-BindsTo=dev-ubuntu-boot.device
-After=dev-ubuntu-boot.device
-
-[Mount]
-Type=ext4
-What=/dev/ubuntu/boot
-Where=/run/mnt/ubuntu-boot
-EOF
-
-mkdir -p "${1}/initrd-root-fs.target.wants"
-mkdir -p "${1}/initrd-root-fs.target.requires"
-
-ln -s "../run-mnt-ubuntu\\x2dseed.mount" "${1}/initrd-root-fs.target.wants/run-mnt-ubuntu\\x2dseed.mount"
-ln -s "../run-mnt-ubuntu\\x2dboot.mount" "${1}/initrd-root-fs.target.requires/run-mnt-ubuntu\\x2dboot.mount"
-ln -s "../run-mnt-data.mount" "${1}/initrd-root-fs.target.requires/run-mnt-data.mount"
-ln -s "../run-mnt-ubuntu\\x2dsave.mount" "${1}/initrd-root-fs.target.wants/run-mnt-ubuntu\\x2dsave.mount"

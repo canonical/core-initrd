@@ -1,14 +1,19 @@
 [Unit]
-ConditionKernelCommandLine=|snapd_recovery_mode=run
 ConditionKernelCommandLine=|snapd_recovery_mode=install
-Description=Measure the epoch
+Description=Generate an ephemeral modeenv
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly
 DefaultDependencies=no
 
+Requires=reload-model.service
+After=reload-model.service
+
+Requires=run-mnt-data.mount
+After=run-mnt-data.mount
+
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/lib/snapd/snap-bootstrap measure-epoch
+ExecStart=/usr/lib/snapd/snap-bootstrap ephemeral-modeenv
 StandardOutput=journal+console
 StandardError=journal+console

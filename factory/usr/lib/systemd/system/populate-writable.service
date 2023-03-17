@@ -11,6 +11,8 @@ Requires=sysroot.mount
 Requires=sysroot-writable.mount
 Wants=snap-initramfs-mounts.service
 After=snap-initramfs-mounts.service
+Wants=snap-configure-gadget.service
+After=snap-configure-gadget.service
 
 ConditionPathIsMountPoint=/run/mnt/base
 

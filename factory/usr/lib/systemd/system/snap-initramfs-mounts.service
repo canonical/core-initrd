@@ -1,5 +1,6 @@
 [Unit]
 ConditionKernelCommandLine=!snapd_recovery_mode=run
+ConditionKernelCommandLine=!snapd_recovery_mode=install
 Description=Mount initial filesystems
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly

@@ -262,6 +262,7 @@ override_dh_auto_install:
 	cp -a $(CURDIR)/debian/tmp/usr/lib/systemd/libsystemd-shared* $(TEMPLIBDIR)
 	set -e;									\
 	for f in								\
+		/usr/bin/systemd-escape						\
 		/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*			\
 		/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*			\
 		/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1			\
