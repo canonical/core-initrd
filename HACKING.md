@@ -79,7 +79,7 @@ and yq (needed for yaml manipulation), download the newest image and import it i
 ```
 sudo snap install lxd
 sudo snap install yq
-curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd22-img.tar.gz
+curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd-img.tar.gz
 lxc image import lxd-initrd-img.tar.gz --alias ucspread22
 lxc image show ucspread22 > temp.profile
 yq e '.properties.aliases = "ucspread22,amd64"' -i ./temp.profile
