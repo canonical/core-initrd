@@ -1,2 +1,7 @@
 [Unit]
 Description=Model available
+
+# This unit will depend on the mount that will contain the model to load.
+# In run mode, it will be run-mnt-ubuntu\x2dseed.mount
+# In install/recover/reset, it will be in run-mnt-ubuntu\x2dboot.mount
+# Those units will be generated and added by /usr/lib/systemd/system-generators/snap-mounts
