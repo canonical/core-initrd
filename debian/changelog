@@ -1,3 +1,21 @@
+ubuntu-core-initramfs (66) jammy; urgency=medium
+
+  [ Dimitri John Ledkov ]
+  * Enable riscv64 build
+
+  [ Philip Meulengracht ]
+  * github: fix the lxd-image workflow
+
+  [ Alfonso Sanchez-Beato ]
+  * tests: avoid interactions when using apt
+  * bin/ubuntu-core-initramfs: fix ubuntu-core-initramfs crash
+  * Update to systemd 249.11-0ubuntu3.6
+  * Add GPU and input virtio modules
+  * Include cryptsetup from FDE ICE PPA (no sources changed)
+  * Include snapd 2.59 (no sources changed)
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Wed, 22 Mar 2023 13:30:31 +0000
+
 ubuntu-core-initramfs (65) jammy; urgency=medium
 
   * Build from "main" branch to include fix:
