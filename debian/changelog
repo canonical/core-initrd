@@ -1,3 +1,12 @@
+ubuntu-core-initramfs (51.5) focal; urgency=medium
+
+  * Pick up snap-bootstrap from snapd 2.59
+
+  [ Dimitri John Ledkov ]
+  * vendor/systemd: maintain stable default net-naming-scheme (LP#1945225)
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Thu, 23 Mar 2023 08:10:58 +0000
+
 ubuntu-core-initramfs (51.4) focal; urgency=medium
 
   * Update systemd to 245.4-4ubuntu3.19
