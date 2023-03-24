@@ -14,6 +14,8 @@ After=run-mnt-data.mount
 
 After=model-available.target
 Requires=model-available.target
+After=modeenv-available.target
+Requires=modeenv-available.target
 
 After=sysinit.target
 After=tmp.mount
