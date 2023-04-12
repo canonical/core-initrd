@@ -18,7 +18,7 @@ jobs:
         with:
           repository: 'valentindavid/snapd'
           path: snapd
-          ref: 'valentindavid/udev-scan-disk'
+          ref: 'valentindavid/split-snap-bootstrap'
       - name: Build snapd deb
         working-directory: '${{ github.workspace }}/snapd'
         run: |
