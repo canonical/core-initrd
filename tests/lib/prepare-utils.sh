@@ -245,6 +245,9 @@ repack_and_sign_gadget() {
     sbsign --key "$snakeoil_dir/PkKek-1-snakeoil.key" --cert "$snakeoil_dir/PkKek-1-snakeoil.pem" --output "$gadget_dir/shim.efi.signed" "$gadget_dir/shim.efi.signed"
 
     rm "$gadget_snap"
+
+    echo "console=ttyS0 systemd.journald.foward_to_console=1" >"${gadget_dir}/cmdline.extra"
+
     snap pack --filename=$gadget_name "$gadget_dir"
     rm -rf "$gadget_dir"
 }
