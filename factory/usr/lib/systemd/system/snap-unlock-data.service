@@ -1,9 +1,8 @@
 [Unit]
 ConditionKernelCommandLine=snapd_recovery_mode=run
 Description=Unlock data partition
-OnFailure=emergency.target
-OnFailureJobMode=replace-irreversibly
 DefaultDependencies=no
+JobTimeoutSec=3min
 
 After=snap-measure-model.service
 Requires=snap-measure-model.service
