@@ -20,7 +20,7 @@ fi
 ubuntu-core-initramfs create-initrd --kernelver $version
 
 case `dpkg --print-architecture` in
-    amd64)
-        ubuntu-core-initramfs create-efi --kernelver $version
+    amd64|arm64)
+        ubuntu-core-initramfs create-efi --unsigned --kernelver $version
         ;;
 esac
