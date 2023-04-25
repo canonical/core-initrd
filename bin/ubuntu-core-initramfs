@@ -400,7 +400,7 @@ def create_efi(parser, args):
                 args.output,
             ]
         )
-    os.chmod(args.output, 0o600)
+    os.chmod(args.output, 0o644)
 
 
 def main():
