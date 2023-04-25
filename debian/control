@@ -52,7 +52,7 @@ Build-Depends: debhelper-compat (= 13), dh-python, python3:any, dracut-core, qui
                python3:native,
                python3-jinja2:native,
                python3-lxml:native,
-               python3-pyparsing:native <!nocheck>,
+               python3-pyparsing:native <!nocheck> | python3-pyparsing <!nocheck>,
                python3-evdev:native <!nocheck>,
                tzdata <!nocheck>,
                libcap2-bin <!nocheck>,
