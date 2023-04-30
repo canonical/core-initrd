@@ -1,4 +1,6 @@
 [Unit]
+ConditionKernelCommandLine=!snapd_recovery_mode=run
+ConditionKernelCommandLine=!snapd_recovery_mode=install
 Description=Mount initial filesystems
 OnFailure=emergency.target
 OnFailureJobMode=replace-irreversibly
@@ -6,6 +8,9 @@ OnFailureJobMode=replace-irreversibly
 DefaultDependencies=no
 After=sysinit.target
 Before=initrd-root-device.target
+
+BindsTo=dev-ubuntu-disk.device
+After=dev-ubuntu-disk.device
 
 [Service]
 Type=oneshot

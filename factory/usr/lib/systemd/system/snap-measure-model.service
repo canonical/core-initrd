@@ -1,0 +1,19 @@
+[Unit]
+ConditionKernelCommandLine=|snapd_recovery_mode=run
+ConditionKernelCommandLine=|snapd_recovery_mode=install
+Description=Measure the model
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+DefaultDependencies=no
+
+After=snap-measure-epoch.service
+Requires=snap-measure-epoch.service
+After=model-available.target
+Requires=model-available.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/lib/snapd/snap-bootstrap measure-model
+StandardOutput=journal+console
+StandardError=journal+console

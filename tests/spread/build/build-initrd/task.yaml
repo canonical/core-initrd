@@ -9,7 +9,7 @@ prepare: |
   . "$TESTSLIB/prepare-utils.sh"
 
   # install dependencies
-  install_core_initrd_deps "$PROJECT_PATH"
+  install_core_initrd_deps "$PROJECT_PATH" "$PROJECT_PATH"/snapd_*.deb
 
   # download pc-kernel and pc gadget
   snap download pc-kernel --channel=22/${SNAP_BRANCH} --basename=upstream-pc-kernel

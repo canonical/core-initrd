@@ -1,0 +1,18 @@
+[Unit]
+ConditionKernelCommandLine=|snapd_recovery_mode=run
+ConditionKernelCommandLine=|snapd_recovery_mode=install
+Description=Reload disk
+
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+
+DefaultDependencies=no
+
+Requires=dev-ubuntu-disk.device
+After=dev-ubuntu-disk.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStartPre=-systemctl daemon-reload
+ExecStart=-systemctl --no-block start initrd-root-fs.target snap-data-mounted-mounted.target

@@ -1,0 +1,90 @@
+#!/bin/sh
+
+set -eu
+
+normaldir="${1}"
+mkdir -p "${normaldir}"
+
+generate_unit() {
+    where="${1}"
+    fs="${2}"
+    device="${3}"
+    shift 3
+
+    mount_unit="$(systemd-escape --suffix=mount -p "${where}")"
+
+    unset before
+    for target; do
+        case "${target}" in
+            -*)
+                ;;
+            *)
+                before="${before-}${before:+ }$(echo "${target}" | sed 's/[.]\(requires\|wants\)$//')"
+                ;;
+        esac
+        mkdir -p "${normaldir}/${target#-}"
+        ln -s "../${mount_unit}" "${normaldir}/${target#-}/${mount_unit}"
+    done
+
+    case "${fs}" in
+        tmpfs)
+            cat <<EOF >"${normaldir}/${mount_unit}"
+[Unit]
+DefaultDependencies=no
+${before:+Before=}${before}
+
+[Mount]
+Type=${fs}
+What=${device}
+Where=${where}
+Options=nosuid,private
+EOF
+            ;;
+        *)
+            device_escaped="$(systemd-escape -p "${device}")"
+            cat <<EOF >"${normaldir}/${mount_unit}"
+[Unit]
+DefaultDependencies=no
+BindsTo=${device_escaped}.device
+After=${device_escaped}.device
+Requires=systemd-fsck@${device_escaped}.service
+After=systemd-fsck@${device_escaped}.service
+${before:+Before=}${before}
+
+[Mount]
+Type=${fs}
+What=${device}
+Where=${where}
+Options=private
+EOF
+            ;;
+    esac
+}
+
+if mode="$(/usr/libexec/core/get-arg snapd_recovery_mode)"; then
+  case "${mode}" in
+      run)
+          disable_seed=-
+          disable_save=-
+          if [ -L /dev/ubuntu/disk ]; then
+            if udevadm info --query=property /dev/ubuntu/disk | grep -q '^UBUNTU_SEED_UUID='; then
+              disable_seed=
+            fi
+            if udevadm info --query=property /dev/ubuntu/disk | grep -q '^UBUNTU_SAVE_UUID='; then
+              disable_save=
+            fi
+          fi
+          generate_unit /run/mnt/data ext4 /dev/ubuntu/data initrd-root-fs.target.requires snap-data-save-mounted.target.requires modeenv-available.target.requires
+          generate_unit /run/mnt/ubuntu-seed vfat /dev/ubuntu/seed ${disable_seed}initrd-root-fs.target.wants ${disable_seed}model-available.target.wants
+          generate_unit /run/mnt/ubuntu-boot ext4 /dev/ubuntu/boot initrd-root-fs.target.requires model-available.target.requires
+          generate_unit /run/mnt/ubuntu-save ext4 /dev/ubuntu/save ${disable_save}initrd-root-fs.target.wants ${disable_save}snap-data-save-mounted.target.wants
+          ;;
+      install)
+          generate_unit /run/mnt/ubuntu-seed vfat /dev/ubuntu/seed initrd-root-fs.target.requires model-available.target.requires
+          generate_unit /run/mnt/data tmpfs tmpfs initrd-root-fs.target.requires
+          ;;
+      *)
+          exit 0
+          ;;
+  esac
+fi

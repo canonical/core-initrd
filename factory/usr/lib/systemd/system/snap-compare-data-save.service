@@ -1,0 +1,19 @@
+[Unit]
+ConditionKernelCommandLine=snapd_recovery_mode=run
+ConditionPathIsEncrypted=/run/mnt/data
+Description=Compare data and save partitions
+OnFailure=emergency.target
+OnFailureJobMode=replace-irreversibly
+DefaultDependencies=no
+
+Before=initrd-root-fs.target
+
+Wants=snap-data-save-mounted.target
+After=snap-data-save-mounted.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/lib/snapd/snap-bootstrap compare-data-save
+StandardOutput=journal+console
+StandardError=journal+console
