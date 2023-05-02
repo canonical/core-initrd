@@ -134,6 +134,8 @@ INSTALL_FILES_FROM_HOST=						\
 	/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1			\
 	/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*			\
 	/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*			\
+	/lib/systemd/system/dbus.service				\
+	/lib/systemd/system/dbus.socket					\
 	/lib/systemd/system/snapd.recovery-chooser-trigger.service	\
 	/lib/systemd/systemd-bootchart					\
 	/sbin/cryptsetup						\
@@ -144,10 +146,12 @@ INSTALL_FILES_FROM_HOST=						\
 	/sbin/mkfs.ext4							\
 	/sbin/mkfs.vfat							\
 	/sbin/sfdisk							\
+	/usr/bin/dbus-daemon						\
 	/usr/bin/partx							\
 	/usr/bin/unsquashfs						\
 	/usr/lib/snapd/info						\
-	/usr/lib/snapd/snap-bootstrap
+	/usr/lib/snapd/snap-bootstrap					\
+	/usr/share/dbus-1/system.conf
 
 override_dh_auto_install: TEMPLIBDIR := $(shell mktemp -d)
 override_dh_auto_install:
