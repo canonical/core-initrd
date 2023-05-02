@@ -5,6 +5,7 @@ Maintainer: Dimitri John Ledkov <xnox@ubuntu.com>
 Build-Depends: debhelper-compat (= 13), dh-python, python3:any, dracut-core, quilt, busybox-initramfs,
                util-linux,
                e2fsprogs,
+               dbus,
                dosfstools,
                dmsetup,
                mount,
