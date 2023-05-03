@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (67) jammy; urgency=medium
+
+  * No change rebuild to pick up snapd 2.59.3
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Wed, 03 May 2023 18:32:47 +0200
+
 ubuntu-core-initramfs (66) jammy; urgency=medium
 
   [ Dimitri John Ledkov ]
