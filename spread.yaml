@@ -9,6 +9,7 @@ environment:
   # TODO: are these vars needed still?
   LANG: "C.UTF-8"
   LANGUAGE: "en"
+  UBUNTU_IMAGE_CHANNEL: "2/stable"
 
 backends:
   google-nested:
