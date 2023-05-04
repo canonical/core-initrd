@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (51.6) focal; urgency=medium
+
+  * No change rebuild to pick-up 2.59.3
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Thu, 04 May 2023 12:06:49 +0200
+
 ubuntu-core-initramfs (51.5) focal; urgency=medium
 
   * Pick up snap-bootstrap from snapd 2.59
