@@ -3,8 +3,9 @@
 set -e
 set -x 
 
-SSH_PORT=${SSH_PORT:-8022}
-MON_PORT=${MON_PORT:-8888}
+: ${SSH_PORT:=8022}
+: ${MON_PORT:=8888}
+: ${UBUNTU_IMAGE_CHANNEL:=latest/stable}
 
 execute_remote(){
     sshpass -p ubuntu ssh -p "$SSH_PORT" -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no test@localhost "$*"
@@ -141,7 +142,7 @@ install_core_initrd_deps() {
         echo "FIXME: snapd install failed, retrying"
         sudo snap install snapd
     fi
-    sudo snap install ubuntu-image --classic
+    sudo snap install ubuntu-image --classic --channel="${UBUNTU_IMAGE_CHANNEL}"
 }
 
 download_core_initrd_snaps() {
