@@ -294,10 +294,8 @@ override_dh_auto_install:
 		/usr/share/plymouth/themes/spinner/*				\
 		/usr/bin/unsquashfs						\
 		/sbin/dmsetup							\
-		/usr/lib/snapd/snap-bootstrap					\
-		/usr/lib/snapd/info						\
 		/lib/systemd/systemd-bootchart					\
-		/lib/systemd/system/snapd.recovery-chooser-trigger.service;	\
+		; \
 	do									\
 		LD_PRELOAD=							\
 		LD_LIBRARY_PATH=$(TEMPLIBDIR)					\
@@ -305,11 +303,6 @@ override_dh_auto_install:
 			-D $(CURDIR)/debian/tmp --ldd $$f;			\
 	done
 	dpkg -L dmsetup | grep rules.d | xargs -L1 /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd
-ifeq ($(DEB_HOST_ARCH),amd64)
-	-cp $(CURDIR)/factory/usr/lib/snapd/snap-bootstrap $(CURDIR)/debian/tmp/usr/lib/snapd/snap-bootstrap
-else
-	-rm $(CURDIR)/factory/usr/lib/snapd/snap-bootstrap
-endif
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
@@ -348,5 +341,3 @@ override_dh_makeshlibs:
 	dh_makeshlibs -Xusr/lib/ubuntu-core-initramfs/main
 override_dh_shlibdeps:
 	dh_shlibdeps -Xusr/lib/ubuntu-core-initramfs/main
-override_dh_strip:
-	dh_strip -Xsnap-bootstrap

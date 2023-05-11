@@ -293,9 +293,22 @@ def create_initrd(parser, args):
         subprocess.check_call(["cp", "-ar", args.firmwaredir, firmware])
 
         db = ModuleDb(modules)
-        installed_module = set()
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
+        # Copy snapd bits
+        snapd_lib = "/usr/lib/snapd"
+        snapd_files = [os.path.join(snapd_lib, "snap-bootstrap"),
+                       os.path.join(snapd_lib, "info"),
+                       "/lib/systemd/system/snapd.recovery-chooser-trigger.service"]
+        for snapd_f in snapd_files:
+            subprocess.check_call(
+                [
+                    "/usr/lib/dracut/dracut-install",
+                    "-D", main,
+                    "--ldd", snapd_f,
+                ]
+            )
+        # Copy features
         for feature in args.features:
             # Add feature files
             feature_path = os.path.join(args.skeleton, feature)
