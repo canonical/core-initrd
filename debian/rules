@@ -230,7 +230,6 @@ INSTALL_FILES_FROM_HOST=						\
 	/lib/systemd/system/dbus.socket					\
 	/lib/systemd/system/plymouth-start.service			\
 	/lib/systemd/system/plymouth-switch-root.service		\
-	/lib/systemd/system/snapd.recovery-chooser-trigger.service	\
 	/lib/systemd/systemd-bootchart					\
 	/sbin/cryptsetup						\
 	/sbin/dmsetup							\
@@ -248,8 +247,6 @@ INSTALL_FILES_FROM_HOST=						\
 	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so		\
 	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so		\
 	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/two-step.so		\
-	/usr/lib/snapd/info						\
-	/usr/lib/snapd/snap-bootstrap					\
 	/usr/sbin/depmod						\
 	/usr/sbin/insmod						\
 	/usr/sbin/lsmod							\
@@ -304,11 +301,6 @@ override_dh_auto_install:
 	cp -a $(CURDIR)/debian/tmp/usr/lib/systemd/libsystemd-shared* $(TEMPLIBDIR)
 	LD_PRELOAD= LD_LIBRARY_PATH=$(TEMPLIBDIR) /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $(INSTALL_FILES_FROM_HOST)
 	dpkg -L dmsetup | grep rules.d | xargs -L1 /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd
-ifeq ($(DEB_HOST_ARCH),amd64)
-	-cp $(CURDIR)/factory/usr/lib/snapd/snap-bootstrap $(CURDIR)/debian/tmp/usr/lib/snapd/snap-bootstrap
-else
-	-rm $(CURDIR)/factory/usr/lib/snapd/snap-bootstrap
-endif
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
 	set -e; \
@@ -347,5 +339,3 @@ override_dh_makeshlibs:
 	dh_makeshlibs -Xusr/lib/ubuntu-core-initramfs/main
 override_dh_shlibdeps:
 	dh_shlibdeps -Xusr/lib/ubuntu-core-initramfs/main
-override_dh_strip:
-	dh_strip -Xsnap-bootstrap
