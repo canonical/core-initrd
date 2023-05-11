@@ -1,0 +1,56 @@
+#!/bin/bash
+declare -A binaries
+binaries["busybox-initramfs"]=1
+binaries["snapd"]=1
+binaries["plymouth-label-ft"]=1
+binaries["plymouth-theme-spinner"]=1
+
+if [ -e /usr/sbin/iucode_tool ]; then
+	binaries["intel-microcode"]=1
+	binaries["amd64-microcode"]=1
+fi
+for pf in $(find debian/tmp/usr/lib -type f -name 'lib*.so*'); do
+	[ ! -f $pf ] && continue
+	loc_usrlib=$(echo $pf | sed 's|^debian/tmp/||')
+	loc_lib=$(echo $loc_usrlib | sed 's|^/usr||')
+	bin="$(dpkg-query -S $loc_usrlib $loc_lib 2>/dev/null | sed 's|: .*||')"
+	[ -z "$bin" ] && continue
+	binaries[$bin]=1
+done
+
+for pf in $(find debian/tmp/usr/bin -type f); do
+	[ ! -f $pf ] && continue
+	prog=$(basename $pf)
+	bin="$(dpkg-query -S /usr/bin/$prog /usr/sbin/$prog /bin/$prog /sbin/$prog 2>/dev/null | sed 's|: .*||')"
+	[ -z "$bin" ] && continue
+	binaries[$bin]=1
+done
+
+systemd_ver=$(dpkg-parsechangelog -l vendor/systemd/debian/changelog -SVersion)
+
+declare -A bin_ver
+declare -A src_ver
+for bin in "${!binaries[@]}"; do
+	case $bin in
+		libsystemd0|libudev1|systemd|udev)
+			bin_ver["$bin"]="$systemd_ver"
+			src_ver["systemd"]="$systemd_ver"
+			;;
+		*)
+			pkg="$(dpkg-query -W --showformat='${Package}' $bin)"
+			src="$(dpkg-query -W --showformat='${Source}' $bin)"
+			[ -z "$src" ] && src=$pkg
+			version="$(dpkg-query -W --showformat='${Version}' $bin)"
+			bin_ver["$pkg"]=$version
+			src_ver["$src"]=$version
+			;;
+	esac
+done
+for bin in "${!bin_ver[@]}"; do
+	echo "  $bin=${bin_ver[$bin]}: null"
+done | sort >debian/tmp/primed-stage-packages.txt
+printf "generated:Built-Using=" >>debian/ubuntu-core-initramfs.substvars
+for src in "${!src_ver[@]}"; do
+	printf "$src (= ${src_ver[$src]}), "
+done >>debian/ubuntu-core-initramfs.substvars
+echo >>debian/ubuntu-core-initramfs.substvars

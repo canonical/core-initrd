@@ -322,6 +322,7 @@ endif
 	rm -rf debian/tmp/tmp/
 
 override_dh_install:
+	./debian/generate-primed-stage-packages
 	dh_install
 	rm -rf debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/main/usr/lib/systemd/boot
 ifeq ($(DEB_HOST_ARCH),amd64)
