@@ -1,9 +1,13 @@
-ubuntu-core-initramfs (66.1) UNRELEASED; urgency=medium
+ubuntu-core-initramfs (66.1) jammy; urgency=medium
 
+  [ Dimitri John Ledkov ]
   * Add build-conflicts on snapd 2.59.3
   * Add new changelog entry with correct SRU version numbering for jammy
 
- -- Dimitri John Ledkov <dimitri.ledkov@canonical.com>  Wed, 10 May 2023 11:13:37 +0100
+  [ Alfonso Sanchez-Beato ]
+  * No change rebuild to pick up snapd 2.59.4
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Fri, 12 May 2023 13:08:43 +0100
 
 ubuntu-core-initramfs (67) jammy; urgency=medium
 
