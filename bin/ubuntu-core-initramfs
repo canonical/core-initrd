@@ -273,6 +273,7 @@ def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
 
 
 def create_initrd(parser, args):
+    rootfs = "/"
     if not args.kerneldir:
         args.kerneldir = "/lib/modules/%s" % args.kernelver
     if args.root:
@@ -280,6 +281,7 @@ def create_initrd(parser, args):
         args.kerneldir = path_join_make_rel_paths(args.root, args.kerneldir)
         args.firmwaredir = path_join_make_rel_paths(args.root, args.firmwaredir)
         args.output = path_join_make_rel_paths(args.root, args.output)
+        rootfs = args.root
     if args.kernelver:
         args.output = "-".join([args.output, args.kernelver])
     with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
@@ -296,7 +298,7 @@ def create_initrd(parser, args):
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
         # Copy snapd bits
-        snapd_lib = "/usr/lib/snapd"
+        snapd_lib = path_join_make_rel_paths(rootfs, "/usr/lib/snapd")
         snapd_files = [os.path.join(snapd_lib, "snap-bootstrap"),
                        os.path.join(snapd_lib, "info"),
                        "/lib/systemd/system/snapd.recovery-chooser-trigger.service"]
