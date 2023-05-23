@@ -1,0 +1,13 @@
+[Unit]
+Description=Create initial writable directories
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=initrd-root-fs.target shutdown.target
+RefuseManualStop=yes
+RequiresMountsFor=/sysroot/writable
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/systemd-tmpfiles --root=/sysroot --create core-writable.conf
+SuccessExitStatus=DATAERR CANTCREAT

@@ -1,12 +1,13 @@
+# This filesystem is needed to be prepared with
+# initrd-core-tmpfiles-setup.service. This needs to happen
+# before we try mount filesystems imported from /etc/fstab from core.
+# This means it cannot itself be imported by /etc/fstab.
 [Unit]
 DefaultDependencies=no
 Before=initrd-root-fs.target
-
-Wants=sysroot.mount
-After=sysroot.mount
-
-After=run-mnt-data.mount
-After=run-mnt-base.mount
+RequiresMountsFor=/writable
+RequiresMountsFor=/run/mnt/data
+Wants=snap-initramfs-mounts.service
 After=snap-initramfs-mounts.service
 
 ConditionPathIsMountPoint=/run/mnt/base
