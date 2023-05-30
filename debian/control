@@ -67,6 +67,8 @@ Build-Depends: debhelper-compat (= 13), dh-python, python3:any, dracut-core, qui
                squashfs-tools,
                snapd (>= 2.50+20.04),
                systemd-bootchart,
+               cryptsetup-bin,
+               tar,
                golang-go, indent, libapparmor-dev, libcap-dev, libfuse-dev, libglib2.0-dev, liblzma-dev, liblzo2-dev, libseccomp-dev, libudev-dev, openssh-client, pkg-config, python3, python3-docutils, python3-markdown, squashfs-tools, tzdata, udev, xfslibs-dev
 Standards-Version: 4.4.1
 Build-Conflicts: snapd (= 2.59.3+22.04)
