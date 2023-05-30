@@ -222,6 +222,7 @@ override_dh_auto_clean:
 INSTALL_FILES_FROM_HOST=					\
 	/bin/kmod						\
 	/bin/mount						\
+	/bin/tar						\
 	/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1		\
 	/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*		\
 	/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*		\
@@ -230,12 +231,17 @@ INSTALL_FILES_FROM_HOST=					\
 	/lib/systemd/system/plymouth-start.service		\
 	/lib/systemd/system/plymouth-switch-root.service	\
 	/lib/systemd/systemd-bootchart				\
+	/sbin/cryptsetup					\
 	/sbin/dmsetup						\
 	/sbin/e2fsck						\
 	/sbin/fsck /bin/umount					\
 	/sbin/fsck.vfat						\
+	/sbin/fsck.vfat						\
+	/sbin/mkfs.ext4						\
+	/sbin/sfdisk						\
 	/usr/bin/dbus-daemon					\
 	/usr/bin/mountpoint					\
+	/usr/bin/partx						\
 	/usr/bin/plymouth					\
 	/usr/bin/unsquashfs					\
 	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so	\
