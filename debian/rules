@@ -135,13 +135,18 @@ INSTALL_FILES_FROM_HOST=						\
 	/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*			\
 	/lib/systemd/system/snapd.recovery-chooser-trigger.service	\
 	/lib/systemd/systemd-bootchart					\
+	/sbin/cryptsetup						\
 	/sbin/dmsetup							\
 	/sbin/e2fsck							\
 	/sbin/fsck							\
 	/sbin/fsck.vfat							\
+	/sbin/sfdisk							\
+	/usr/bin/partx							\
+	/usr/bin/tar							\
 	/usr/bin/unsquashfs						\
 	/usr/lib/snapd/info						\
-	/usr/lib/snapd/snap-bootstrap
+	/usr/lib/snapd/snap-bootstrap					\
+	/usr/sbin/mkfs.ext4
 
 override_dh_auto_install: TEMPLIBDIR := $(shell mktemp -d)
 override_dh_auto_install:
