@@ -20,7 +20,7 @@ apt install snapd mtools ovmf qemu-system-x86 sshpass whois -yqq
 # should we instead install beta/edge snapd here and point ubuntu-image to this
 # version of snapd?
 snap install snapd
-snap install ubuntu-image --classic
+snap install ubuntu-image --classic --channel=2/stable
 
 # install build-deps for ubuntu-core-initramfs
 (
