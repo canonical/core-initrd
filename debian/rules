@@ -219,6 +219,40 @@ override_dh_auto_clean:
 
 	rm -rf vendor/systemd/.pc
 
+INSTALL_FILES_FROM_HOST=					\
+	/bin/kmod						\
+	/bin/mount						\
+	/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1		\
+	/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*		\
+	/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*		\
+	/lib/systemd/system/dbus.service			\
+	/lib/systemd/system/dbus.socket				\
+	/lib/systemd/system/plymouth-start.service		\
+	/lib/systemd/system/plymouth-switch-root.service	\
+	/lib/systemd/systemd-bootchart				\
+	/sbin/dmsetup						\
+	/sbin/e2fsck						\
+	/sbin/fsck /bin/umount					\
+	/sbin/fsck.vfat						\
+	/usr/bin/dbus-daemon					\
+	/usr/bin/mountpoint					\
+	/usr/bin/plymouth					\
+	/usr/bin/unsquashfs					\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so	\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so	\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so	\
+	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/two-step.so	\
+	/usr/sbin/depmod					\
+	/usr/sbin/insmod					\
+	/usr/sbin/lsmod						\
+	/usr/sbin/modinfo					\
+	/usr/sbin/modprobe					\
+	/usr/sbin/plymouthd					\
+	/usr/sbin/rmmod						\
+	/usr/share/dbus-1/system.conf				\
+	/usr/share/libdrm/amdgpu.ids				\
+	/usr/share/plymouth/themes/bgrt/*			\
+	/usr/share/plymouth/themes/spinner/*
 
 override_dh_auto_install: TEMPLIBDIR := $(shell mktemp -d)
 override_dh_auto_install:
@@ -260,48 +294,7 @@ override_dh_auto_install:
 		cp -a $(CURDIR)/debian/tmp/lib/$(DEB_HOST_MULTIARCH)/$$lib* $(TEMPLIBDIR); \
 	done
 	cp -a $(CURDIR)/debian/tmp/usr/lib/systemd/libsystemd-shared* $(TEMPLIBDIR)
-	set -e;									\
-	for f in								\
-		/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*			\
-		/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*			\
-		/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1			\
-		/sbin/e2fsck							\
-		/sbin/fsck.vfat							\
-		/sbin/fsck /bin/umount						\
-		/bin/mount							\
-		/usr/bin/mountpoint						\
-		/bin/kmod							\
-		/usr/sbin/depmod						\
-		/usr/sbin/insmod						\
-		/usr/sbin/lsmod							\
-		/usr/sbin/modinfo						\
-		/usr/sbin/modprobe						\
-		/usr/sbin/rmmod							\
-		/usr/bin/dbus-daemon						\
-		/lib/systemd/system/dbus.service				\
-		/lib/systemd/system/dbus.socket					\
-		/usr/share/dbus-1/system.conf					\
-		/usr/sbin/plymouthd						\
-		/usr/bin/plymouth						\
-		/lib/systemd/system/plymouth-start.service			\
-		/lib/systemd/system/plymouth-switch-root.service		\
-		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so		\
-		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so		\
-		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/two-step.so		\
-		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so		\
-		/usr/share/libdrm/amdgpu.ids					\
-		/usr/share/plymouth/themes/bgrt/*				\
-		/usr/share/plymouth/themes/spinner/*				\
-		/usr/bin/unsquashfs						\
-		/sbin/dmsetup							\
-		/lib/systemd/systemd-bootchart					\
-		; \
-	do									\
-		LD_PRELOAD=							\
-		LD_LIBRARY_PATH=$(TEMPLIBDIR)					\
-			/usr/lib/dracut/dracut-install				\
-			-D $(CURDIR)/debian/tmp --ldd $$f;			\
-	done
+	LD_PRELOAD= LD_LIBRARY_PATH=$(TEMPLIBDIR) /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $(INSTALL_FILES_FROM_HOST)
 	dpkg -L dmsetup | grep rules.d | xargs -L1 /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd
 	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
 
