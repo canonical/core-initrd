@@ -146,7 +146,7 @@ INSTALL_FILES_FROM_HOST=						\
 	/usr/bin/unsquashfs						\
 	/usr/lib/snapd/info						\
 	/usr/lib/snapd/snap-bootstrap					\
-	/usr/sbin/mkfs.ext4
+	/sbin/mkfs.ext4
 
 override_dh_auto_install: TEMPLIBDIR := $(shell mktemp -d)
 override_dh_auto_install:
