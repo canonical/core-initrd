@@ -129,6 +129,7 @@ override_dh_auto_clean:
 INSTALL_FILES_FROM_HOST=						\
 	/bin/kmod							\
 	/bin/mount							\
+	/bin/tar							\
 	/bin/umount							\
 	/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1			\
 	/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*			\
@@ -140,13 +141,12 @@ INSTALL_FILES_FROM_HOST=						\
 	/sbin/e2fsck							\
 	/sbin/fsck							\
 	/sbin/fsck.vfat							\
+	/sbin/mkfs.ext4							\
 	/sbin/sfdisk							\
 	/usr/bin/partx							\
-	/usr/bin/tar							\
 	/usr/bin/unsquashfs						\
 	/usr/lib/snapd/info						\
-	/usr/lib/snapd/snap-bootstrap					\
-	/sbin/mkfs.ext4
+	/usr/lib/snapd/snap-bootstrap
 
 override_dh_auto_install: TEMPLIBDIR := $(shell mktemp -d)
 override_dh_auto_install:
