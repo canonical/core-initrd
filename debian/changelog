@@ -1,3 +1,10 @@
+ubuntu-core-initramfs (51.9) focal; urgency=medium
+
+  [ Valentin David ]
+  * Add missing build dependency and fix binary path
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 19 Jun 2023 14:33:54 +0100
+
 ubuntu-core-initramfs (51.8) focal; urgency=medium
 
   * Pick up snapd 2.60
