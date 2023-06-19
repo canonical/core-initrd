@@ -1,3 +1,19 @@
+ubuntu-core-initramfs (51.8) focal; urgency=medium
+
+  * Pick up snapd 2.60
+
+  [ Dimitri John Ledkov ]
+  * Adapt maintainer scripts for ease of snap automation
+  * Add build-conflicts on snapd 2.59.3 to prevent building against buggy
+    version
+
+  [ Valentin David ]
+  * ci: use old version of ubuntu-image
+  * Refactor list of files added from host
+  * Changes to be able to install from initramfs
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 19 Jun 2023 09:15:49 +0100
+
 ubuntu-core-initramfs (51.7) focal; urgency=medium
 
   * No change rebuild to pick-up 2.59.4
