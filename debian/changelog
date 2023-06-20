@@ -1,3 +1,10 @@
+ubuntu-core-initramfs (51.11) focal; urgency=medium
+
+  [ Valentin David ]
+  * Add mkfs.vfat for u-boot gadgets
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Tue, 20 Jun 2023 10:29:52 +0100
+
 ubuntu-core-initramfs (51.10) focal; urgency=medium
 
   [ Valentin David ]
