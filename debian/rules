@@ -142,6 +142,7 @@ INSTALL_FILES_FROM_HOST=						\
 	/sbin/fsck							\
 	/sbin/fsck.vfat							\
 	/sbin/mkfs.ext4							\
+	/sbin/mkfs.vfat							\
 	/sbin/sfdisk							\
 	/usr/bin/partx							\
 	/usr/bin/unsquashfs						\
