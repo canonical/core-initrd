@@ -20,9 +20,12 @@ Build-Depends: debhelper-compat (= 13), dh-python, python3:any, dracut-core, qui
                plymouth-theme-spinner,
                squashfs-tools,
                systemd,
+               systemd-boot-efi,
                systemd-bootchart,
                cryptsetup-bin,
+               systemd-sysv,
                tar,
+               udev,
                util-linux
 Standards-Version: 4.4.1
 Homepage: https://launchpad.net/ubuntu-core-initramfs

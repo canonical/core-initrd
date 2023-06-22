@@ -48,8 +48,8 @@ INSTALL_FILES_FROM_HOST=					\
 	/usr/share/plymouth/themes/spinner/*
 
 override_dh_auto_install:
-	rm -rf debian/tmp
-	mkdir debian/tmp
+	rm -rf debian/tmp debian/tmp-efi
+	mkdir debian/tmp debian/tmp-efi
 	cp -ar factory/* debian/tmp
 	mkdir -p debian/tmp/usr/bin
 	mkdir -p debian/tmp/usr/lib64
@@ -63,13 +63,31 @@ override_dh_auto_install:
 		debian/tmp/usr/share/fonts/Plymouth.ttf
 
 	touch debian/tmp/etc/machine-id
+
+	# Include all needed systemd bits
+	set -e;					\
+	for f in $$(dpkg -L systemd |							\
+	grep -E '(^/lib/systemd/system|modprobe\.d/|sysctl\.d/|rules\.d/|tmpfiles\.d/|bin/)')	\
+	$$(dpkg -L systemd-sysv | grep sbin/)			\
+	/var/lib/systemd/					\
+	$$(dpkg -L udev | grep -E '(bin/|lib/|rules\.d/)')	\
+		;						\
+	do							\
+		LD_PRELOAD=					\
+			/usr/lib/dracut/dracut-install		\
+			-D $(CURDIR)/debian/tmp --ldd $$f;	\
+	done
+
 	# This hack should be removed with #113
 	sed -i '/^After=/{;s, *plymouth-start[.]service *, ,;/^After= *$$/d;}' debian/tmp/usr/lib/systemd/system/systemd-ask-password-*
 
-	LD_LIBRARY_PATH=$(pwd)/debian/tmp/usr/lib/*/:$(pwd)/debian/tmp/usr/lib/systemd \
-	    $(pwd)/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
+	# XXX Is this still needed?
+	LD_LIBRARY_PATH=$$(pwd)/debian/tmp/usr/lib/*/:$$(pwd)/debian/tmp/usr/lib/systemd \
+	    $$(pwd)/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
 
+	# Use busybox shell instead of dash as in the past
+	rm debian/tmp/usr/bin/sh
 	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /usr/lib/initramfs-tools/bin/busybox usr/bin/busybox
 	set -e; \
 	for alias in `debian/tmp/usr/bin/busybox --list-long | grep -v -e busybox -e reboot -e mount -e umount`; do \
@@ -88,6 +106,9 @@ override_dh_auto_install:
 	 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
 	done
 	ldconfig -r debian/tmp
+
+	# Include stub (used when building kernel.efi)
+	install /usr/lib/systemd/boot/efi/linux*.efi.stub $(CURDIR)/debian/tmp-efi/
 
 override_dh_install:
 	dh_install
