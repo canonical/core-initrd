@@ -19,8 +19,10 @@ fi
 
 ubuntu-core-initramfs create-initrd --kernelver $version
 
+# Note focal's systemd & objcopy fail on arm64
+# Do not enable arm64, regressed twice now
 case `dpkg --print-architecture` in
-    amd64|arm64)
+    amd64)
         ubuntu-core-initramfs create-efi --unsigned --kernelver $version
         ;;
 esac
