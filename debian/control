@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Dimitri John Ledkov <xnox@ubuntu.com>
 Build-Depends: debhelper-compat (= 13), dh-python, python3:any, dracut-core, quilt, busybox-initramfs,
                amd64-microcode [amd64],
+               bash,
                dbus,
                dmsetup,
                dosfstools,

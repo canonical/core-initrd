@@ -6,7 +6,9 @@ include /usr/share/dpkg/default.mk
 %:
 	dh $@
 
+# bash is now used by debug-shell.service
 INSTALL_FILES_FROM_HOST=					\
+	/bin/bash						\
 	/bin/kmod						\
 	/bin/mount						\
 	/bin/tar						\
