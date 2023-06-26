@@ -67,8 +67,8 @@ override_dh_auto_install:
 	touch debian/tmp/etc/machine-id
 
 	# Include all needed systemd bits
-	set -e;					\
-	for f in $$(dpkg -L systemd |							\
+	set -e;				\
+	for f in $$(dpkg -L systemd |	\
 	grep -E '(^/lib/systemd/system|modprobe\.d/|sysctl\.d/|rules\.d/|tmpfiles\.d/|bin/)')	\
 	$$(dpkg -L systemd-sysv | grep sbin/)			\
 	/var/lib/systemd/					\
@@ -79,6 +79,10 @@ override_dh_auto_install:
 			/usr/lib/dracut/dracut-install		\
 			-D $(CURDIR)/debian/tmp --ldd $$f;	\
 	done
+	# But we don't won't to automount the rootfs
+	rm debian/tmp/usr/lib/systemd/system-generators/systemd-gpt-auto-generator
+	# or this (binfmt_misc module is not in the initramfs)
+	rm debian/tmp/usr/lib/systemd/system/sysinit.target.wants/proc-sys-fs-binfmt_misc.automount
 
 	# This hack should be removed with #113
 	sed -i '/^After=/{;s, *plymouth-start[.]service *, ,;/^After= *$$/d;}' debian/tmp/usr/lib/systemd/system/systemd-ask-password-*
