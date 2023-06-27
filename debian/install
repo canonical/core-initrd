@@ -3,5 +3,4 @@ postinst.d etc/kernel/
 snakeoil/* usr/lib/ubuntu-core-initramfs/snakeoil/
 debian/tmp/* usr/lib/ubuntu-core-initramfs/main
 debian/tmp-efi/* usr/lib/ubuntu-core-initramfs/efi/
-debian/sbat.txt usr/lib/ubuntu-core-initramfs/efi/
 modules usr/lib/ubuntu-core-initramfs/
