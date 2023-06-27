@@ -6,11 +6,10 @@ include /usr/share/dpkg/default.mk
 %:
 	dh $@
 
-# bash is now used by debug-shell.service
 INSTALL_FILES_FROM_HOST=					\
-	/bin/bash						\
 	/bin/kmod						\
 	/bin/mount						\
+	/sbin/sulogin						\
 	/bin/tar						\
 	/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1		\
 	/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*		\
@@ -69,7 +68,7 @@ override_dh_auto_install:
 	# Include all needed systemd bits
 	set -e;				\
 	for f in $$(dpkg -L systemd |	\
-	grep -E '(^/lib/systemd/system|modprobe\.d/|sysctl\.d/|rules\.d/|tmpfiles\.d/|bin/)')	\
+	grep -E '(^/lib/systemd/system|/modprobe\.d/|/sysctl\.d/|/rules\.d/|/tmpfiles\.d/|/bin/)')	\
 	$$(dpkg -L systemd-sysv | grep sbin/)			\
 	/var/lib/systemd/					\
 	$$(dpkg -L udev | grep -E '(bin/|lib/|rules\.d/)')	\
@@ -87,13 +86,14 @@ override_dh_auto_install:
 	# This hack should be removed with #113
 	sed -i '/^After=/{;s, *plymouth-start[.]service *, ,;/^After= *$$/d;}' debian/tmp/usr/lib/systemd/system/systemd-ask-password-*
 
-	# XXX Is this still needed?
+	# Generate hw database (/usr/lib/udev/hwdb.bin) for udev and
+	# remove redundant definitions after that.
 	LD_LIBRARY_PATH=$$(pwd)/debian/tmp/usr/lib/*/:$$(pwd)/debian/tmp/usr/lib/systemd \
 	    $$(pwd)/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
 
 	# Use busybox shell instead of dash as in the past
-	rm debian/tmp/usr/bin/sh
+	rm debian/tmp/usr/bin/sh debian/tmp/usr/bin/dash
 	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /usr/lib/initramfs-tools/bin/busybox usr/bin/busybox
 	set -e; \
 	for alias in `debian/tmp/usr/bin/busybox --list-long | grep -v -e busybox -e reboot -e mount -e umount`; do \
