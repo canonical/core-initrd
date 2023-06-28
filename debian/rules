@@ -90,8 +90,7 @@ override_dh_auto_install:
 
 	# Generate hw database (/usr/lib/udev/hwdb.bin) for udev and
 	# remove redundant definitions after that.
-	LD_LIBRARY_PATH=$$(pwd)/debian/tmp/usr/lib/*/:$$(pwd)/debian/tmp/usr/lib/systemd \
-	    $$(pwd)/debian/tmp/usr/bin/systemd-hwdb --root debian/tmp update --usr --strict
+	systemd-hwdb --root debian/tmp update --usr --strict
 	rm -rf debian/tmp/usr/lib/udev/hwdb.d
 
 	# Use busybox shell instead of dash as in the past
