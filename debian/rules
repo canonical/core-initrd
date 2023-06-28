@@ -82,6 +82,8 @@ override_dh_auto_install:
 	rm debian/tmp/usr/lib/systemd/system-generators/systemd-gpt-auto-generator
 	# or this (binfmt_misc module is not in the initramfs)
 	rm debian/tmp/usr/lib/systemd/system/sysinit.target.wants/proc-sys-fs-binfmt_misc.automount
+	# Remove all pcrphase related bits for the moment (services and binary)
+	find debian/tmp/ -type f,l -name \*systemd-pcrphase\* -delete
 
 	# This hack should be removed with #113
 	sed -i '/^After=/{;s, *plymouth-start[.]service *, ,;/^After= *$$/d;}' debian/tmp/usr/lib/systemd/system/systemd-ask-password-*
