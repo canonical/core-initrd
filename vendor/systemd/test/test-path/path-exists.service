@@ -1,7 +1,0 @@
-[Unit]
-Description=Service Test for Path units
-
-[Service]
-ExecStart=sleep infinity
-Type=exec
-RemainAfterExit=true

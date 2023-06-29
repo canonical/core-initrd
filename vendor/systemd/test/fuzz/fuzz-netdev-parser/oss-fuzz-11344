@@ -1,6 +1,0 @@
-[NetDev]
-Name=v
-Kind=vti
-[Tunnel]
-Local=::
-Local=any

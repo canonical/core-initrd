@@ -1,8 +1,0 @@
-[NetDev]
-Name=ipiptun96
-Kind=ipip
-MTUBytes=1480
-
-[Tunnel]
-Local=any
-Remote=any

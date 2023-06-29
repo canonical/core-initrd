@@ -1,5 +1,0 @@
-[Unit]
-Description=Unit with BoundBy=
-
-[Service]
-ExecStart=/bin/sleep 0.7
