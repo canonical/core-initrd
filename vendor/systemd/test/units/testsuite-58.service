@@ -1,6 +1,0 @@
-[Unit]
-Description=TEST-58-REPART
-
-[Service]
-ExecStart=/usr/lib/systemd/tests/testdata/units/%N.sh
-Type=oneshot

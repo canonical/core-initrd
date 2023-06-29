@@ -1,4 +1,0 @@
-# This file is part of systemd.
-# See systemd-timedated.service(8) for more information.
-
-systemd-timesyncd.service

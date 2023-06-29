@@ -1,3 +1,0 @@
-service
-[Service]
-LoadCredential=passwd.hashed-password.root

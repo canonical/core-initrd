@@ -1,6 +1,0 @@
-[Unit]
-Description=Silent successful service
-
-[Service]
-LogLevelMax=notice
-ExecStart=/bin/true

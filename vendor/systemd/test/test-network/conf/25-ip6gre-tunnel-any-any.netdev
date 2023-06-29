@@ -1,7 +1,0 @@
-[NetDev]
-Name=ip6gretun96
-Kind=ip6gre
-
-[Tunnel]
-Local=any
-Remote=any
