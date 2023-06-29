@@ -113,15 +113,16 @@ start_nested_core_vm_unit(){
     # TODO: enable ms key booting for i.e. nightly edge jobs ?
     OVMF_CODE=""
     OVMF_VARS=""
+    OVMF_VARS_D="/usr/share/OVMF"
     if [ "${ENABLE_SECURE_BOOT:-false}" = "true" ]; then
         OVMF_CODE=".secboot"
-    fi
-    if [ "${ENABLE_OVMF_SNAKEOIL:-false}" = "true" ]; then
+        # Use test certs so our signatures can be verified
         OVMF_VARS=".snakeoil"
+        OVMF_VARS_D="/usr/lib/ubuntu-core-initramfs/snakeoil"
     fi
 
     mkdir -p "${WORK_DIR}/image/"
-    cp -f "/usr/share/OVMF/OVMF_VARS${OVMF_VARS}.fd" "${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd"
+    cp -f "${OVMF_VARS_D}/OVMF_VARS${OVMF_VARS}.fd" "${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd"
     PARAM_BIOS="-drive file=/usr/share/OVMF/OVMF_CODE${OVMF_CODE}.fd,if=pflash,format=raw,unit=0,readonly=on -drive file=${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd,if=pflash,format=raw"
     PARAM_MACHINE="-machine q35${ATTR_KVM} -global ICH9-LPC.disable_s3=1"
 

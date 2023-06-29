@@ -25,6 +25,13 @@ execute: |
   # We should have a modeenv
   execute_remote test -f /var/lib/snapd/modeenv
 
+  # Check we have FDE for fullenc
+  if [ "$SPREAD_VARIANT" = fullenc ]; then
+      # If FDE the data/save labels end in -enc
+      execute_remote test -h /dev/disk/by-label/ubuntu-data-enc
+      execute_remote test -h /dev/disk/by-label/ubuntu-save-enc
+  fi
+
   # TODO: what else qualifies a "successful boot"? 
   # * no failed systemd units?
   # * all expected partitions mounted?
