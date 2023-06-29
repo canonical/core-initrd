@@ -127,7 +127,7 @@ endif
 
 override_dh_clean:
 	# Include ubuntu-core plymouth theme in sources
-	[ -d vendor/plymouth-theme-ubuntu-core ] || ( cd vendor; \
+	[ -d vendor/plymouth-theme-ubuntu-core ] || ( mkdir -p vendor; cd vendor; \
 		git clone https://github.com/snapcore/plymouth-theme-ubuntu-core )
 	dh_clean
 
