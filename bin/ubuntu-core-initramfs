@@ -360,7 +360,6 @@ def create_efi(parser, args):
         parser.error("--stub is required, and one was not automatically detected")
     if args.root:
         args.stub = path_join_make_rel_paths(args.root, args.stub)
-        args.sbat = path_join_make_rel_paths(args.root, args.sbat)
         args.kernel = path_join_make_rel_paths(args.root, args.kernel)
         args.initrd = path_join_make_rel_paths(args.root, args.initrd)
         args.key = path_join_make_rel_paths(args.root, args.key)
@@ -392,8 +391,6 @@ def create_efi(parser, args):
             ]
     # TODO add .splash
     objcopy_cmd += [
-            "--add-section", ".sbat=%s" % args.sbat,
-            "--set-section-flags", ".sbat=readonly,data",
             "--add-section", ".linux=%s" % args.kernel,
             "--set-section-flags", ".linux=readonly,data",
             "--add-section", ".initrd=%s" % args.initrd,
@@ -434,8 +431,6 @@ def main():
     )
     efi_parser.add_argument("--root", help="path to root")
     efi_parser.add_argument("--stub", help="path to stub")
-    efi_parser.add_argument("--sbat", help="path to sbat",
-                            default="/usr/lib/ubuntu-core-initramfs/efi/sbat.txt")
     if suffix:
         efi_parser.set_defaults(
             stub="/usr/lib/ubuntu-core-initramfs/efi/linux%s.efi.stub" % suffix

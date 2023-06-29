@@ -19,8 +19,8 @@ backends:
     plan: n2-standard-2
     halt-timeout: 2h
     systems:
-      - ubuntu-22.04-64:
-          image: ubuntu-2204-64-virt-enabled
+      - ubuntu-23.10-64:
+          image: ubuntu-2310-64-v20230621
           storage: 20G
 
   qemu-nested:
