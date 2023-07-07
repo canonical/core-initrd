@@ -307,6 +307,17 @@ def create_initrd(parser, args):
             if os.path.exists(extra_modules):
                 add_modules_from_file(main, kernel_root, modules, firmware, extra_modules, db)
 
+        if "fips" in args.features:
+            subprocess.check_call(
+                [
+                    "/usr/lib/dracut/dracut-install",
+                    "-D", main,
+                    "--ldd", "--all",
+                    "/usr/bin/sha512hmac",
+                    "/usr/bin/.sha512hmac.hmac",
+                ] + glob.glob("/usr/lib/*/.libkcapi.so.*.hmac")
+            )
+
         # Update epoch
         pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
         # Should iterate all the .conf drop ins
@@ -487,6 +498,8 @@ def main():
         # For generic kernels, enable more server drivers too
         if args.kernelver.endswith("-generic") and "server" not in args.features:
             args.features.append("server")
+        if args.kernelver.endswith("-fips"):
+            args.features.append("fips")
     globals()[args.subcmd.replace("-", "_")](parser, args)
 
 
