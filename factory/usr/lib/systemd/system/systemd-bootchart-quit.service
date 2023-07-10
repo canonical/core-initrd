@@ -2,7 +2,8 @@
 Description=Stop Boot Process Profiler
 DefaultDependencies=no
 Before=initrd-switch-root.service
-ConditionKernelCommandLine=core.bootchart
+ConditionKernelCommandLine=|core.bootchart
+ConditionKernelCommandLine=|ubuntu_core.bootchart
 
 [Service]
 Type=oneshot

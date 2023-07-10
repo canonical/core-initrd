@@ -74,9 +74,9 @@ snappy-dev PPA is included when these build happen.
 
 # Bootchart
 
-It is possible to enable bootcharts by adding `core.bootchart` to the
-kernel command line. The sample collector will run until the systemd
-switches root, and the chart will be saved in `/run/log`. If
+It is possible to enable bootcharts by adding `ubuntu_core.bootchart`
+to the kernel command line. The sample collector will run until the
+systemd switches root, and the chart will be saved in `/run/log`. If
 bootcharts are also enabled for the core snap, that file will be
 eventually moved to the `ubuntu-save` partition (see Core snap
 documentation).
