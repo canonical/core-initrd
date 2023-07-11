@@ -328,8 +328,8 @@ def create_initrd(parser, args):
                     "/usr/lib/dracut/dracut-install",
                     "-D", main,
                     "--ldd", "--all",
-                    "/usr/bin/sha512hmac",
-                    "/usr/bin/.sha512hmac.hmac",
+                    "/usr/bin/kcapi-hasher",
+                    "/usr/bin/.kcapi-hasher.hmac",
                 ] + glob.glob("/usr/lib/*/.libkcapi.so.*.hmac")
             )
 
