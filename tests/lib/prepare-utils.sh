@@ -5,7 +5,7 @@ set -x
 
 : ${SSH_PORT:=8022}
 : ${MON_PORT:=8888}
-: ${UBUNTU_IMAGE_CHANNEL:=latest/stable}
+: ${UBUNTU_IMAGE_CHANNEL:=latest/edge}
 
 execute_remote(){
     sshpass -p ubuntu ssh -p "$SSH_PORT" -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no test@localhost "$*"
@@ -149,13 +149,16 @@ download_core_initrd_snaps() {
     local snap_branch="$1"
 
     # get the model
-    curl -o ubuntu-core-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-22-amd64-dangerous.model
+    # FIXME: add the model there
+    #curl -o ubuntu-core-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-24-amd64-dangerous.model
+    curl -o ubuntu-core-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/core-base/main/ubuntu-core-24-amd64-dangerous.model
 
     # download neccessary images
+    # FIXME: switch to 24/ channel
     snap download pc-kernel --channel=22/${snap_branch} --basename=upstream-pc-kernel
-    snap download pc --channel=22/${snap_branch} --basename=upstream-pc-gadget
+    snap download pc --channel=24/${snap_branch} --basename=upstream-pc-gadget
     snap download snapd --channel=${snap_branch} --basename=upstream-snapd
-    snap download core22 --channel=${snap_branch} --basename=upstream-core22
+    snap download core24 --channel=${snap_branch} --basename=upstream-core24
 }
 
 build_core_initrd() {
@@ -339,10 +342,10 @@ EOF
     rm -r $snapddir
 }
 
-build_core22_image() {
+build_core24_image() {
     ubuntu-image snap \
         -i 8G \
-        --snap upstream-core22.snap \
+        --snap upstream-core24.snap \
         --snap upstream-snapd.snap \
         --snap upstream-pc-kernel.snap \
         --snap upstream-pc-gadget.snap \
