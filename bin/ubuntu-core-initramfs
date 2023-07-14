@@ -367,6 +367,17 @@ def create_efi(parser, args):
         args.initrd = "-".join([args.initrd, args.kernelver])
         args.output = "-".join([args.output, args.kernelver])
 
+        if platform.machine() == "aarch64":
+            import gzip
+            raw_kernel=tempfile.NamedTemporaryFile(mode='wb')
+            try:
+                with gzip.open(args.kernel, 'rb') as comp_kernel:
+                    shutil.copyfileobj(comp_kernel, raw_kernel)
+                raw_kernel.flush()
+                args.kernel = raw_kernel.name
+            except gzip.BadGzipFile:
+                pass
+
     # kernel.efi sections will be aligned to the page size by llvm-objcopy
     # (which is the default value for SectionAlignment in the PE header).
     # --set-section-flags are such so added COFF sections have flags:
