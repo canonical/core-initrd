@@ -9,7 +9,7 @@ environment:
   # TODO: are these vars needed still?
   LANG: "C.UTF-8"
   LANGUAGE: "en"
-  UBUNTU_IMAGE_CHANNEL: "2/stable"
+  UBUNTU_IMAGE_CHANNEL: "latest/edge"
 
 backends:
   google-nested:
@@ -29,7 +29,7 @@ backends:
     #            uc22 with less RAM
     memory: 4G
     systems:
-      - ubuntu-22.04-64:
+      - ubuntu-24.04-64:
           username: ubuntu
           password: ubuntu
 
@@ -37,8 +37,8 @@ backends:
     type: lxd
     container-profiles: coreinitrd
     systems:
-      - ubuntu-22.04:
-          image: ucspread22
+      - ubuntu-24.04:
+          image: ucspread24
 
 path: /home/core-initrd
 

@@ -99,21 +99,21 @@ jobs:
           echo "************* DOWNLOADING SNAPS *************"
           download_core_initrd_snaps 'edge'
 
-          echo "************* PREPAREING CORE22 IMAGE *************"
+          echo "************* PREPAREING CORE24 IMAGE *************"
           rm -f "upstream-pc-kernel.snap" "upstream-pc-gadget.snap"
           mv "pc-kernel.artifact" "upstream-pc-kernel.snap"
           mv "pc-gadget.artifact" "upstream-pc-gadget.snap"
           
-          echo "************* BUILDING CORE22 IMAGE *************"
-          build_core22_image
+          echo "************* BUILDING CORE24 IMAGE *************"
+          build_core24_image
 
-          echo "************* STARTING CORE22 VM *************"
+          echo "************* STARTING CORE24 VM *************"
           start_snapd_core_vm '${{ github.workspace }}'
 
           cd snapd
           
           # add any test suites that should be tested here
-          SPREAD_EXTERNAL_ADDRESS=localhost:8022 spread external:ubuntu-core-22-64:tests/smoke/
+          SPREAD_EXTERNAL_ADDRESS=localhost:8022 spread external:ubuntu-core-24-64:tests/smoke/
 
       - name: Discard spread workers
         if: always()
