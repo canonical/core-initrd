@@ -1,3 +1,22 @@
+ubuntu-core-initramfs (66.2) jammy; urgency=medium
+
+  [ Dimitri John Ledkov ]
+  * Adapt maintainer scripts for ease of snap automation
+
+  [ Valentin David ]
+  * Add dbus system bus
+  * Refactor list of files added from host
+  * Install in initrd
+
+  [ Alfonso Sánchez-Beato ]
+  * Accept ubuntu_core.bootchart as alias for core.bootchart
+
+  [ Dimitri John Ledkov ]
+  * Implement fips feature
+  * Nullboot doesn't seal cmdline yet, thus it must be baked in.
+
+ -- Dimitri John Ledkov <dimitri.ledkov@canonical.com>  Mon, 31 Jul 2023 14:28:27 +0100
+
 ubuntu-core-initramfs (66.1) jammy; urgency=medium
 
   [ Dimitri John Ledkov ]
