@@ -1,4 +1,4 @@
-ubuntu-core-initramfs (66.3) jammy; urgency=medium
+ubuntu-core-initramfs (66.4) jammy; urgency=medium
 
   [ Dimitri John Ledkov ]
   * Adapt maintainer scripts for ease of snap automation
