@@ -230,7 +230,7 @@ INSTALL_FILES_FROM_HOST=						\
 	/lib/systemd/system/dbus.socket					\
 	/lib/systemd/system/plymouth-start.service			\
 	/lib/systemd/system/plymouth-switch-root.service		\
-	/lib/systemd/system/snapd.recovery-chooser-trigger.service;	\
+	/lib/systemd/system/snapd.recovery-chooser-trigger.service	\
 	/lib/systemd/systemd-bootchart					\
 	/sbin/cryptsetup						\
 	/sbin/dmsetup							\
