@@ -7,10 +7,10 @@ DefaultDependencies=no
 
 Requires=initrd-root-fs.target
 After=initrd-root-fs.target
+Before=initrd-fs.target
 
 [Service]
 Type=oneshot
 # We force re-running kernel-snap-generator
 ExecStart=systemctl daemon-reload
-StandardOutput=journal+console
 StandardError=journal+console
