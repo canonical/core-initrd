@@ -3,6 +3,7 @@ Description=Detect Ubuntu classic sysroot
 DefaultDependencies=no
 Before=initrd-root-device.target
 After=snap-initramfs-mounts.service
+Wants=classic-mounts.service
 
 ConditionPathIsMountPoint=!/run/mnt/base
 
