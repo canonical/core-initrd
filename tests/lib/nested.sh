@@ -54,7 +54,7 @@ cleanup_nested_core_vm(){
         # remove the swtpm
         # TODO: we could just remove/reset the swtpm instead of removing the snap 
         # wholesale
-        snap remove swtpm-mvo
+        snap remove test-snapd-swtpm
     fi
 
     # delete the image file
@@ -126,18 +126,19 @@ start_nested_core_vm_unit(){
     PARAM_BIOS="-drive file=/usr/share/OVMF/OVMF_CODE${OVMF_CODE}.fd,if=pflash,format=raw,unit=0,readonly=on -drive file=${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd,if=pflash,format=raw"
     PARAM_MACHINE="-machine q35${ATTR_KVM} -global ICH9-LPC.disable_s3=1"
 
-    # Unfortunately the swtpm-mvo snap does not work correctly in lxd container. It's not possible
-    # for the socket to come up due to being containerized.
+    # Unfortunately the test-snapd-swtpm snap does not work correctly in lxd
+    # container. It's not possible for the socket to come up due to being
+    # containerized.
     if [ "${ENABLE_TPM:-false}" = "true" ]; then
-        TPMSOCK_PATH="/var/snap/swtpm-mvo/current/swtpm-sock"
+        TPMSOCK_PATH="/var/snap/test-snapd-swtpm/current/swtpm-sock"
         if [ "${SPREAD_BACKEND}" = "lxd-nested" ]; then
             mkdir -p /tmp/qtpm
             swtpm socket --tpmstate dir=/tmp/qtpm --ctrl type=unixio,path=/tmp/qtpm/sock --tpm2 -d -t
             TPMSOCK_PATH="/tmp/qtpm/sock"
-        elif ! snap list swtpm-mvo > /dev/null; then
-            snap install swtpm-mvo --beta
+        elif ! snap list test-snapd-swtpm > /dev/null; then
+            snap install test-snapd-swtpm --beta
             retry=60
-            while ! test -S /var/snap/swtpm-mvo/current/swtpm-sock; do
+            while ! test -S /var/snap/test-snapd-swtpm/current/swtpm-sock; do
                 retry=$(( retry - 1 ))
                 if [ $retry -le 0 ]; then
                     echo "Timed out waiting for the swtpm socket. Aborting!"
