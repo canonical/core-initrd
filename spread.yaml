@@ -20,7 +20,6 @@ backends:
     halt-timeout: 2h
     systems:
       - ubuntu-23.10-64:
-          image: ubuntu-2310-64-v20230621
           storage: 20G
 
   qemu-nested:
