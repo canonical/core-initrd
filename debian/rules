@@ -79,7 +79,7 @@ override_dh_auto_install:
 			-D $(CURDIR)/debian/tmp --ldd $$f;	\
 	done
 	# But we don't won't to automount the rootfs
-	rm debian/tmp/usr/lib/systemd/system-generators/systemd-gpt-auto-generator
+	rm -f --verbose debian/tmp/usr/lib/systemd/system-generators/systemd-gpt-auto-generator
 	# or this (binfmt_misc module is not in the initramfs)
 	rm debian/tmp/usr/lib/systemd/system/sysinit.target.wants/proc-sys-fs-binfmt_misc.automount
 	# Remove all pcrphase related bits for the moment (services and binary)
