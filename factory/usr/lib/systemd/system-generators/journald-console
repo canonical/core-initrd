@@ -2,7 +2,7 @@
 
 set -eu
 
-if [ "$(/usr/libexec/core/get-arg snapd_recovery_mode || true)" != install ]; then
+if [ "$(/usr/libexec/core/get-arg snapd_recovery_mode || true)" == run ]; then
     exit 0
 fi
 

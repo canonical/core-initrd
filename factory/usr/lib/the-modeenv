@@ -21,6 +21,13 @@ if [ "${mode}" = "run" ]; then
     elif [ -f /run/mnt/ubuntu-seed/piboot/ubuntu/piboot.conf ]; then
         echo '/run/mnt/ubuntu-seed/piboot/ubuntu /boot/piboot none bind 0 0' >> /run/image.fstab
     fi
+    # if there is override for journald.conf, remove it, it has ForwardToConsole=true
+    # also modify generator, as current mode is now new run mode
+    if [ -f /run/systemd/journald.conf.d/core-override.conf ]; then
+        rm /run/systemd/journald.conf.d/core-override.conf
+        cmdline_mode="$(/usr/libexec/core/get-arg snapd_recovery_mode)
+        sed -i 's/run/'"${cmdline_mode}"'/g' /usr/lib/systemd/system-generators/journald-console
+    fi
 fi
 mount -o bind /run/image.fstab /sysroot/etc/fstab
 umount -lf /sysroot/run
