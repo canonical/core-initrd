@@ -1,6 +1,10 @@
 #!/bin/sh
-if ! grep -q 'snapd_recovery_mode=install' /proc/cmdline
-then
+
+mode="$(/usr/libexec/core/get-mode mode)" || mode="$(/usr/libexec/core/get-arg snapd_recovery_mode)" || mode="run"
+
+if [ "${mode}" = "run" ]; then
+    # remove any previous overrides
+    rm -rf /run/systemd/journald.conf.d/core-override.conf
     exit 0
 fi
 
