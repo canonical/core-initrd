@@ -1,3 +1,14 @@
+ubuntu-core-initramfs (66.6) jammy; urgency=medium
+
+  [ Valentin David ]
+  * Add mkfs.vfat for u-boot gadgets
+
+  [ Alfonso Sánchez-Beato ]
+  * Make snapd a run dependency instead of a build dependency
+  * Add support for SAS controllers storage
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 16 Oct 2023 16:04:08 +0100
+
 ubuntu-core-initramfs (66.5) jammy; urgency=medium
 
   * On arm64, attempt to decompress vmlinuz automatically.
