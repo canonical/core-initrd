@@ -1,3 +1,19 @@
+ubuntu-core-initramfs (51.14) focal; urgency=medium
+
+  [ Valentin David ]
+  * Persist device mapper devices in udev database
+
+  [ Alfonso Sanchez-Beato ]
+  * Add support for SAS controllers storage
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 16 Oct 2023 16:14:48 +0100
+
+ubuntu-core-initramfs (51.13) focal; urgency=medium
+
+  * Accept ubuntu_core.bootchart as alias for core.bootchart
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 21 Aug 2023 10:15:02 +0100
+
 ubuntu-core-initramfs (51.12) focal; urgency=medium
 
   [ Valentin David ]
