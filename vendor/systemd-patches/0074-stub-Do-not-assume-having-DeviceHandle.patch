@@ -1,0 +1,41 @@
+From 5204355861643a658a6d8e009b67e422cdb9194b Mon Sep 17 00:00:00 2001
+From: ksa678491784 <ksa678491784@gmail.com>
+Date: Tue, 28 Dec 2021 18:09:33 +0300
+Subject: [PATCH] stub: Do not assume having DeviceHandle
+
+---
+ src/boot/efi/cpio.c | 6 ++++++
+ src/boot/efi/disk.c | 3 ++-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+Index: systemd/src/boot/efi/cpio.c
+===================================================================
+--- systemd.orig/src/boot/efi/cpio.c
++++ systemd/src/boot/efi/cpio.c
+@@ -343,6 +343,12 @@ EFI_STATUS pack_cpio(
+         assert(ret_buffer);
+         assert(ret_buffer_size);
+ 
++        if (!loaded_image->DeviceHandle) {
++                *ret_buffer = NULL;
++                *ret_buffer_size = 0;
++                return EFI_SUCCESS;
++        }
++
+         err = BS->HandleProtocol(loaded_image->DeviceHandle,
+                                  &FileSystemProtocol, (void*)&volume);
+         /* Error will be unsupported if the bootloader doesn't implement the
+Index: systemd/src/boot/efi/disk.c
+===================================================================
+--- systemd.orig/src/boot/efi/disk.c
++++ systemd/src/boot/efi/disk.c
+@@ -10,7 +10,8 @@ EFI_STATUS disk_get_part_uuid(EFI_HANDLE
+         EFI_DEVICE_PATH *device_path;
+         _cleanup_freepool_ EFI_DEVICE_PATH *paths = NULL;
+ 
+-        assert(handle);
++        if (!handle)
++                return EFI_NOT_FOUND;
+ 
+         /* export the device path this image is started from */
+         device_path = DevicePathFromHandle(handle);
