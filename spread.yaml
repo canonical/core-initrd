@@ -19,7 +19,9 @@ backends:
     plan: n2-standard-2
     halt-timeout: 2h
     systems:
-      - ubuntu-23.10-64:
+      - ubuntu-24.04-64:
+          # FIXME: switch to 24.04
+          image: ubuntu-23.10-64
           storage: 20G
 
   qemu-nested:
