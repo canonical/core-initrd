@@ -4,7 +4,7 @@ export DH_VERBOSE=1
 include /usr/share/dpkg/default.mk
 
 %:
-	dh $@
+	dh $@ --with buildinfo
 
 INSTALL_FILES_FROM_HOST=					\
 	/bin/kmod						\
