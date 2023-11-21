@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (70) noble; urgency=medium
+
+  * Bump version to 70 for noble.
+
+ -- Dimitri John Ledkov <dimitri.ledkov@canonical.com>  Tue, 21 Nov 2023 23:57:55 +0000
+
 ubuntu-core-initramfs (66) jammy; urgency=medium
 
   [ Dimitri John Ledkov ]
