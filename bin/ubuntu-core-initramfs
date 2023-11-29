@@ -412,11 +412,20 @@ def create_efi(parser, args):
             "--set-section-flags", ".cmdline=readonly,data",
             ]
     # TODO add .splash
+    if args.initrd:
+        objcopy_cmd += [
+            "--add-section", ".initrd=%s" % args.initrd,
+            "--set-section-flags", ".initrd=readonly,data",
+            ]
+    if args.dtb:
+        for dtb in args.dtb:
+            objcopy_cmd += [
+                "--add-section", ".dtb=%s" % dtb,
+                "--set-section-flags", ".initrd=readonly,data",
+            ]
     objcopy_cmd += [
             "--add-section", ".linux=%s" % args.kernel,
             "--set-section-flags", ".linux=readonly,data",
-            "--add-section", ".initrd=%s" % args.initrd,
-            "--set-section-flags", ".initrd=readonly,data",
             args.stub,
             args.output,
         ]
@@ -463,6 +472,9 @@ def main():
     )
     efi_parser.add_argument(
         "--initrd", help="path to initramfs", default="/boot/ubuntu-core-initramfs.img"
+    )
+    efi_parser.add_argument(
+        "--dtb", help="dtb to include", action='append'
     )
     efi_parser.add_argument(
         "--cmdline", help="commandline to embed (can be overriden with LoadOptions)"
