@@ -149,9 +149,7 @@ download_core_initrd_snaps() {
     local snap_branch="$1"
 
     # get the model
-    # FIXME: add the model there
-    #curl -o ubuntu-core-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-24-amd64-dangerous.model
-    curl -o ubuntu-core-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/core-base/main/ubuntu-core-24-amd64-dangerous.model
+    curl -o ubuntu-core-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-24-amd64-dangerous.model
 
     # download neccessary images
     # FIXME: switch to 24/ channel
