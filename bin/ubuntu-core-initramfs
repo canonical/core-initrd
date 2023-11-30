@@ -276,6 +276,19 @@ def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
                 )
 
 
+def install_files(files, dest_dir):
+    proc_env = os.environ.copy()
+    proc_env["LP_PRELOAD"] = ""
+    subprocess.check_call(
+        [
+            "/usr/lib/dracut/dracut-install",
+            "-D", dest_dir,
+            "--ldd", "--all",
+        ] + files,
+        env=proc_env)
+
+
+def install_systemd_files(dest_dir):
 def create_initrd(parser, args):
     rootfs = "/"
     if not args.kerneldir:
@@ -306,14 +319,7 @@ def create_initrd(parser, args):
         snapd_files = [os.path.join(snapd_lib, "snap-bootstrap"),
                        os.path.join(snapd_lib, "info"),
                        "/lib/systemd/system/snapd.recovery-chooser-trigger.service"]
-        for snapd_f in snapd_files:
-            subprocess.check_call(
-                [
-                    "/usr/lib/dracut/dracut-install",
-                    "-D", main,
-                    "--ldd", snapd_f,
-                ]
-            )
+        install_files(snapd_files, main)
         # Copy features
         for feature in args.features:
             # Add feature files
@@ -327,15 +333,10 @@ def create_initrd(parser, args):
                 add_modules_from_file(main, kernel_root, modules, firmware, extra_modules, db)
 
         if "fips" in args.features:
-            subprocess.check_call(
-                [
-                    "/usr/lib/dracut/dracut-install",
-                    "-D", main,
-                    "--ldd", "--all",
+            install_files([
                     "/usr/bin/kcapi-hasher",
                     "/usr/bin/.kcapi-hasher.hmac",
-                ] + glob.glob("/usr/lib/*/.libkcapi.so.*.hmac")
-            )
+            ] + glob.glob("/usr/lib/*/.libkcapi.so.*.hmac"), main)
 
         # Update epoch
         pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
