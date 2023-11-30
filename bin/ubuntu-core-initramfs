@@ -289,6 +289,49 @@ def install_files(files, dest_dir):
 
 
 def install_systemd_files(dest_dir):
+    # Build list of files and directories
+    out = subprocess.check_output(
+        [
+            r"dpkg -L systemd | "
+            r"grep -E '(^/lib/systemd/system|/modprobe\.d/|/sysctl\.d/|"
+            r"/rules\.d/|/tmpfiles\.d/|/bin/)'",
+        ],
+        shell=True) + subprocess.check_output(
+        [
+            r"dpkg -L systemd-sysv | grep sbin/",
+        ],
+        shell=True) + subprocess.check_output(
+        [
+            r"dpkg -L udev | grep -E '(bin/|lib/|rules\.d/)'",
+        ],
+        shell=True)
+    files = out.decode("utf-8").splitlines()
+    files.append("/var/lib/systemd/")
+    # Filter out things we don't want
+    to_remove = re.compile(".*systemd-gpt-auto-generator|"
+                           ".*proc-sys-fs-binfmt_misc.automount|"
+                           ".*systemd-pcrphase.*")
+    filtered = [i for i in files if not to_remove.match(i)]
+    # Install
+    install_files(filtered, dest_dir)
+
+    # Local modifications
+    # This hack should be removed with PR#113
+    subprocess.check_call([r"sed -i '/^After=/"
+                           "{;s, *plymouth-start[.]service *, ,;/"
+                           "^After= *$$/d;}' "
+                           + os.path.join(dest_dir,
+                                          "usr/lib/systemd/system/systemd-ask-password-*")],
+                          shell=True)
+    # Generate hw database (/usr/lib/udev/hwdb.bin) for udev and
+    # remove redundant definitions after that.
+    subprocess.check_call(["systemd-hwdb", "--root", dest_dir,
+                           "update", "--usr", "--strict"])
+    subprocess.check_call(["rm -rf " + os.path.join(dest_dir,
+                                                    "usr/lib/udev/hwdb.d")],
+                          shell=True)
+
+
 def create_initrd(parser, args):
     rootfs = "/"
     if not args.kerneldir:
@@ -314,6 +357,8 @@ def create_initrd(parser, args):
         db = ModuleDb(modules)
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
+        # Copy systemd bits
+        install_systemd_files(main)
         # Copy snapd bits
         snapd_lib = path_join_make_rel_paths(rootfs, "/usr/lib/snapd")
         snapd_files = [os.path.join(snapd_lib, "snap-bootstrap"),
@@ -460,7 +505,7 @@ def main():
     efi_parser.add_argument("--stub", help="path to stub")
     if suffix:
         efi_parser.set_defaults(
-            stub="/usr/lib/ubuntu-core-initramfs/efi/linux%s.efi.stub" % suffix
+            stub="/usr/lib/systemd/boot/efi/linux%s.efi.stub" % suffix
         )
     efi_parser.add_argument("--kernel", help="path to kernel", default="/boot/vmlinuz")
     efi_parser.add_argument(
