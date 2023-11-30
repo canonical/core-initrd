@@ -288,6 +288,20 @@ def install_files(files, dest_dir):
         env=proc_env)
 
 
+# This is useful if the destination path inside dest_dir is different
+# from the current file path.
+def install_file_to_path(file, dest_dir, dest_path):
+    proc_env = os.environ.copy()
+    proc_env["LP_PRELOAD"] = ""
+    subprocess.check_call(
+        [
+            "/usr/lib/dracut/dracut-install",
+            "-D", dest_dir,
+            "--ldd", file, dest_path,
+        ],
+        env=proc_env)
+
+
 def install_systemd_files(dest_dir):
     # Build list of files and directories
     out = subprocess.check_output(
@@ -332,7 +346,103 @@ def install_systemd_files(dest_dir):
                           shell=True)
 
 
+def install_busybox(dest_dir):
+    # Use busybox shell instead of dash
+    os.remove(os.path.join(dest_dir, "usr/bin/sh"))
+    os.remove(os.path.join(dest_dir, "usr/bin/dash"))
+    install_file_to_path("/usr/lib/initramfs-tools/bin/busybox", dest_dir,
+                         "usr/bin/busybox")
+    # Create links to commands
+    bb_cmd = os.path.join(dest_dir, "usr/bin/busybox")
+    out = subprocess.check_output([bb_cmd, "--list-long"])
+    cmds = out.decode("utf-8").splitlines()
+    # Remove command we do not want
+    to_remove = ["busybox", "reboot", "mount", "umount"]
+    cmds = [c for c in cmds if c not in to_remove]
+    for c in cmds:
+        os.symlink("busybox", os.path.join(dest_dir, "usr/bin", c))
+
+
+def install_misc(dest_dir):
+    # dmsetup rules
+    rules = subprocess.check_output([r"dpkg -L dmsetup | grep rules.d"],
+                                    shell=True).decode("utf-8").splitlines()
+    install_files(rules, dest_dir)
+    # Other needed stuff
+    out = subprocess.check_output(["dpkg-architecture", "-q",
+                                   "DEB_BUILD_MULTIARCH"]).decode("utf-8")
+    deb_arch = out.splitlines()[0]
+    files = [
+        "/bin/kmod",
+        "/bin/mount",
+        "/sbin/sulogin",
+        "/bin/tar",
+        "/lib/" + deb_arch + "/libgcc_s.so.1",
+        "/lib/systemd/system/dbus.service",
+        "/lib/systemd/system/dbus.socket",
+        "/lib/systemd/system/plymouth-start.service",
+        "/lib/systemd/system/plymouth-switch-root.service",
+        "/lib/systemd/systemd-bootchart",
+        "/sbin/cryptsetup",
+        "/sbin/dmsetup",
+        "/sbin/e2fsck",
+        "/sbin/fsck",
+        "/bin/umount",
+        "/sbin/fsck.vfat",
+        "/sbin/fsck.vfat",
+        "/sbin/mkfs.ext4",
+        "/sbin/mkfs.vfat",
+        "/sbin/sfdisk",
+        "/usr/bin/dbus-daemon",
+        "/usr/bin/mountpoint",
+        "/usr/bin/partx",
+        "/usr/bin/plymouth",
+        "/usr/bin/unsquashfs",
+        "/usr/lib/" + deb_arch + "/plymouth/label-ft.so",
+        "/usr/lib/" + deb_arch + "/plymouth/script.so",
+        "/usr/lib/" + deb_arch + "/plymouth/two-step.so",
+        "/usr/sbin/depmod",
+        "/usr/sbin/insmod",
+        "/usr/sbin/lsmod",
+        "/usr/sbin/modinfo",
+        "/usr/sbin/modprobe",
+        "/usr/sbin/plymouthd",
+        "/usr/sbin/rmmod",
+        "/usr/share/dbus-1/system.conf",
+        "/usr/share/libdrm/amdgpu.ids",
+    ]
+    files += glob.glob("/lib/" + deb_arch + "/libnss_compat.so.*")
+    files += glob.glob("/lib/" + deb_arch + "/libnss_files.so.*")
+    files += glob.glob("/usr/lib/" + deb_arch + "/plymouth/renderers/*.so")
+    files += glob.glob("/usr/share/plymouth/themes/bgrt/*")
+    files += glob.glob("/usr/share/plymouth/themes/spinner/*")
+    install_files(files, dest_dir)
+    # Links for fsck
+    os.symlink("e2fsck", os.path.join(dest_dir, "usr/sbin", "fsck.ext4"))
+    # Get deps for shared objects that have not the exec bit set and that
+    # are loaded with dlopen (which means that they are not pull by --ldd
+    # option, instead use --resolvelazy).
+    proc_env = os.environ.copy()
+    proc_env["LP_PRELOAD"] = ""
+    to_resolve = [
+        "/usr/lib/" + deb_arch + "/plymouth/label-ft.so",
+        "/usr/lib/" + deb_arch + "/plymouth/script.so",
+        "/usr/lib/" + deb_arch + "/plymouth/two-step.so",
+    ]
+    to_resolve += glob.glob("/usr/lib/" + deb_arch + "/plymouth/renderers/*.so")
+    subprocess.check_call(
+        [
+            "/usr/lib/dracut/dracut-install",
+            "-D", dest_dir,
+            "--resolvelazy",
+        ] + to_resolve,
+        env=proc_env)
+    # Build ld cache
+    subprocess.check_call(["ldconfig", "-r", dest_dir])
+
+
 def create_initrd(parser, args):
+    # TODO generate microcode instead of shipping in debian package
     rootfs = "/"
     if not args.kerneldir:
         args.kerneldir = "/lib/modules/%s" % args.kernelver
@@ -359,6 +469,10 @@ def create_initrd(parser, args):
         os.makedirs(main, exist_ok=True)
         # Copy systemd bits
         install_systemd_files(main)
+        # copy busybox
+        install_busybox(main)
+        # Other miscelanea stuff
+        install_misc(main)
         # Copy snapd bits
         snapd_lib = path_join_make_rel_paths(rootfs, "/usr/lib/snapd")
         snapd_files = [os.path.join(snapd_lib, "snap-bootstrap"),
