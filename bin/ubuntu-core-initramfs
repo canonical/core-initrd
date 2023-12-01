@@ -512,6 +512,9 @@ def create_initrd(parser, args):
             if os.path.exists(extra_modules):
                 add_modules_from_file(main, kernel_root, modules, firmware, extra_modules, db)
 
+        # TODO xnox: fips actually needs additional runtime dependencies than
+        # this, and currently forked in fips PPA. we need to figure out how to
+        # make ubuntu-core-initramfs-fips a reality.
         if "fips" in args.features:
             install_files([
                     "/usr/bin/kcapi-hasher",
