@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import argparse
 import os
-import subprocess
+from subprocess import run, check_call, check_output
 import tempfile
 import pathlib
 import platform
@@ -259,7 +259,7 @@ def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
                     if not mod.builtin:
                         db.mark_installed(module, conf_file)
 
-                subprocess.check_call(
+                check_call(
                     [
                         "/usr/lib/dracut/dracut-install",
                         "-D",
@@ -278,8 +278,8 @@ def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
 
 def install_files(files, dest_dir):
     proc_env = os.environ.copy()
-    subprocess.check_call(
     proc_env["LD_PRELOAD"] = ""
+    check_call(
         [
             "/usr/lib/dracut/dracut-install",
             "-D", dest_dir,
@@ -292,8 +292,8 @@ def install_files(files, dest_dir):
 # from the current file path.
 def install_file_to_path(file, dest_dir, dest_path):
     proc_env = os.environ.copy()
-    subprocess.check_call(
     proc_env["LD_PRELOAD"] = ""
+    check_call(
         [
             "/usr/lib/dracut/dracut-install",
             "-D", dest_dir,
@@ -331,19 +331,19 @@ def install_systemd_files(dest_dir):
 
     # Local modifications
     # This hack should be removed with PR#113
-    subprocess.check_call([r"sed -i '/^After=/"
-                           "{;s, *plymouth-start[.]service *, ,;/"
-                           "^After= *$$/d;}' "
-                           + os.path.join(dest_dir,
-                                          "usr/lib/systemd/system/systemd-ask-password-*")],
-                          shell=True)
+    check_call([r"sed -i '/^After=/"
+                r"{;s, *plymouth-start[.]service *, ,;/"
+                r"^After= *$$/d;}' "
+                + os.path.join(dest_dir,
+                               "usr/lib/systemd/system/systemd-ask-password-*")],
+               shell=True)
     # Generate hw database (/usr/lib/udev/hwdb.bin) for udev and
     # remove redundant definitions after that.
-    subprocess.check_call(["systemd-hwdb", "--root", dest_dir,
-                           "update", "--usr", "--strict"])
-    subprocess.check_call(["rm -rf " + os.path.join(dest_dir,
-                                                    "usr/lib/udev/hwdb.d")],
-                          shell=True)
+    check_call(["systemd-hwdb", "--root", dest_dir,
+                "update", "--usr", "--strict"])
+    check_call(["rm -rf " + os.path.join(dest_dir,
+                                         "usr/lib/udev/hwdb.d")],
+               shell=True)
 
 
 def install_busybox(dest_dir):
@@ -354,7 +354,7 @@ def install_busybox(dest_dir):
                          "usr/bin/busybox")
     # Create links to commands
     bb_cmd = os.path.join(dest_dir, "usr/bin/busybox")
-    out = subprocess.check_output([bb_cmd, "--list-long"])
+    out = check_output([bb_cmd, "--list-long"])
     cmds = out.decode("utf-8").splitlines()
     # Remove command we do not want
     to_remove = ["busybox", "reboot", "mount", "umount"]
@@ -365,12 +365,12 @@ def install_busybox(dest_dir):
 
 def install_misc(dest_dir):
     # dmsetup rules
-    rules = subprocess.check_output([r"dpkg -L dmsetup | grep rules.d"],
-                                    shell=True).decode("utf-8").splitlines()
+    rules = check_output([r"dpkg -L dmsetup | grep rules.d"],
+                         shell=True).decode("utf-8").splitlines()
     install_files(rules, dest_dir)
     # Other needed stuff
-    out = subprocess.check_output(["dpkg-architecture", "-q",
-                                   "DEB_BUILD_MULTIARCH"]).decode("utf-8")
+    out = check_output(["dpkg-architecture", "-q",
+                        "DEB_BUILD_MULTIARCH"]).decode("utf-8")
     deb_arch = out.splitlines()[0]
     files = [
         "/bin/kmod",
@@ -430,7 +430,7 @@ def install_misc(dest_dir):
         "/usr/lib/" + deb_arch + "/plymouth/two-step.so",
     ]
     to_resolve += glob.glob("/usr/lib/" + deb_arch + "/plymouth/renderers/*.so")
-    subprocess.check_call(
+    check_call(
         [
             "/usr/lib/dracut/dracut-install",
             "-D", dest_dir,
@@ -438,7 +438,7 @@ def install_misc(dest_dir):
         ] + to_resolve,
         env=proc_env)
     # Build ld cache
-    subprocess.check_call(["ldconfig", "-r", dest_dir])
+    check_call(["ldconfig", "-r", dest_dir])
 
 
 def create_initrd(parser, args):
@@ -459,10 +459,10 @@ def create_initrd(parser, args):
         modules = os.path.join(kernel_root, "usr", "lib", "modules")
         os.makedirs(modules, exist_ok=True)
         modules = os.path.join(modules, args.kernelver)
-        subprocess.check_call(["cp", "-ar", args.kerneldir, modules])
+        check_call(["cp", "-ar", args.kerneldir, modules])
 
         firmware = os.path.join(kernel_root, "usr", "lib", "firmware")
-        subprocess.check_call(["cp", "-ar", args.firmwaredir, firmware])
+        check_call(["cp", "-ar", args.firmwaredir, firmware])
 
         db = ModuleDb(modules)
         main = os.path.join(d, "main")
@@ -484,7 +484,7 @@ def create_initrd(parser, args):
             # Add feature files
             feature_path = os.path.join(args.skeleton, feature)
             if os.path.isdir(feature_path):
-                subprocess.check_call(["cp", "-aT", feature_path, main])
+                check_call(["cp", "-aT", feature_path, main])
             # Add feature kernel modules
             extra_modules = os.path.join(args.skeleton, "modules", feature,
                                          "extra-modules.conf")
@@ -505,7 +505,7 @@ def create_initrd(parser, args):
                                   warn_discoverable=True)
 
         for modulesf in ["modules.order", "modules.builtin", "modules.builtin.bin", "modules.builtin.modinfo"]:
-            subprocess.check_call(
+            check_call(
                 [
                     "/usr/lib/dracut/dracut-install",
                     "-D",
@@ -515,13 +515,13 @@ def create_initrd(parser, args):
                     os.path.join("usr/lib/modules", args.kernelver, modulesf),
                 ]
             )
-        subprocess.check_call(["depmod", "-a", "-b", main, args.kernelver])
+        check_call(["depmod", "-a", "-b", main, args.kernelver])
         with open(args.output, "wb") as output:
             for early in glob.iglob("%s/early/*.cpio" % args.skeleton):
                 with open(early, "rb") as f:
                     shutil.copyfileobj(f, output)
             output.write(
-                subprocess.run(
+                run(
                     "find . | cpio --create --quiet --format='newc' --owner=0:0 | zstd -1 -T0",
                     cwd=main,
                     capture_output=True,
@@ -547,7 +547,7 @@ def create_efi(parser, args):
 
         if platform.machine() == "aarch64":
             import gzip
-            raw_kernel=tempfile.NamedTemporaryFile(mode='wb')
+            raw_kernel = tempfile.NamedTemporaryFile(mode='wb')
             try:
                 with gzip.open(args.kernel, 'rb') as comp_kernel:
                     shutil.copyfileobj(comp_kernel, raw_kernel)
@@ -584,9 +584,9 @@ def create_efi(parser, args):
             args.stub,
             args.output,
         ]
-    subprocess.check_call(objcopy_cmd)
+    check_call(objcopy_cmd)
     if not args.unsigned:
-        subprocess.check_call(
+        check_call(
             [
                 "sbsign",
                 "--key",
@@ -602,7 +602,7 @@ def create_efi(parser, args):
 
 
 def main():
-    kernelver = subprocess.check_output(
+    kernelver = check_output(
         ["uname", "-r"], universal_newlines=True
     ).strip()
     suffix = {"x86_64": "x64",
@@ -671,7 +671,7 @@ def main():
         "--output", help="path to output", default="/boot/ubuntu-core-initramfs.img"
     )
     initrd_parser.set_defaults(
-        kernelver=subprocess.check_output(
+        kernelver=check_output(
             ["uname", "-r"], universal_newlines=True
         ).strip()
     )
