@@ -389,7 +389,7 @@ def install_misc(dest_dir):
 
     # Other needed stuff
     out = check_output(["dpkg-architecture", "-q",
-                        "DEB_BUILD_MULTIARCH"]).decode("utf-8")
+                        "DEB_HOST_MULTIARCH"]).decode("utf-8")
     deb_arch = out.splitlines()[0]
     files = [
         "/bin/kmod",
