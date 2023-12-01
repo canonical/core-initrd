@@ -367,9 +367,6 @@ def install_systemd_files(dest_dir):
 
 
 def install_busybox(dest_dir):
-    # Use busybox shell instead of dash
-    os.remove(os.path.join(dest_dir, "usr/bin/sh"))
-    os.remove(os.path.join(dest_dir, "usr/bin/dash"))
     install_file_to_path("/usr/lib/initramfs-tools/bin/busybox", dest_dir,
                          "usr/bin/busybox")
     # Create links to commands
@@ -489,10 +486,12 @@ def create_initrd(parser, args):
         db = ModuleDb(modules)
         main = os.path.join(d, "main")
         os.makedirs(main, exist_ok=True)
+        # copy busybox first so we get already the shell interpreter we
+        # want (busybox) instead of dracut-install pulling the systemd
+        # default (dash) when it pulls a shell script later.
+        install_busybox(main)
         # Copy systemd bits
         install_systemd_files(main)
-        # copy busybox
-        install_busybox(main)
         # Other miscelanea stuff
         install_misc(main)
         # Copy snapd bits
