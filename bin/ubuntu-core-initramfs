@@ -304,24 +304,44 @@ def install_file_to_path(file, dest_dir, dest_path):
 
 def install_systemd_files(dest_dir):
     # Build list of files and directories
-    out = subprocess.check_output(
-        [
-            r"dpkg -L systemd | "
-            r"grep -E '(^/lib/systemd/system|/modprobe\.d/|/sysctl\.d/|"
-            r"/rules\.d/|/tmpfiles\.d/|/bin/)'",
-        ],
-        shell=True) + subprocess.check_output(
-        [
-            r"dpkg -L systemd-sysv | grep sbin/",
-        ],
-        shell=True) + subprocess.check_output(
-        [
-            r"dpkg -L udev | grep -E '(bin/|lib/|rules\.d/)'",
-        ],
-        shell=True)
-    files = out.decode("utf-8").splitlines()
+
+    out = check_output(["dpkg", "-L", "systemd", "systemd-sysv"])
+    lines = out.decode("utf-8").splitlines()
+    # From systemd, we pull
+    # * units configuration
+    # * Executables
+    # * Module load options
+    # * Configuration of kernel parameters
+    # * udev rules
+    # * Configuration for systemd-tmpfiles
+    # TODO: some of this can be cleaned up
+    to_include = re.compile(r"^/lib/systemd/system|"
+                            r".*/modprobe\.d/|"
+                            r".*/sysctl\.d/|"
+                            r".*/rules\.d/|"
+                            r".*/tmpfiles\.d/|"
+                            r".*bin/|"
+                            r".*sbin/"
+                            )
+    files = [i for i in lines if to_include.match(i)]
+
+    out = check_output(["dpkg", "-L", "udev"])
+    lines = out.decode("utf-8").splitlines()
+    # From udev, we pull
+    # * Executables
+    # * systemd configuration (units, tmpfiles)
+    # * udev rules
+    # * hwdb
+    # TODO: some of this can be cleaned up
+    to_include = re.compile(r".*bin/|"
+                            r".*lib/|"
+                            r".*rules\.d/"
+                            )
+    files += [i for i in lines if to_include.match(i)]
+
     files.append("/var/lib/systemd/")
-    # Filter out things we don't want
+
+    # Filter out some units we don't want
     to_remove = re.compile(".*systemd-gpt-auto-generator|"
                            ".*proc-sys-fs-binfmt_misc.automount|"
                            ".*systemd-pcrphase.*")
@@ -365,9 +385,11 @@ def install_busybox(dest_dir):
 
 def install_misc(dest_dir):
     # dmsetup rules
-    rules = check_output([r"dpkg -L dmsetup | grep rules.d"],
-                         shell=True).decode("utf-8").splitlines()
+    rules = check_output(["dpkg", "-L", "dmsetup"]).decode("utf-8").splitlines()
+    to_include = re.compile(r".*rules.d/")
+    rules = [i for i in rules if to_include.match(i)]
     install_files(rules, dest_dir)
+
     # Other needed stuff
     out = check_output(["dpkg-architecture", "-q",
                         "DEB_BUILD_MULTIARCH"]).decode("utf-8")
