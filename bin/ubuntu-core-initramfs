@@ -278,8 +278,8 @@ def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
 
 def install_files(files, dest_dir):
     proc_env = os.environ.copy()
-    proc_env["LP_PRELOAD"] = ""
     subprocess.check_call(
+    proc_env["LD_PRELOAD"] = ""
         [
             "/usr/lib/dracut/dracut-install",
             "-D", dest_dir,
@@ -292,8 +292,8 @@ def install_files(files, dest_dir):
 # from the current file path.
 def install_file_to_path(file, dest_dir, dest_path):
     proc_env = os.environ.copy()
-    proc_env["LP_PRELOAD"] = ""
     subprocess.check_call(
+    proc_env["LD_PRELOAD"] = ""
         [
             "/usr/lib/dracut/dracut-install",
             "-D", dest_dir,
@@ -423,7 +423,7 @@ def install_misc(dest_dir):
     # are loaded with dlopen (which means that they are not pull by --ldd
     # option, instead use --resolvelazy).
     proc_env = os.environ.copy()
-    proc_env["LP_PRELOAD"] = ""
+    proc_env["LD_PRELOAD"] = ""
     to_resolve = [
         "/usr/lib/" + deb_arch + "/plymouth/label-ft.so",
         "/usr/lib/" + deb_arch + "/plymouth/script.so",
