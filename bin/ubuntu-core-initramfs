@@ -302,11 +302,16 @@ def install_file_to_path(file, dest_dir, dest_path):
         env=proc_env)
 
 
+# Returns as a list the files contained in a list of deb packages.
+def package_files(pkgs):
+    out = check_output(["dpkg", "-L"] + pkgs)
+    return out.decode("utf-8").splitlines()
+
+
 def install_systemd_files(dest_dir):
     # Build list of files and directories
 
-    out = check_output(["dpkg", "-L", "systemd", "systemd-sysv"])
-    lines = out.decode("utf-8").splitlines()
+    lines = package_files(["systemd", "systemd-sysv"])
     # From systemd, we pull
     # * units configuration
     # * Executables
@@ -325,8 +330,7 @@ def install_systemd_files(dest_dir):
                             )
     files = [i for i in lines if to_include.match(i)]
 
-    out = check_output(["dpkg", "-L", "udev"])
-    lines = out.decode("utf-8").splitlines()
+    lines = package_files(["udev"])
     # From udev, we pull
     # * Executables
     # * systemd configuration (units, tmpfiles)
@@ -353,7 +357,7 @@ def install_systemd_files(dest_dir):
     # This hack should be removed with PR#113
     check_call([r"sed -i '/^After=/"
                 r"{;s, *plymouth-start[.]service *, ,;/"
-                r"^After= *$$/d;}' "
+                r"^After= *$/d;}' "
                 + os.path.join(dest_dir,
                                "usr/lib/systemd/system/systemd-ask-password-*")],
                shell=True)
@@ -361,9 +365,7 @@ def install_systemd_files(dest_dir):
     # remove redundant definitions after that.
     check_call(["systemd-hwdb", "--root", dest_dir,
                 "update", "--usr", "--strict"])
-    check_call(["rm -rf " + os.path.join(dest_dir,
-                                         "usr/lib/udev/hwdb.d")],
-               shell=True)
+    shutil.rmtree(os.path.join(dest_dir, "usr/lib/udev/hwdb.d"))
 
 
 def install_busybox(dest_dir):
@@ -373,8 +375,8 @@ def install_busybox(dest_dir):
     bb_cmd = os.path.join(dest_dir, "usr/bin/busybox")
     out = check_output([bb_cmd, "--list-long"])
     cmds = out.decode("utf-8").splitlines()
-    # Remove command we do not want
-    to_remove = ["busybox", "reboot", "mount", "umount"]
+    # Remove commands we do not want
+    to_remove = ["busybox", "reboot", "mount", "umount", "modinfo"]
     cmds = [c for c in cmds if c not in to_remove]
     for c in cmds:
         os.symlink("busybox", os.path.join(dest_dir, "usr/bin", c))
@@ -382,7 +384,7 @@ def install_busybox(dest_dir):
 
 def install_misc(dest_dir):
     # dmsetup rules
-    rules = check_output(["dpkg", "-L", "dmsetup"]).decode("utf-8").splitlines()
+    rules = package_files(["dmsetup"])
     to_include = re.compile(r".*rules.d/")
     rules = [i for i in rules if to_include.match(i)]
     install_files(rules, dest_dir)
