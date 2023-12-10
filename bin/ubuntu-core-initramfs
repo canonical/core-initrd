@@ -276,42 +276,47 @@ def add_modules_from_file(dest_d, kernel_root, modules_d, fw_d, conf_file, db,
                 )
 
 
-def install_files(files, dest_dir):
+def install_files(files, dest_dir, sysroot):
     proc_env = os.environ.copy()
     proc_env["LD_PRELOAD"] = ""
-    check_call(
-        [
-            "/usr/lib/dracut/dracut-install",
-            "-D", dest_dir,
-            "--ldd", "--all",
-        ] + files,
-        env=proc_env)
+    cmd = [
+        "/usr/lib/dracut/dracut-install",
+        "-D", dest_dir,
+        "--ldd", "--all",
+    ]
+    # dracut-install has some bugs if you set "/" as sysroot, avoid that
+    if sysroot != "/":
+        cmd += ["-r", sysroot]
+    check_call(cmd + files, env=proc_env)
 
 
 # This is useful if the destination path inside dest_dir is different
 # from the current file path.
-def install_file_to_path(file, dest_dir, dest_path):
+def install_file_to_path(file, dest_dir, dest_path, sysroot):
     proc_env = os.environ.copy()
     proc_env["LD_PRELOAD"] = ""
-    check_call(
-        [
-            "/usr/lib/dracut/dracut-install",
-            "-D", dest_dir,
-            "--ldd", file, dest_path,
-        ],
-        env=proc_env)
+    cmd = [
+        "/usr/lib/dracut/dracut-install",
+        "-D", dest_dir,
+        "--ldd",
+    ]
+    # dracut-install has some bugs if you set "/" as sysroot, avoid that
+    if sysroot != "/":
+        cmd += ["-r", sysroot]
+    cmd += [file, dest_path]
+    check_call(cmd, env=proc_env)
 
 
 # Returns as a list the files contained in a list of deb packages.
-def package_files(pkgs):
-    out = check_output(["dpkg", "-L"] + pkgs)
+def package_files(pkgs, sysroot):
+    out = check_output(["dpkg", "--admindir=" + sysroot + "/var/lib/dpkg/", "-L"] + pkgs)
     return out.decode("utf-8").splitlines()
 
 
-def install_systemd_files(dest_dir):
+def install_systemd_files(dest_dir, sysroot):
     # Build list of files and directories
 
-    lines = package_files(["systemd", "systemd-sysv"])
+    lines = package_files(["systemd", "systemd-sysv"], sysroot)
     # From systemd, we pull
     # * units configuration
     # * Executables
@@ -330,7 +335,7 @@ def install_systemd_files(dest_dir):
                             )
     files = [i for i in lines if to_include.match(i)]
 
-    lines = package_files(["udev"])
+    lines = package_files(["udev"], sysroot)
     # From udev, we pull
     # * Executables
     # * systemd configuration (units, tmpfiles)
@@ -351,7 +356,7 @@ def install_systemd_files(dest_dir):
                            ".*systemd-pcrphase.*")
     filtered = [i for i in files if not to_remove.match(i)]
     # Install
-    install_files(filtered, dest_dir)
+    install_files(filtered, dest_dir, sysroot)
 
     # Local modifications
     # This hack should be removed with PR#113
@@ -368,28 +373,37 @@ def install_systemd_files(dest_dir):
     shutil.rmtree(os.path.join(dest_dir, "usr/lib/udev/hwdb.d"))
 
 
-def install_busybox(dest_dir):
+def install_busybox(dest_dir, sysroot):
     install_file_to_path("/usr/lib/initramfs-tools/bin/busybox", dest_dir,
-                         "usr/bin/busybox")
-    # Create links to commands
-    bb_cmd = os.path.join(dest_dir, "usr/bin/busybox")
-    out = check_output([bb_cmd, "--list-long"])
-    cmds = out.decode("utf-8").splitlines()
-    # Remove commands we do not want
-    to_remove = ["busybox", "reboot", "mount", "umount", "modinfo"]
-    cmds = [c for c in cmds if c not in to_remove]
+                         "usr/bin/busybox", sysroot)
+    # Commands we want for busybox (static for more control and to help
+    # with cross-building).
+    cmds = ["[", "[[", "acpid", "arch", "ascii", "ash", "awk", "base32", "basename",
+            "blockdev", "cat", "chmod", "chroot", "chvt", "clear", "cmp", "cp",
+            "crc32", "cut", "date", "deallocvt", "deluser", "devmem", "df", "dirname",
+            "du", "dumpkmap", "echo", "egrep", "env", "expr", "false", "fbset", "fgrep",
+            "find", "fold", "fstrim", "grep", "gunzip", "gzip", "hostname", "hwclock",
+            "i2ctransfer", "ifconfig", "ip", "kill", "ln", "loadfont", "loadkmap", "ls",
+            "lzop", "mkdir", "mkfifo", "mknod", "mkswap", "mktemp", "more",
+            "mv", "nuke", "openvt", "pidof", "printf", "ps", "pwd", "readlink",
+            "reset", "rm", "rmdir", "run-init", "sed", "seq", "setkeycodes",
+            "sh", "sleep", "sort", "stat", "static-sh", "stty", "switch_root", "sync",
+            "tail", "tee", "test", "touch", "tr", "true", "ts", "tty", "uname",
+            "uniq", "wc", "wget", "which", "yes"]
     for c in cmds:
         os.symlink("busybox", os.path.join(dest_dir, "usr/bin", c))
 
 
-def install_misc(dest_dir):
+def install_misc(dest_dir, sysroot):
     # dmsetup rules
-    rules = package_files(["dmsetup"])
+    rules = package_files(["dmsetup"], sysroot)
     to_include = re.compile(r".*rules.d/")
     rules = [i for i in rules if to_include.match(i)]
-    install_files(rules, dest_dir)
+    install_files(rules, dest_dir, sysroot)
 
     # Other needed stuff
+    proc_env = os.environ.copy()
+    proc_env["DPKG_DATADIR"] = sysroot + "/usr/share/dpkg"
     out = check_output(["dpkg-architecture", "-q",
                         "DEB_HOST_MULTIARCH"]).decode("utf-8")
     deb_arch = out.splitlines()[0]
@@ -437,7 +451,7 @@ def install_misc(dest_dir):
     files += glob.glob("/usr/lib/" + deb_arch + "/plymouth/renderers/*.so")
     files += glob.glob("/usr/share/plymouth/themes/bgrt/*")
     files += glob.glob("/usr/share/plymouth/themes/spinner/*")
-    install_files(files, dest_dir)
+    install_files(files, dest_dir, sysroot)
     # Links for fsck
     os.symlink("e2fsck", os.path.join(dest_dir, "usr/sbin", "fsck.ext4"))
     # Get deps for shared objects that have not the exec bit set and that
@@ -451,13 +465,15 @@ def install_misc(dest_dir):
         "/usr/lib/" + deb_arch + "/plymouth/two-step.so",
     ]
     to_resolve += glob.glob("/usr/lib/" + deb_arch + "/plymouth/renderers/*.so")
-    check_call(
-        [
-            "/usr/lib/dracut/dracut-install",
-            "-D", dest_dir,
-            "--resolvelazy",
-        ] + to_resolve,
-        env=proc_env)
+    cmd = [
+        "/usr/lib/dracut/dracut-install",
+        "-D", dest_dir,
+        "--resolvelazy",
+    ]
+    # dracut-install has some bugs if you set "/" as sysroot, avoid that
+    if sysroot != "/":
+        cmd += ["-r", sysroot]
+    check_call(cmd + to_resolve, env=proc_env)
     # Build ld cache
     check_call(["ldconfig", "-r", dest_dir])
 
@@ -491,17 +507,17 @@ def create_initrd(parser, args):
         # copy busybox first so we get already the shell interpreter we
         # want (busybox) instead of dracut-install pulling the systemd
         # default (dash) when it pulls a shell script later.
-        install_busybox(main)
+        install_busybox(main, rootfs)
         # Copy systemd bits
-        install_systemd_files(main)
+        install_systemd_files(main, rootfs)
         # Other miscelanea stuff
-        install_misc(main)
+        install_misc(main, rootfs)
         # Copy snapd bits
         snapd_lib = path_join_make_rel_paths(rootfs, "/usr/lib/snapd")
         snapd_files = [os.path.join(snapd_lib, "snap-bootstrap"),
                        os.path.join(snapd_lib, "info"),
                        "/lib/systemd/system/snapd.recovery-chooser-trigger.service"]
-        install_files(snapd_files, main)
+        install_files(snapd_files, main, rootfs)
         # Copy features
         for feature in args.features:
             # Add feature files
@@ -521,7 +537,7 @@ def create_initrd(parser, args):
             install_files([
                     "/usr/bin/kcapi-hasher",
                     "/usr/bin/.kcapi-hasher.hmac",
-            ] + glob.glob("/usr/lib/*/.libkcapi.so.*.hmac"), main)
+            ] + glob.glob("/usr/lib/*/.libkcapi.so.*.hmac"), main, rootfs)
 
         # Update epoch
         pathlib.Path("%s/main/usr/lib/clock-epoch" % d).touch()
