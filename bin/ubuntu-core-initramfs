@@ -80,9 +80,13 @@ class ModuleDb:
 
         for root, dirs, files in os.walk(module_path):
             for f in files:
-                name, ext = os.path.splitext(f)
-                if ext == '.ko':
-                    self._modules[name] = ModuleDb.ModuleInfo(False, [], [])
+                if f.endswith('.ko'):
+                    name, _ = os.path.splitext(f)
+                elif '.ko.' in f:
+                    name, _ = f.split('.ko.', maxsplit=1)
+                else:
+                    continue
+                self._modules[name] = ModuleDb.ModuleInfo(False, [], [])
 
         for alias, target in ModuleDb.__each_alias(os.path.join(module_path, "modules.alias")):
             try:
