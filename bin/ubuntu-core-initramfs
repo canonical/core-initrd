@@ -340,7 +340,7 @@ def create_initrd(parser, args):
             add_modules_from_file(main, kernel_root, modules, firmware, module_load, db,
                                   warn_discoverable=True)
 
-        for modulesf in ["modules.order", "modules.builtin", "modules.builtin.bin"]:
+        for modulesf in ["modules.order", "modules.builtin", "modules.builtin.bin", "modules.builtin.modinfo"]:
             subprocess.check_call(
                 [
                     "/usr/lib/dracut/dracut-install",
