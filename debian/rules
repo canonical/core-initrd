@@ -6,55 +6,10 @@ include /usr/share/dpkg/default.mk
 %:
 	dh $@
 
-INSTALL_FILES_FROM_HOST=					\
-	/bin/kmod						\
-	/bin/mount						\
-	/sbin/sulogin						\
-	/bin/tar						\
-	/lib/$(DEB_HOST_MULTIARCH)/libgcc_s.so.1		\
-	/lib/$(DEB_HOST_MULTIARCH)/libnss_compat.so.*		\
-	/lib/$(DEB_HOST_MULTIARCH)/libnss_files.so.*		\
-	/lib/systemd/system/dbus.service			\
-	/lib/systemd/system/dbus.socket				\
-	/lib/systemd/system/plymouth-start.service		\
-	/lib/systemd/system/plymouth-switch-root.service	\
-	/lib/systemd/systemd-bootchart				\
-	/sbin/cryptsetup					\
-	/sbin/dmsetup						\
-	/sbin/e2fsck						\
-	/sbin/fsck /bin/umount					\
-	/sbin/fsck.vfat						\
-	/sbin/fsck.vfat						\
-	/sbin/mkfs.ext4						\
-	/sbin/mkfs.vfat						\
-	/sbin/sfdisk						\
-	/usr/bin/dbus-daemon					\
-	/usr/bin/mountpoint					\
-	/usr/bin/partx						\
-	/usr/bin/plymouth					\
-	/usr/bin/unsquashfs					\
-	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/label-ft.so	\
-	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so	\
-	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/script.so	\
-	/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/two-step.so	\
-	/usr/sbin/depmod					\
-	/usr/sbin/insmod					\
-	/usr/sbin/lsmod						\
-	/usr/sbin/modinfo					\
-	/usr/sbin/modprobe					\
-	/usr/sbin/plymouthd					\
-	/usr/sbin/rmmod						\
-	/usr/share/dbus-1/system.conf				\
-	/usr/share/libdrm/amdgpu.ids				\
-	/usr/share/plymouth/themes/bgrt/*			\
-	/usr/share/plymouth/themes/spinner/*
-
 override_dh_auto_install:
-	rm -rf debian/tmp debian/tmp-efi
-	mkdir debian/tmp debian/tmp-efi
+	rm -rf debian/tmp
+	mkdir debian/tmp
 	cp -ar factory/* debian/tmp
-	mkdir -p debian/tmp/usr/bin
-	mkdir -p debian/tmp/usr/lib64
 
 	# splash functionality
 	mkdir -p debian/tmp/usr/share/plymouth/themes/
@@ -66,61 +21,9 @@ override_dh_auto_install:
 
 	touch debian/tmp/etc/machine-id
 
-	# Include all needed systemd bits
-	set -e;				\
-	for f in $$(dpkg -L systemd |	\
-	grep -E '(^/lib/systemd/system|/modprobe\.d/|/sysctl\.d/|/rules\.d/|/tmpfiles\.d/|/bin/)')	\
-	$$(dpkg -L systemd-sysv | grep sbin/)			\
-	/var/lib/systemd/					\
-	$$(dpkg -L udev | grep -E '(bin/|lib/|rules\.d/)')	\
-		;						\
-	do							\
-		LD_PRELOAD=					\
-			/usr/lib/dracut/dracut-install		\
-			-D $(CURDIR)/debian/tmp --ldd $$f;	\
-	done
-	# But we don't won't to automount the rootfs
-	rm -f --verbose debian/tmp/usr/lib/systemd/system-generators/systemd-gpt-auto-generator
-	# or this (binfmt_misc module is not in the initramfs)
-	rm debian/tmp/usr/lib/systemd/system/sysinit.target.wants/proc-sys-fs-binfmt_misc.automount
-	# Remove all pcrphase related bits for the moment (services and binary)
-	find debian/tmp/ -type f,l -name \*systemd-pcrphase\* -delete
-
-	# This hack should be removed with #113
-	sed -i '/^After=/{;s, *plymouth-start[.]service *, ,;/^After= *$$/d;}' debian/tmp/usr/lib/systemd/system/systemd-ask-password-*
-
-	# Generate hw database (/usr/lib/udev/hwdb.bin) for udev and
-	# remove redundant definitions after that.
-	systemd-hwdb --root debian/tmp update --usr --strict
-	rm -rf debian/tmp/usr/lib/udev/hwdb.d
-
-	# Use busybox shell instead of dash as in the past
-	rm debian/tmp/usr/bin/sh debian/tmp/usr/bin/dash
-	/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd /usr/lib/initramfs-tools/bin/busybox usr/bin/busybox
-	set -e; \
-	for alias in `debian/tmp/usr/bin/busybox --list-long | grep -v -e busybox -e reboot -e mount -e umount`; do \
-		ln -v -s busybox debian/tmp/usr/bin/$$alias; \
-	done
-
-	LD_PRELOAD= /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd $(INSTALL_FILES_FROM_HOST)
-	dpkg -L dmsetup | grep rules.d | xargs -L1 /usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --ldd
-	ln -v -s e2fsck debian/tmp/usr/sbin/fsck.ext4
-
-	set -e; \
-	for e in $$(find debian/tmp -type f -executable) \
-		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/*.so \
-		/usr/lib/$(DEB_HOST_MULTIARCH)/plymouth/renderers/*.so; do \
-		LD_PRELOAD= \
-	 		/usr/lib/dracut/dracut-install -D $(CURDIR)/debian/tmp --resolvelazy $$e ; \
-	done
-	ldconfig -r debian/tmp
-
-	# Include stub (used when building kernel.efi)
-	install /usr/lib/systemd/boot/efi/linux*.efi.stub $(CURDIR)/debian/tmp-efi/
-
 override_dh_install:
 	dh_install
-	rm -rf debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/main/usr/lib/systemd/boot
+
 ifeq ($(DEB_HOST_ARCH),amd64)
 	mkdir -p debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/early/
 	debian/generate-x86-microcode debian/ubuntu-core-initramfs/usr/lib/ubuntu-core-initramfs/early/microcode.cpio
