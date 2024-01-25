@@ -25,3 +25,4 @@ ExecStart=/usr/bin/chroot /sysroot /usr/lib/core/handle-writable-paths / /etc/sy
 # TODO:UC20: move the-modeenv implementation to snap-bootstrap too
 ExecStart=/usr/lib/the-modeenv
 ExecStart=/usr/lib/core/extra-paths
+ExecStart=/usr/lib/core/kernel-mounts

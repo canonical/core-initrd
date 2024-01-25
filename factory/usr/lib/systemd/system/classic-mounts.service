@@ -11,6 +11,5 @@ Before=initrd-fs.target
 
 [Service]
 Type=oneshot
-# We force re-running kernel-snap-generator
-ExecStart=systemctl daemon-reload
+ExecStart=/usr/lib/core/kernel-mounts
 StandardError=journal+console

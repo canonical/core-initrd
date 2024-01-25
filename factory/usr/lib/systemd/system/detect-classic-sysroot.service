@@ -3,7 +3,6 @@ Description=Detect Ubuntu classic sysroot
 DefaultDependencies=no
 Before=initrd-root-device.target
 After=snap-initramfs-mounts.service
-Wants=classic-mounts.service
 
 ConditionPathIsMountPoint=!/run/mnt/base
 
@@ -11,3 +10,4 @@ ConditionPathIsMountPoint=!/run/mnt/base
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/ln -s data /run/mnt/sysroot
+ExecStart=/usr/lib/core/kernel-mounts

@@ -1,0 +1,82 @@
+#!/bin/sh
+
+set -eux
+
+# Prepare kernel modules/firmware tree if it does not exist
+
+ksnap_d=/run/mnt/kernel
+core=false
+data_d=/run/mnt/data
+if [ -d /run/mnt/base ]; then
+    core=true
+    data_d=/run/mnt/data/system-data
+fi
+
+kernelVer=
+for f in "$ksnap_d"/System.map-*; do
+    kernelVer=${f##"$ksnap_d"/System.map-}
+done
+mod_root_d="$data_d"/usr/lib/modules
+mod_d="$mod_root_d"/"$kernelVer"
+ksnap_mod_d="$ksnap_d"/modules/"$kernelVer"
+
+if [ ! -d "$mod_d" ]; then
+    for d in initrd kernel vdso updates; do
+        mkdir -p "$mod_d"/"$d"
+    done
+    # Copy modinfo files
+    cp "$ksnap_mod_d"/modules.* "$mod_d"
+fi
+
+fw_root_d="$data_d"/usr/lib/firmware/updates
+mkdir -p "$fw_root_d"
+
+sysinit_wants=/run/systemd/system/sysinit.target.wants
+mkdir -p "$sysinit_wants"
+
+conf_mount_dir() {
+    what=$1
+    where=$2
+    options=$3
+    before_deps=
+    if [ $# -gt 3 ]; then
+        before_deps=$4
+    fi
+
+    unit=$(systemd-escape -p --suffix=mount "$where")
+    unit_path=/run/systemd/system/"$unit"
+    cat <<EOF > "$unit_path"
+[Unit]
+ConditionPathExists=!/etc/initrd-release
+DefaultDependencies=no
+After=systemd-remount-fs.service
+Before=systemd-udev.service systemd-modules-load.service $before_deps
+Before=sysinit.target
+Before=umount.target
+Conflicts=umount.target
+
+[Mount]
+What=$what
+Options=$options
+EOF
+
+    ln -s "$unit_path" "$sysinit_wants"/"$unit"
+}
+
+mod_unit_dep=
+if [ "$core" = true ]; then
+    # For classic we are actually working on the rootfs, for core
+    # we need to bind mount to the base that is the rootfs.
+    mod_where=/usr/lib/modules
+    mod_unit_dep=$(systemd-escape -p --suffix=mount "$mod_where")
+    # Needs to be rw as we run depmod on this folder
+    conf_mount_dir "$mod_root_d" "$mod_where" rbind,rw
+fi
+conf_mount_dir "$ksnap_mod_d"/kernel "$mod_d"/kernel bind,ro "$mod_unit_dep"
+conf_mount_dir "$ksnap_mod_d"/vdso "$mod_d"/vdso bind,ro "$mod_unit_dep"
+
+fw_where=/usr/lib/firmware
+fw_unit=$(systemd-escape -p --suffix=mount "$fw_where")
+conf_mount_dir "$ksnap_d"/firmware "$fw_where" rbind,ro
+# Note that this will fail if the kernel snap does not have a firmware/updates dir
+conf_mount_dir "$fw_root_d" /usr/lib/firmware/updates rbind,ro "$fw_unit"
