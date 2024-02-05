@@ -419,7 +419,7 @@ def install_misc(dest_dir):
         "/usr/bin/partx",
         "/usr/bin/plymouth",
         "/usr/bin/unsquashfs",
-        "/usr/lib/" + deb_arch + "/plymouth/label-ft.so",
+        "/usr/lib/" + deb_arch + "/plymouth/label-freetype.so",
         "/usr/lib/" + deb_arch + "/plymouth/script.so",
         "/usr/lib/" + deb_arch + "/plymouth/two-step.so",
         "/usr/sbin/depmod",
@@ -446,7 +446,7 @@ def install_misc(dest_dir):
     proc_env = os.environ.copy()
     proc_env["LD_PRELOAD"] = ""
     to_resolve = [
-        "/usr/lib/" + deb_arch + "/plymouth/label-ft.so",
+        "/usr/lib/" + deb_arch + "/plymouth/label-freetype.so",
         "/usr/lib/" + deb_arch + "/plymouth/script.so",
         "/usr/lib/" + deb_arch + "/plymouth/two-step.so",
     ]
