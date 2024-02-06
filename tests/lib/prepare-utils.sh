@@ -152,8 +152,7 @@ download_core_initrd_snaps() {
     curl -o ubuntu-core-amd64-dangerous.model https://raw.githubusercontent.com/snapcore/models/master/ubuntu-core-24-amd64-dangerous.model
 
     # download neccessary images
-    # FIXME: switch to 24/ channel
-    snap download pc-kernel --channel=22/${snap_branch} --basename=upstream-pc-kernel
+    snap download pc-kernel --channel=24/${snap_branch} --basename=upstream-pc-kernel
     snap download pc --channel=24/${snap_branch} --basename=upstream-pc-gadget
     snap download snapd --channel=${snap_branch} --basename=upstream-snapd
     snap download core24 --channel=${snap_branch} --basename=upstream-core24
