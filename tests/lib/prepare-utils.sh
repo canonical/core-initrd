@@ -326,7 +326,8 @@ echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers.d/99-ubuntu-user
 sed -i 's/\#\?\(PermitRootLogin\|PasswordAuthentication\)\>.*/\1 yes/' /etc/ssh/sshd_config
 echo "MaxAuthTries 120" >> /etc/ssh/sshd_config
 grep '^PermitRootLogin yes' /etc/ssh/sshd_config
-systemctl reload ssh
+# ssh might not be active yet so the command might fail
+systemctl reload ssh || true
 
 print_system "done setting up ssh for spread test user"
 
