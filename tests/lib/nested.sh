@@ -122,8 +122,8 @@ start_nested_core_vm_unit(){
     fi
 
     mkdir -p "${WORK_DIR}/image/"
-    cp -f "${OVMF_VARS_D}/OVMF_VARS${OVMF_VARS}.fd" "${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd"
-    PARAM_BIOS="-drive file=/usr/share/OVMF/OVMF_CODE${OVMF_CODE}.fd,if=pflash,format=raw,unit=0,readonly=on -drive file=${WORK_DIR}/image/OVMF_VARS${OVMF_VARS}.fd,if=pflash,format=raw"
+    cp -f "${OVMF_VARS_D}/OVMF_VARS_4M${OVMF_VARS}.fd" "${WORK_DIR}/image/OVMF_VARS_4M${OVMF_VARS}.fd"
+    PARAM_BIOS="-drive file=/usr/share/OVMF/OVMF_CODE_4M${OVMF_CODE}.fd,if=pflash,format=raw,unit=0,readonly=on -drive file=${WORK_DIR}/image/OVMF_VARS_4M${OVMF_VARS}.fd,if=pflash,format=raw"
     PARAM_MACHINE="-machine q35${ATTR_KVM} -global ICH9-LPC.disable_s3=1"
 
     # Unfortunately the test-snapd-swtpm snap does not work correctly in lxd
