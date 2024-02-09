@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (67) noble; urgency=medium
+
+  * Bumping version for noble release
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Fri, 09 Feb 2024 08:57:32 +0000
+
 ubuntu-core-initramfs (66) jammy; urgency=medium
 
   [ Dimitri John Ledkov ]
