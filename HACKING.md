@@ -264,21 +264,28 @@ that, to repack everything, run these commands:
 $ cd initrd
 $ find . | cpio --create --quiet --format=newc --owner=0:0 | lz4 -l -7 > ../initrd.img
 $ cd -
-$ sudo add-apt-repository ppa:snappy-dev/image
-$ apt download ubuntu-core-initramfs
-$ dpkg --fsys-tarfile ubuntu-core-initramfs_*_amd64.deb |
-       tar xf - ./usr/lib/ubuntu-core-initramfs/efi/linuxx64.efi.stub
+$ apt download systemd-boot-efi
+$ dpkg --fsys-tarfile systemd-boot-efi_*.deb |
+       tar xf - ./usr/lib/systemd/boot/efi/linuxx64.efi.stub
 $ objcopy -O binary -j .linux pc-kernel/kernel.efi linux
-$ objcopy --add-section .linux=linux --change-section-vma .linux=0x2000000 \
-          --add-section .initrd=initrd.img --change-section-vma .initrd=0x3000000 \
-          usr/lib/ubuntu-core-initramfs/efi/linuxx64.efi.stub \
+$ llvm-objcopy --add-section .linux=linux --set-section-flags .linux=readonly,data \
+          --add-section .initrd=initrd.img --set-section-flags .initrd=readonly,data \
+          usr/lib/systemd/boot/efi/linuxx64.efi.stub \
           pc-kernel/kernel.efi
 $ snap pack pc-kernel
 ```
 
-You can use this new kernel snap while building image, or copy it over
-to your device and install. Note that the new `kernel.efi` won't be
-signed, so Secure Boot will not be possible anymore.
+Here we use llvm-objcopy as it can automatically adjust section
+addresses as necessary (objcopy does not do that), while for
+retrieving the section data we use objcopy (llvm-objcopy unfortunately
+adds a PE header to the extracted files that would need manual
+removal).
+
+Note that the systemd-boot-efi package should match the Ubuntu release
+of the kernel being modified. You can use this new kernel snap while
+building image, or copy it over to your device and install. The new
+`kernel.efi` won't be signed, so Secure Boot will not be possible
+anymore, unless signed again with a key accepted by the system.
 
 # Hacking with rebuilding
 
