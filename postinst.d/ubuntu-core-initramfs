@@ -17,7 +17,15 @@ if [ -e /boot/kernel.efi-$version ]; then
     exit 0
 fi
 
-ubuntu-core-initramfs create-initrd --kernelver $version
+case $version in
+    *-nvidia-tegra-igx)
+	# nvidia-tegra-igx kernels need extra tegra-specific modules
+	ubuntu-core-initramfs create-initrd --kernelver $version --feature main nvidia-tegra
+	;;
+    *)
+	ubuntu-core-initramfs create-initrd --kernelver $version
+	;;
+esac
 
 case `dpkg --print-architecture` in
     amd64|arm64)
