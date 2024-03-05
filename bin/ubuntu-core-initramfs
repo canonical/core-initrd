@@ -461,6 +461,9 @@ def install_misc(dest_dir):
     # Build ld cache
     check_call(["ldconfig", "-r", dest_dir])
 
+    # /sbin/modprobe is a static path in the kernel
+    os.makedirs(os.path.join(dest_dir, "sbin"))
+    os.symlink("../usr/sbin/modprobe", os.path.join(dest_dir, "sbin", "modprobe"))
 
 def create_initrd(parser, args):
     # TODO generate microcode instead of shipping in debian package
