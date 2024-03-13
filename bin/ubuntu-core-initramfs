@@ -326,6 +326,8 @@ def install_systemd_files(dest_dir, sysroot):
     # * Configuration for systemd-tmpfiles
     # TODO: some of this can be cleaned up
     to_include = re.compile(r"^(/usr)?/lib/systemd/system|"
+                            r"/usr/share/dbus-1/system-services/org.freedesktop.systemd1.service|"
+                            r"/usr/share/dbus-1/system.d/org.freedesktop.systemd1.conf|"
                             r".*/modprobe\.d/|"
                             r".*/sysctl\.d/|"
                             r".*/rules\.d/|"
