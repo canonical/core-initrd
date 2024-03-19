@@ -355,7 +355,8 @@ def install_systemd_files(dest_dir, sysroot):
     # Filter out some units we don't want
     to_remove = re.compile(".*systemd-gpt-auto-generator|"
                            ".*proc-sys-fs-binfmt_misc.automount|"
-                           ".*systemd-pcrphase.*")
+                           ".*systemd-pcrphase.*|"
+                           ".*systemd-tpm2-setup.*")
     filtered = [i for i in files if not to_remove.match(i)]
     # Install
     install_files(filtered, dest_dir, sysroot)
