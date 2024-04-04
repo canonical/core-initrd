@@ -486,6 +486,139 @@ def install_misc(dest_dir, sysroot):
     # FIXME: systemd is configured with the wrong path to dmsetup
     os.symlink("../usr/sbin/dmsetup", os.path.join(dest_dir, "sbin", "dmsetup"))
 
+
+class AptRepo:
+
+    def __init__(self, url):
+        self.url = url
+        self.suites = []
+        self.components = []
+
+
+def find_apt_repos(sysroot):
+    repos = {}
+    sources = os.path.join(sysroot, "etc/apt/sources.list")
+    sources_d = os.path.join(sysroot, "etc/apt/sources.list.d")
+    state_d = os.path.join(sysroot, "var/lib/apt/lists")
+    repo_lines = check_output(["apt-cache", "policy",
+                               "-o", "Dir::Etc::SourceList="+sources,
+                               "-o", "Dir::Etc::SourceParts="+sources_d,
+                               "-o", "Dir::State::Lists="+state_d]).decode("utf-8").splitlines()
+    uri_line = re.compile(r"^ *-?[0-9]+ (http|mirror|file|cdrom|ftp|copy|rsh|ssh)")
+    repo_lines = [r for r in repo_lines if uri_line.match(r)]
+    uri_start = re.compile(r"^ *-?[0-9]+ ")
+    for r in repo_lines:
+        r = uri_start.sub("", r)
+        fields = r.split(" ")
+        if len(fields) < 2:
+            continue
+        # suite/comp in the line
+        suite_comp = fields[1].split("/")
+        if len(suite_comp) != 2:
+            continue
+        # Key will be url + suite (we only have one suite per line)
+        key = (fields[0], suite_comp[0])
+        if key in repos:
+            repos[key].components.append(suite_comp[1])
+        else:
+            repo = AptRepo(fields[0])
+            repo.suites = [suite_comp[0]]
+            repo.components = [suite_comp[1]]
+            repos[key] = repo
+    # Now merge suites that share components
+    repo_ls = list(repos.values())
+    merged = set()
+    final_repos = []
+    for i, repo in enumerate(repo_ls):
+        if i in merged:
+            continue
+        for j in range(i+1, len(repo_ls)):
+            if sorted(repo.components) == sorted(repo_ls[j].components):
+                repo.suites += repo_ls[j].suites
+                merged.add(j)
+        final_repos.append(repo)
+
+    return final_repos
+
+
+def pkgs_used_in_initrd(dest_dir, sysroot):
+    MD5_HEX_CHARS = 32
+
+    # Get list of files we have in the initramfs
+    initrd_files = []
+    for dirpath, dirs, files in os.walk(dest_dir):
+        for f in files:
+            path = os.path.join(dirpath, f)
+            if os.path.islink(path) or not os.path.isfile(path):
+                continue
+            f_stats = os.stat(path)
+            if f_stats.st_size == 0:
+                continue
+            initrd_files.append(path)
+
+    # Now calculate their md5sums
+    lines = check_output(["md5sum"] + initrd_files,
+                         cwd=dest_dir).decode("utf-8").splitlines()
+    initrd_digests = []
+    for ln in lines:
+        initrd_digests.append(ln[:MD5_HEX_CHARS])
+
+    # Read digests from dpkg database
+    root_digests = {}
+    dpkg_d = os.path.join(sysroot, "var/lib/dpkg/info")
+    for dirpath, dirs, files in os.walk(dpkg_d):
+        for f in files:
+            if not f.endswith(".md5sums"):
+                continue
+            pkg = f.removesuffix(".md5sums")
+            # Files from libraries usually are of form pkg_name:arch, consider
+            # that case
+            pkg = pkg.split(":")[0]
+            with open(os.path.join(dirpath, f), "r") as digests_f:
+                for ln in digests_f.readlines():
+                    if len(ln) >= MD5_HEX_CHARS:
+                        root_digests[ln[:MD5_HEX_CHARS]] = pkg
+
+    # Now find matches
+    pkgs = set()
+    for d in initrd_digests:
+        pkg = root_digests.get(d)
+        if pkg is not None:
+            pkgs.add(pkg)
+
+    # Files we take from systemd-sysv are symlinks and have been ignored
+    pkgs.add("systemd-sysv")
+    # Return sorted list
+    return sorted(pkgs)
+
+
+def create_initrd_pkg_list(dest_dir, sysroot):
+    # Find used repos
+    repos = find_apt_repos(sysroot)
+    # and packages used to build the initramfs
+    pkgs = pkgs_used_in_initrd(dest_dir, sysroot)
+
+    # Write package list in yaml format
+    docs_dir = os.path.join(dest_dir, "usr", "share", "doc")
+    os.makedirs(docs_dir)
+    with open(os.path.join(docs_dir, "dpkg.yaml"), "w") as pkg_list:
+        # Write active repositories first so we can have an idea of where
+        # things come from
+        out = "package-repositories:\n"
+        for r in repos:
+            out += "- type: apt\n" \
+                "  url: " + r.url + "\n" \
+                "  suites: [ " + ', '.join(r.suites) + " ]\n" \
+                "  components: [ " + ', '.join(r.components) + " ]\n"
+
+        # Now write package information
+        out += "packages:\n"
+        out += check_output(["dpkg-query", "--admindir=" + sysroot + "/var/lib/dpkg/",
+                             "--show", "--showformat=- ${binary:Package}=${Version}\\n"] +
+                            pkgs).decode("utf-8")
+        pkg_list.write(out)
+
+
 def create_initrd(parser, args):
     # TODO generate microcode instead of shipping in debian package
     rootfs = "/"
@@ -566,6 +699,11 @@ def create_initrd(parser, args):
                 ]
             )
         check_call(["depmod", "-a", "-b", main, args.kernelver])
+
+        # Create manifest with packages with files included in the initramfs
+        create_initrd_pkg_list(main, rootfs)
+
+        # Finally, write it
         with open(args.output, "wb") as output:
             for early in glob.iglob("%s/early/*.cpio" % args.skeleton):
                 with open(early, "rb") as f:
