@@ -1,3 +1,19 @@
+ubuntu-core-initramfs (68) noble; urgency=medium
+
+  [ Valentin David ]
+  * Fix path to /sbin/modprobe
+  * Workaround wrong path to dmsetup
+  * Workaround /usr/lib/modules path being prefixed with sysroot
+  * Remove systemd-tpm2 services
+
+  [ Alfonso Sanchez-Beato ]
+  * HACKING.md: adapt to changes in mantic and forward
+  * Make sure the initramfs can be cross-built
+  * Include dbus files for org.freedesktop.systemd1
+  * Create manifest with used packages
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 08 Apr 2024 20:36:26 +0100
+
 ubuntu-core-initramfs (67) noble; urgency=medium
 
   * Bumping version for noble release
