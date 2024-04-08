@@ -9,6 +9,7 @@ import glob
 import shutil
 import re
 import sys
+import hashlib
 from collections import namedtuple
 from enum import Enum, auto
 
@@ -542,10 +543,10 @@ def find_apt_repos(sysroot):
 
 
 def pkgs_used_in_initrd(dest_dir, sysroot):
-    MD5_HEX_CHARS = 32
+    MD5_HEX_CHARS = 2*hashlib.md5().digest_size
 
-    # Get list of files we have in the initramfs
-    initrd_files = []
+    # Get list of files we have in the initramfs and calculate their md5sum
+    initrd_digests = []
     for dirpath, dirs, files in os.walk(dest_dir):
         for f in files:
             path = os.path.join(dirpath, f)
@@ -554,14 +555,8 @@ def pkgs_used_in_initrd(dest_dir, sysroot):
             f_stats = os.stat(path)
             if f_stats.st_size == 0:
                 continue
-            initrd_files.append(path)
-
-    # Now calculate their md5sums
-    lines = check_output(["md5sum"] + initrd_files,
-                         cwd=dest_dir).decode("utf-8").splitlines()
-    initrd_digests = []
-    for ln in lines:
-        initrd_digests.append(ln[:MD5_HEX_CHARS])
+            dig = hashlib.file_digest(open(path, "rb"), "md5").hexdigest()
+            initrd_digests.append(dig)
 
     # Read digests from dpkg database
     root_digests = {}
