@@ -1,3 +1,10 @@
+ubuntu-core-initramfs (66.7) jammy; urgency=medium
+
+  * No change rebuild to take latest versions of packages in
+    initramfs skeleton.
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 08 Apr 2024 18:31:53 +0100
+
 ubuntu-core-initramfs (66.6) jammy; urgency=medium
 
   [ Valentin David ]
