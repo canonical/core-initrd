@@ -714,9 +714,10 @@ def create_initrd(parser, args):
 
 
 def create_efi(parser, args):
-    if not args.stub:
-        parser.error("--stub is required, and one was not automatically detected")
     if args.root:
+        if not args.stub:
+            parser.error("--stub is mandatory when --root is given")
+        args.os_release = path_join_make_rel_paths(args.root, args.os_release)
         args.stub = path_join_make_rel_paths(args.root, args.stub)
         args.kernel = path_join_make_rel_paths(args.root, args.kernel)
         args.initrd = path_join_make_rel_paths(args.root, args.initrd)
@@ -739,35 +740,32 @@ def create_efi(parser, args):
             except gzip.BadGzipFile:
                 pass
 
-    # kernel.efi sections will be aligned to the page size by llvm-objcopy
-    # (which is the default value for SectionAlignment in the PE header).
-    # --set-section-flags are such so added COFF sections have flags:
-    # CONTENTS, ALLOC, LOAD, READONLY, DATA
-    # (see llvm-objcopy man page for details)
-    # To see more details, run 'objdump --all-headers kernel.efi'
-    # (objdump gives a bit more of information than llvm-objdump in this case)
-    objcopy_cmd = [
-            "llvm-objcopy",
+    # TODO: add --splash
+    ukify_cmd = [
+        '/usr/lib/systemd/ukify', 'build',
+        '--linux', args.kernel,
+        '--initrd', args.initrd,
+        '--output', args.output,
+        '--os-release', '@{}'.format(args.os_release),
+    ]
+
+    if args.kernelver:
+        ukify_cmd += [
+            '--uname', args.kernelver,
         ]
-    # TODO add .osrel
+    if args.stub:
+        ukify_cmd += [
+            '--stub', args.stub,
+        ]
+    if args.efi_arch:
+        ukify_cmd += [
+            '--efi-arch', args.efi_arch,
+        ]
     if args.cmdline:
-        cmdline = tempfile.NamedTemporaryFile(mode='w')
-        cmdline.write('%s' % args.cmdline)
-        cmdline.flush()
-        objcopy_cmd += [
-            "--add-section", ".cmdline=%s" % cmdline.name,
-            "--set-section-flags", ".cmdline=readonly,data",
-            ]
-    # TODO add .splash
-    objcopy_cmd += [
-            "--add-section", ".linux=%s" % args.kernel,
-            "--set-section-flags", ".linux=readonly,data",
-            "--add-section", ".initrd=%s" % args.initrd,
-            "--set-section-flags", ".initrd=readonly,data",
-            args.stub,
-            args.output,
+        ukify_cmd += [
+            '--cmdline', args.cmdline,
         ]
-    check_call(objcopy_cmd)
+    check_call(ukify_cmd)
     if not args.unsigned:
         check_call(
             [
@@ -788,10 +786,6 @@ def main():
     kernelver = check_output(
         ["uname", "-r"], universal_newlines=True
     ).strip()
-    suffix = {"x86_64": "x64",
-              "aarch64": "aa64",
-              "arm": "arm",
-              "riscv64": "riscv64"}.get(platform.machine())
     features = {"x86_64": "main server"}.get(platform.machine(), "main")
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(dest="subcmd", required=True)
@@ -800,10 +794,8 @@ def main():
     )
     efi_parser.add_argument("--root", help="path to root")
     efi_parser.add_argument("--stub", help="path to stub")
-    if suffix:
-        efi_parser.set_defaults(
-            stub="/usr/lib/systemd/boot/efi/linux%s.efi.stub" % suffix
-        )
+    efi_parser.add_argument("--efi-arch", help="efi architecture name")
+    efi_parser.add_argument("--os-release", help="path to os-release", default="/etc/os-release")
     efi_parser.add_argument("--kernel", help="path to kernel", default="/boot/vmlinuz")
     efi_parser.add_argument(
         "--kernelver", help="kernel version suffix", default=kernelver
