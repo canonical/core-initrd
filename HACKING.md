@@ -264,28 +264,20 @@ that, to repack everything, run these commands:
 $ cd initrd
 $ find . | cpio --create --quiet --format=newc --owner=0:0 | lz4 -l -7 > ../initrd.img
 $ cd -
-$ apt download systemd-boot-efi
-$ dpkg --fsys-tarfile systemd-boot-efi_*.deb |
-       tar xf - ./usr/lib/systemd/boot/efi/linuxx64.efi.stub
+$ apt install systemd-boot-efi systemd-ukify
 $ objcopy -O binary -j .linux pc-kernel/kernel.efi linux
-$ llvm-objcopy --add-section .linux=linux --set-section-flags .linux=readonly,data \
-          --add-section .initrd=initrd.img --set-section-flags .initrd=readonly,data \
-          usr/lib/systemd/boot/efi/linuxx64.efi.stub \
-          pc-kernel/kernel.efi
+$ /usr/lib/systemd/ukify build --linux linux \
+          --initrd initrd.img \
+          --output pc-kernel/kernel.efi
 $ snap pack pc-kernel
 ```
 
-Here we use llvm-objcopy as it can automatically adjust section
-addresses as necessary (objcopy does not do that), while for
-retrieving the section data we use objcopy (llvm-objcopy unfortunately
-adds a PE header to the extracted files that would need manual
-removal).
-
 Note that the systemd-boot-efi package should match the Ubuntu release
-of the kernel being modified. You can use this new kernel snap while
-building image, or copy it over to your device and install. The new
-`kernel.efi` won't be signed, so Secure Boot will not be possible
-anymore, unless signed again with a key accepted by the system.
+of the kernel being modified (both version and architecture). You can
+use this new kernel snap while building image, or copy it over to your
+device and install. The new `kernel.efi` won't be signed, so Secure
+Boot will not be possible anymore, unless signed again with a key
+accepted by the system.
 
 # Hacking with rebuilding
 
