@@ -8,7 +8,7 @@ set -x
 : ${UBUNTU_IMAGE_CHANNEL:=latest/edge}
 
 execute_remote(){
-    sshpass -p ubuntu ssh -p "$SSH_PORT" -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no test@localhost "$*"
+    sshpass -p ubuntu ssh -p "$SSH_PORT" -o ServerAliveInterval=60 -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no test@localhost "$*"
 }
 
 wait_for_ssh(){
