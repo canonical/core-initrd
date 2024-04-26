@@ -115,6 +115,11 @@ jobs:
           # add any test suites that should be tested here
           SPREAD_EXTERNAL_ADDRESS=localhost:8022 spread external:ubuntu-core-24-64:tests/smoke/
 
+      - name: Show serial log
+        if: failure()
+        run: |
+          cat '${{ github.workspace }}/serial.log' || true
+
       - name: Discard spread workers
         if: always()
         run: |
