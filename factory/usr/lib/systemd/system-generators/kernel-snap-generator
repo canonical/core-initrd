@@ -35,6 +35,18 @@ if ! grep -q "^ID=ubuntu$" "${OS_RELEASE}"; then
     exit 0
 fi
 
+# Find out kernel name / revision
+kernelPath=$(cat /sys/dev/block/"$(mountpoint --fs-devno "$KERNEL_MNT_POINT")"/loop/backing_file)
+kernelFile=$(basename "$kernelPath")
+kernelName=${kernelFile%%_*}
+rev=${kernelFile#*_}
+rev=${rev%%.*}
+
+# Mount /lib/{firmware,modules} only if there is no drivers tree created by snapd
+if [ -d /run/mnt/data/var/lib/snapd/kernel/"$kernelName"/"$rev" ]; then
+    exit 0
+fi
+
 for entry in firmware modules; do
     what="${KERNEL_MNT_POINT}/${entry}"
     where="${sysroot}/usr/lib/${entry}"
