@@ -99,7 +99,7 @@ jobs:
           echo "************* DOWNLOADING SNAPS *************"
           download_core_initrd_snaps 'edge'
 
-          echo "************* PREPAREING CORE24 IMAGE *************"
+          echo "************* PREPARING CORE24 IMAGE *************"
           rm -f "upstream-pc-kernel.snap" "upstream-pc-gadget.snap"
           mv "pc-kernel.artifact" "upstream-pc-kernel.snap"
           mv "pc-gadget.artifact" "upstream-pc-gadget.snap"
