@@ -236,6 +236,11 @@ repack_and_sign_gadget() {
         create_cloud_init_cdimage_config "${gadget_dir}/cloud.conf"
     fi
 
+    # Show output in serial
+    cat > "${gadget_dir}/cmdline.extra" << 'EOF'
+console=ttyS0 systemd.journald.forward_to_console=1 rd.systemd.journald.forward_to_console=1
+EOF
+
     sbattach --remove "$gadget_dir/shim.efi.signed"
     sbsign --key "$snakeoil_dir/PkKek-1-snakeoil.key" --cert "$snakeoil_dir/PkKek-1-snakeoil.pem" --output "$gadget_dir/shim.efi.signed" "$gadget_dir/shim.efi.signed"
 
