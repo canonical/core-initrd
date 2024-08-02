@@ -20,7 +20,6 @@ Depends: ${python3:Depends}, ${misc:Depends}, dracut-core (>= 051-1),
          zstd,
          sbsigntool,
          snapd (>= 2.50+20.04),
-         linux-firmware,
          kcapi-tools (>= 1.4.0-1ubuntu3),
          dbus,
          dmsetup,
@@ -45,6 +44,7 @@ Depends: ${python3:Depends}, ${misc:Depends}, dracut-core (>= 051-1),
          tar,
          udev,
          util-linux
+Recommends: linux-firmware
 Description: standard embedded initrd
  Standard embedded initrd implementation to be used with Ubuntu Core
  systems. Currently targetting creating BLS Type2 like binaries.
