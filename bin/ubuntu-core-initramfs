@@ -409,7 +409,7 @@ def install_misc(dest_dir, sysroot):
     proc_env = os.environ.copy()
     proc_env["DPKG_DATADIR"] = sysroot + "/usr/share/dpkg"
     out = check_output(["dpkg-architecture", "-q",
-                        "DEB_HOST_MULTIARCH"]).decode("utf-8")
+                        "DEB_HOST_MULTIARCH"], env=proc_env).decode("utf-8")
     deb_arch = out.splitlines()[0]
     files = [
         "/usr/bin/kmod",
