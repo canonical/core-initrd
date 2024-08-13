@@ -478,7 +478,9 @@ def install_misc(dest_dir, sysroot):
     if sysroot != "/":
         cmd += ["-r", sysroot]
     check_call(cmd + to_resolve, env=proc_env)
-    # Build ld cache
+    # Build ld cache (make sure /etc is there before)
+    etc_d = os.path.join(dest_dir, "etc")
+    os.makedirs(etc_d, exist_ok=True)
     check_call(["ldconfig", "-r", dest_dir])
 
     # /sbin/modprobe is a static path in the kernel
