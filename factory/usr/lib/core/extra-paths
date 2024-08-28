@@ -3,7 +3,7 @@
 set -eu
 
 cat <<'EOF' >>/sysroot/etc/fstab
-/run/mnt/data /writable none bind,x-initrd.mount 0 0
+/run/mnt/data /writable none bind 0 0
 EOF
 
 # Find out kernel name / revision
