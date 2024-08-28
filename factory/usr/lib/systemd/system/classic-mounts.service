@@ -10,7 +10,8 @@ After=initrd-root-fs.target
 Before=initrd-fs.target
 
 [Service]
-Type=oneshot
+Type=simple
+RemainAfterExit=yes
 # We force re-running kernel-snap-generator
 ExecStart=systemctl daemon-reload
 StandardError=journal+console
