@@ -49,7 +49,7 @@ jobs:
           rm -rf "${{ github.workspace }}"
           mkdir "${{ github.workspace }}"
       - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         with:
           name: snaps
       
@@ -81,7 +81,7 @@ jobs:
         with:
           repository: 'snapcore/snapd'
           path: snapd
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         with:
           name: snaps
       
