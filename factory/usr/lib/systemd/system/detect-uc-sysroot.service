@@ -1,3 +1,5 @@
+# TODO remove this unit once snap-bootstrap starts
+# to mount the base directly to sysroot.
 [Unit]
 Description=Detect Ubuntu Core sysroot
 DefaultDependencies=no
