@@ -317,7 +317,7 @@ def package_files(pkgs, sysroot):
 def install_systemd_files(dest_dir, sysroot):
     # Build list of files and directories
 
-    lines = package_files(["systemd", "systemd-sysv"], sysroot)
+    lines = package_files(["systemd", "systemd-sysv", "systemd-cryptsetup"], sysroot)
     # From systemd, we pull
     # * units configuration
     # * Executables
@@ -417,6 +417,7 @@ def install_misc(dest_dir, sysroot):
         "/usr/sbin/sulogin",
         "/usr/bin/tar",
         "/usr/lib/" + deb_arch + "/libgcc_s.so.1",
+        "/usr/lib/" + deb_arch + "/libkmod.so.2",
         "/usr/lib/systemd/system/dbus.service",
         "/usr/lib/systemd/system/dbus.socket",
         "/usr/lib/systemd/system/plymouth-start.service",
