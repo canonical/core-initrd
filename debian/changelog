@@ -1,3 +1,10 @@
+ubuntu-core-initramfs (69) oracular; urgency=medium
+
+  * Add systemd-cryptsetup, which is now a separate package, and libkmod2.
+    that is dlopen'ed by systemd now.
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Mon, 07 Oct 2024 12:10:15 -0400
+
 ubuntu-core-initramfs (68) noble; urgency=medium
 
   [ Valentin David ]
