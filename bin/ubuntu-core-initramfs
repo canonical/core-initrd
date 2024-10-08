@@ -12,6 +12,7 @@ import sys
 import hashlib
 from collections import namedtuple
 from enum import Enum, auto
+import json
 
 
 class ModTable:
@@ -398,19 +399,13 @@ def install_busybox(dest_dir, sysroot):
         os.symlink("busybox", os.path.join(dest_dir, "usr/bin", c))
 
 
-def install_misc(dest_dir, sysroot):
+def install_misc(dest_dir, sysroot, deb_arch):
     # dmsetup rules
     rules = package_files(["dmsetup"], sysroot)
     to_include = re.compile(r".*rules.d/")
     rules = [i for i in rules if to_include.match(i)]
     install_files(rules, dest_dir, sysroot)
 
-    # Other needed stuff
-    proc_env = os.environ.copy()
-    proc_env["DPKG_DATADIR"] = sysroot + "/usr/share/dpkg"
-    out = check_output(["dpkg-architecture", "-q",
-                        "DEB_HOST_MULTIARCH"], env=proc_env).decode("utf-8")
-    deb_arch = out.splitlines()[0]
     files = [
         "/usr/bin/kmod",
         "/usr/bin/mount",
@@ -616,6 +611,67 @@ def create_initrd_pkg_list(dest_dir, sysroot):
                             pkgs).decode("utf-8")
         pkg_list.write(out)
 
+# verify_missing_dlopen looks at the .notes.dlopen section of ELF
+# binaries to find libraries that are not in the dynamic section, and
+# that will be loaded with dynamically dlopen when needed.
+# See https://systemd.io/ELF_DLOPEN_METADATA/
+def verify_missing_dlopen(destdir, libdir):
+    missing = {}
+    for dirpath, dirs, files in os.walk(destdir):
+        for f in files:
+            path = os.path.join(dirpath, f)
+            if os.path.islink(path) or not os.path.isfile(path):
+                continue
+            with open(path, 'rb') as b:
+                if b.read(4) != b'\x7fELF':
+                    continue
+            out = check_output(["dlopen-notes", path])
+            split = out.splitlines()
+            json_doc = b'\n'.join([s for s in split if not s[:1] == b'#'])
+            doc = json.loads(json_doc)
+            for dep in doc:
+                sonames = dep["soname"]
+                priority = dep["priority"]
+                found_sonames = []
+                for soname in sonames:
+                    dest = os.path.join(destdir, os.path.relpath(libdir, "/"), soname)
+                    if os.path.exists(os.path.join(destdir, dest)):
+                        found_sonames.append(soname)
+                if not found_sonames:
+                    # We did not find any library.
+                    # In this case we need to mark all sonames as
+                    # missing. This is required because some features
+                    # may have common subset of sonames and those
+                    # features might have different priorities.
+                    for soname in sonames:
+                        current_priority = missing.get(soname)
+                        if current_priority == "required":
+                            continue
+                        elif current_priority == "recommended" and priority not in ["required"]:
+                            continue
+                        elif current_priority == "suggested" and priority not in ["required", "recommended"]:
+                            continue
+                        else:
+                            missing[soname] = priority
+
+    fatal = False
+    if missing:
+        print(f"WARNING: These sonames are missing:", file=sys.stderr)
+        for m, priority in missing.items():
+            print(f" * {m} ({priority})", file=sys.stderr)
+            if priority in ["required", "recommended"]:
+                fatal = True
+        if fatal:
+            print(f"WARNING: Some missing sonames are required or recommended. Failing.", file=sys.stderr)
+
+    return not fatal
+
+def get_deb_arch(sysroot):
+    proc_env = os.environ.copy()
+    proc_env["DPKG_DATADIR"] = sysroot + "/usr/share/dpkg"
+    out = check_output(["dpkg-architecture", "-q",
+                        "DEB_HOST_MULTIARCH"], env=proc_env).decode("utf-8")
+    return out.splitlines()[0]
 
 def create_initrd(parser, args):
     # TODO generate microcode instead of shipping in debian package
@@ -631,6 +687,8 @@ def create_initrd(parser, args):
     if args.kernelver:
         args.output = "-".join([args.output, args.kernelver])
     with tempfile.TemporaryDirectory(suffix=".ubuntu-core-initramfs") as d:
+        deb_arch = get_deb_arch(rootfs)
+
         kernel_root = os.path.join(d, "kernel")
         modules = os.path.join(kernel_root, "usr", "lib", "modules")
         os.makedirs(modules, exist_ok=True)
@@ -650,7 +708,7 @@ def create_initrd(parser, args):
         # Copy systemd bits
         install_systemd_files(main, rootfs)
         # Other miscelanea stuff
-        install_misc(main, rootfs)
+        install_misc(main, rootfs, deb_arch)
         # Copy snapd bits
         snapd_lib = path_join_make_rel_paths(rootfs, "/usr/lib/snapd")
         snapd_files = [os.path.join(snapd_lib, "snap-bootstrap"),
@@ -697,6 +755,9 @@ def create_initrd(parser, args):
                 ]
             )
         check_call(["depmod", "-a", "-b", main, args.kernelver])
+
+        if not verify_missing_dlopen(main, os.path.join("/usr/lib", deb_arch)):
+            sys.exit(1)
 
         # Create manifest with packages with files included in the initramfs
         create_initrd_pkg_list(main, rootfs)
