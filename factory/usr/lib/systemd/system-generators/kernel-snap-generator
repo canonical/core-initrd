@@ -8,6 +8,13 @@ if ! mountpoint -q "${KERNEL_MNT_POINT}"; then
     exit 0
 fi
 
+# Find out kernel name / revision
+kernelPath=$(cat /sys/dev/block/"$(mountpoint --fs-devno "$KERNEL_MNT_POINT")"/loop/backing_file)
+kernelFile=$(basename "$kernelPath")
+kernelName=${kernelFile%%_*}
+rev=${kernelFile#*_}
+rev=${rev%%.*}
+
 # FIXME use SYSTEMD_IN_INITRD when using systemd 251+
 if [ -f /etc/initrd-release ]; then
     sysroot=/sysroot
@@ -19,43 +26,62 @@ else
     target=local-fs.target
 fi
 
+# Note that /sysroot/etc/os-release is accessible when generators are
+# re-executed by classic-mounts.service, which happens after
+# initrd-parse-etc.service has been started.
+
 : "${OS_RELEASE:="${sysroot}/etc/os-release"}"
 
-# Note that /sysroot/etc/os-release is accessible when generators are
-# re-executed due to "daemon-reload" called by
-# initrd-parse-etc.service
+is_core=true
+data_d=/run/mnt/data/system-data
+if grep -q "^ID=ubuntu$" "${OS_RELEASE}"; then
+    is_core=false
+    data_d=/run/mnt/data
+fi
+drivers_d="$data_d"/var/lib/snapd/kernel/"$kernelName"/"$rev"
 
-# We generate the kernel bind mount units only
-# if we are on Ubuntu Classic
+if [ -d  "$drivers_d" ]; then
+    # Mount for the snap
+    escapedName=$(systemd-escape "$kernelName")
+    unit="sysroot-snap-${escapedName}-${rev}.mount"
 
-# Ubuntu Core will have those mounts declared in /etc/fstab, thus
-# using systemd-fstab-generator instead.
+    mkdir -p "${1}/${target}.requires"
+    ln -sf "../${unit}" "${1}/${target}.requires/${unit}"
 
-if ! grep -q "^ID=ubuntu$" "${OS_RELEASE}"; then
-    exit 0
+    cat <<EOF > "${1}/${unit}"
+[Unit]
+Before=${target}
+
+[Mount]
+What=/sysroot/var/lib/snapd/snaps/${kernelName}_${rev}.snap
+Where=/sysroot/snap/${kernelName}/${rev}
+Type=squashfs
+Options=nodev,ro,x-gdu.hide,x-gvfs-hide
+LazyUnmount=yes
+EOF
 fi
 
-# Find out kernel name / revision
-kernelPath=$(cat /sys/dev/block/"$(mountpoint --fs-devno "$KERNEL_MNT_POINT")"/loop/backing_file)
-kernelFile=$(basename "$kernelPath")
-kernelName=${kernelFile%%_*}
-rev=${kernelFile#*_}
-rev=${rev%%.*}
+# We generate the /lib/{modules,firmware} mount units only if we are
+# on hybrid, on UC they are declared in /etc/fstab.
 
-# Mount /lib/{firmware,modules} only if there is no drivers tree created by snapd
-if [ -d /run/mnt/data/var/lib/snapd/kernel/"$kernelName"/"$rev" ]; then
+if [ "$is_core" = true ]; then
     exit 0
 fi
 
 for entry in firmware modules; do
     what="${KERNEL_MNT_POINT}/${entry}"
+    if [ -d "$drivers_d" ]; then
+        what="$drivers_d"/lib/"$entry"
+    fi
     where="${sysroot}/usr/lib/${entry}"
     unit="usr-lib-${entry}.mount"
     if [ -n "${sysroot_unit}" ]; then
         unit="${sysroot_unit}-${unit}"
     fi
+
     mkdir -p "${1}/${target}.requires"
     ln -sf "../${unit}" "${1}/${target}.requires/${unit}"
+
     cat <<EOF >"${1}/${unit}"
 [Unit]
 Before=${target}
