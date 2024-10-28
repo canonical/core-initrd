@@ -79,12 +79,12 @@ and yq (needed for yaml manipulation), download the newest image and import it i
 ```
 sudo snap install lxd
 sudo snap install yq
-curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd22-img.tar.gz
-lxc image import lxd-initrd-img.tar.gz --alias ucspread24
-lxc image show ucspread24 > temp.profile
-yq e '.properties.aliases = "ucspread24,amd64"' -i ./temp.profile
+curl -o lxd-initrd-img.tar.gz https://storage.googleapis.com/snapd-spread-core/lxd/lxd-spread-initrd26-img.tar.gz
+lxc image import lxd-initrd-img.tar.gz --alias ucspread26
+lxc image show ucspread26 > temp.profile
+yq e '.properties.aliases = "ucspread26,amd64"' -i ./temp.profile
 yq e '.properties.remote = "images"' -i ./temp.profile
-cat ./temp.profile | lxc image edit ucspread24
+cat ./temp.profile | lxc image edit ucspread26
 rm ./temp.profile ./lxd-initrd-img.tar.gz
 ```
 2. Import the LXD coreinitrd test profile. Make sure your working directory is the root of this repository.
