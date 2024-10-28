@@ -19,8 +19,8 @@ backends:
     plan: n2-standard-2
     halt-timeout: 2h
     systems:
-      - ubuntu-24.04-64:
-          image: ubuntu-24.04-64
+      - ubuntu-24.10-64:
+          image: ubuntu-24.10-64
           storage: 20G
 
   qemu-nested:
@@ -30,7 +30,7 @@ backends:
     #            uc22 with less RAM
     memory: 4G
     systems:
-      - ubuntu-24.04-64:
+      - ubuntu-24.10-64:
           username: ubuntu
           password: ubuntu
 
@@ -38,8 +38,8 @@ backends:
     type: lxd
     container-profiles: coreinitrd
     systems:
-      - ubuntu-24.04:
-          image: ucspread24
+      - ubuntu-24.10:
+          image: ucspread26
 
 path: /home/core-initrd
 
