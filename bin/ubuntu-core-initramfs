@@ -488,6 +488,8 @@ def install_misc(dest_dir, sysroot):
     os.symlink("../usr/sbin/modprobe", os.path.join(dest_dir, "sbin", "modprobe"))
     # FIXME: systemd is configured with the wrong path to dmsetup
     os.symlink("../usr/sbin/dmsetup", os.path.join(dest_dir, "sbin", "dmsetup"))
+    # FIXME: snap-bootstrap uses /sbin/reboot
+    os.symlink("../usr/bin/systemctl", os.path.join(dest_dir, "sbin", "reboot"))
 
 
 class AptRepo:
