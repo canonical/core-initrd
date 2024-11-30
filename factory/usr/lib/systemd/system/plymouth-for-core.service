@@ -2,7 +2,6 @@
 Description=Set the core theme if on Ubuntu Core
 DefaultDependencies=no
 After=snap-initramfs-mounts.service
-Before=plymouth-start.service
 ConditionKernelCommandLine=!plymouth.enable=0
 ConditionKernelCommandLine=!nosplash
 ConditionKernelCommandLine=splash
@@ -11,4 +10,4 @@ ConditionPathIsMountPoint=/run/mnt/base
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/ln -s /usr/share/plymouth/core.defaults /usr/share/plymouth/plymouthd.defaults
+ExecStart=/usr/bin/ln -sf /usr/share/plymouth/core.defaults /usr/share/plymouth/plymouthd.defaults
