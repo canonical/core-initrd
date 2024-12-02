@@ -1,3 +1,5 @@
+# TODO remove once snap-bootstrap writing this unit
+# in /run lands.
 [Unit]
 DefaultDependencies=no
 Before=initrd-root-fs.target
