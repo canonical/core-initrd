@@ -780,6 +780,7 @@ def create_initrd(parser, args):
 
 
 def create_efi(parser, args):
+    snapd_info = '/usr/lib/snapd/info'
     if args.root:
         if not args.stub:
             parser.error("--stub is mandatory when --root is given")
@@ -790,6 +791,8 @@ def create_efi(parser, args):
         args.key = path_join_make_rel_paths(args.root, args.key)
         args.cert = path_join_make_rel_paths(args.root, args.cert)
         args.output = path_join_make_rel_paths(args.root, args.output)
+        snapd_info = path_join_make_rel_paths(args.root, snapd_info)
+
     if args.kernelver:
         args.kernel = "-".join([args.kernel, args.kernelver])
         args.initrd = "-".join([args.initrd, args.kernelver])
@@ -831,6 +834,11 @@ def create_efi(parser, args):
         ukify_cmd += [
             '--cmdline', args.cmdline,
         ]
+
+    ukify_cmd += [
+        '--section', f'.snapd:@{snapd_info}',
+    ]
+
     check_call(ukify_cmd)
     if not args.unsigned:
         check_call(
