@@ -6,9 +6,19 @@ cat <<'EOF' >>/sysroot/etc/fstab
 /run/mnt/data /writable none bind,x-initrd.mount 0 0
 EOF
 
+cmdline_mode=$(/usr/libexec/core/get-arg snapd_recovery_mode) || true
+mode="$(/usr/libexec/core/get-mode mode)" || mode="$cmdline_mode" || mode="unknown"
+
 # Find out kernel name / revision
-kernelPath=$(cat /sys/dev/block/"$(mountpoint --fs-devno /run/mnt/kernel)"/loop/backing_file)
-kernelFile=$(basename "$kernelPath")
+if [ "$cmdline_mode" = install ] && [ "$mode" = run ]; then
+    # Installation from initramfs, we cannot take the kernel revision from
+    # the mounted kernel. current_kernels should have only one kernel at this
+    # point, so take it from there.
+    kernelFile="$(/usr/libexec/core/get-mode current_kernels)"
+else
+    kernelPath=$(cat /sys/dev/block/"$(mountpoint --fs-devno /run/mnt/kernel)"/loop/backing_file)
+    kernelFile=$(basename "$kernelPath")
+fi
 kernelName=${kernelFile%%_*}
 rev=${kernelFile#*_}
 rev=${rev%%.*}
@@ -25,7 +35,6 @@ fi
 # group, and gshadow files in /run/snapd/hybrid-users. these files contain users
 # imported from the host system mixed with the default users from the base snap
 # that is used for recovery mode.
-mode="$(/usr/libexec/core/get-mode mode)" || mode="$(/usr/libexec/core/get-arg snapd_recovery_mode)" || mode="unknown"
 if [ -f /run/snapd/hybrid-users/passwd ] && [ "${mode}" = "recover" ]; then
     cat <<'EOF' >>/sysroot/etc/fstab
 /run/snapd/hybrid-users/passwd /etc/passwd none bind 0 0
