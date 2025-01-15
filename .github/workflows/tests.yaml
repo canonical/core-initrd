@@ -52,10 +52,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: snaps
-      
+
       - name: Run tests
-        run: |
-          spread google-nested:tests/spread/main/
+        uses: ./.github/actions/run-spread-tests
+        with:
+          spread-command: spread google-nested:tests/spread/main/
 
       - name: Discard spread workers
         if: always()
@@ -109,11 +110,12 @@ jobs:
 
           echo "************* STARTING CORE24 VM *************"
           start_snapd_core_vm '${{ github.workspace }}'
-
-          cd snapd
-          
-          # add any test suites that should be tested here
-          SPREAD_EXTERNAL_ADDRESS=localhost:8022 spread external:ubuntu-core-24-64:tests/smoke/
+      
+      - name: Run snapd spread
+        uses: ./core-initrd/.github/actions/run-spread-tests
+        with:
+          working-directory: snapd
+          spread-command: SPREAD_EXTERNAL_ADDRESS=localhost:8022 spread external:ubuntu-core-24-64:tests/smoke/
 
       - name: Show serial log
         if: failure()
