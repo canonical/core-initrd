@@ -10,6 +10,9 @@ Before=initrd-root-device.target
 Wants=dbus.socket
 After=dbus.socket
 
+BindsTo=dev-ubuntu-disk.device
+After=dev-ubuntu-disk.device
+
 [Service]
 Type=oneshot
 RemainAfterExit=true

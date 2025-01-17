@@ -7,7 +7,7 @@ set -x
 . "$TESTSLIB/prepare-utils.sh"
 
 # install dependencies
-install_core_initrd_deps "$PROJECT_PATH"
+install_core_initrd_deps "$PROJECT_PATH" "$PROJECT_PATH"/snapd_*.deb
 
 # TODO: is this still necessary for core-initrd? (this was copied from snapd)
 # create test user for spread to use
