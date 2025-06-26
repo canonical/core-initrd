@@ -1,3 +1,9 @@
+ubuntu-core-initramfs (51.18) focal; urgency=medium
+
+  * Pick up snapd 2.70 from ppa
+
+ -- Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>  Thu, 26 Jun 2025 09:47:03 -0400
+
 ubuntu-core-initramfs (51.17) focal; urgency=medium
 
   * Pick up snapd 2.68.2 from ppa
