@@ -17,12 +17,20 @@ if [ -e /boot/kernel.efi-$version ]; then
     exit 0
 fi
 
-ubuntu-core-initramfs create-initrd --kernelver $version
-
 # Note focal's systemd & objcopy fail on arm64
 # Do not enable arm64, regressed twice now
 case `dpkg --print-architecture` in
     amd64)
-        ubuntu-core-initramfs create-efi --unsigned --kernelver $version
-        ;;
+	case $version in
+	    *-azure-fde)
+		ubuntu-core-initramfs create-initrd --feature main server cloudimg-rootfs --kernelver $version
+		# Currently nullboot doesn't seal cmdline, thus it must be baked in for azure
+		ubuntu-core-initramfs create-efi --unsigned --kernelver $version --cmdline "snapd_recovery_mode=cloudimg-rootfs console=tty1 console=ttyS0 earlyprintk=ttyS0"
+		;;
+	    *)
+		ubuntu-core-initramfs create-initrd --kernelver $version
+		ubuntu-core-initramfs create-efi --unsigned --kernelver $version
+		;;
+	esac
 esac
+
