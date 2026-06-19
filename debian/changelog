@@ -1,3 +1,12 @@
+ubuntu-core-initramfs (66.11) jammy; urgency=medium
+
+  * Update to snapd 2.75
+
+  [ Nishit Majithia ]
+  * d/copyright: Add correct license for fonts files
+
+ -- Philip Meulengracht <philip.meulengracht@canonical.com>  Fri, 19 Jun 2026 06:58:39 +0000
+
 ubuntu-core-initramfs (66.10) jammy; urgency=medium
 
   * Update to snapd 2.71
