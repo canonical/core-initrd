@@ -1,3 +1,10 @@
+ubuntu-core-initramfs (51.20) focal; urgency=medium
+
+  [ John Cabaj ]
+  * core-initrd: fix create-initrd default option in post installation script
+
+ -- Philip Meulengracht <philip.meulengracht@canonical.com>  Thu, 06 Aug 2026 08:58:56 +0000
+
 ubuntu-core-initramfs (51.19) focal; urgency=medium
 
   [ Nishit Majithia ]
